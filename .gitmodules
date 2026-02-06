@@ -1,0 +1,4 @@
+[submodule "bindings/godot_extension/godot-cpp"]
+	path = bindings/godot_extension/godot-cpp
+	url = https://github.com/godotengine/godot-cpp.git
+	branch = 4.3

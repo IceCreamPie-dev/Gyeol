@@ -30,4 +30,32 @@
 *.exe
 *.out
 *.app
+
+# Build directories
 /build
+/bindings/godot_extension/.sconsign.dblite
+
+# Compiled story files (generated output)
+*.gyb
+
+# Allow GDExtension DLL in demo
+!demo/godot/bin/*.dll
+
+# SCons cache
+.sconsign.dblite
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude session
+.claude/
+
+# Windows artifacts
+nul
+Thumbs.db
+
+# Godot imports
+demo/godot/.godot/

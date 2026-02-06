@@ -1,0 +1,13 @@
+# 결(Gyeol) 테스트 스토리
+
+label start:
+    hero "안녕? 나는 결(Gyeol)이야. 같이 모험할래?"
+    menu:
+        "좋아, 같이 가자!" -> good
+        "아니, 난 싫어." -> bad
+
+label good:
+    hero "좋았어! 우리 함께 떠나자!"
+
+label bad:
+    hero "그래... 다음에 또 만나자."

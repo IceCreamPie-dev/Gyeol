@@ -26,4 +26,4 @@ FetchContent_MakeAvailable(flatbuffers)
 
 # 하위 디렉토리 추가
 add_subdirectory(src/gyeol_core)
-Add-Content -Path "CMakeLists.txt" -Value "add_subdirectory(src/gyeol_compiler)"
+add_subdirectory(src/gyeol_compiler)

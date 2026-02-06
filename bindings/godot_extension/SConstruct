@@ -1,0 +1,42 @@
+#!/usr/bin/env python
+
+env = SConscript("godot-cpp/SConstruct")
+
+# --- GyeolCore 소스 및 FlatBuffers 포함 ---
+gyeol_root = "../../"
+gyeol_core_include = gyeol_root + "src/gyeol_core/include/"
+gyeol_core_generated = gyeol_root + "src/gyeol_core/include/generated/"
+flatbuffers_include = gyeol_root + "build/_deps/flatbuffers-src/include/"
+
+env.Append(CPPPATH=[
+    "src/",
+    gyeol_core_include,
+    gyeol_core_generated,
+    flatbuffers_include,
+])
+
+# GDExtension 래퍼 소스
+sources = Glob("src/*.cpp")
+
+# GyeolCore 소스 (직접 컴파일)
+sources.append(env.Object(gyeol_root + "src/gyeol_core/src/gyeol_story.cpp"))
+sources.append(env.Object(gyeol_root + "src/gyeol_core/src/gyeol_runner.cpp"))
+
+# 출력 경로: demo/godot/bin/
+output_dir = "../../demo/godot/bin/"
+
+if env["platform"] == "macos":
+    library = env.SharedLibrary(
+        output_dir + "libgyeol.{}.{}.framework/libgyeol.{}.{}".format(
+            env["platform"], env["target"], env["platform"], env["target"]
+        ),
+        source=sources,
+    )
+else:
+    library = env.SharedLibrary(
+        output_dir + "libgyeol{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+        source=sources,
+    )
+
+env.NoCache(library)
+Default(library)

@@ -19,7 +19,9 @@ add_custom_command(
 # --- 3. 라이브러리 타겟 생성 ---
 add_library(GyeolCore
     src/gyeol_story.cpp
+    src/gyeol_runner.cpp
     include/gyeol_story.h
+    include/gyeol_runner.h
     "${GENERATED_DIR}/gyeol_generated.h"
 )
 

@@ -1,0 +1,48 @@
+# 결(Gyeol) 고급 테스트 스토리
+# 변수, 조건, 명령, 나레이션, Jump, Call 테스트
+
+label start:
+    @ bg "forest.png"
+    "어두운 숲 속에서 눈을 떴다."
+    hero "여기가 어디지...?"
+    $ courage = 0
+    menu:
+        "주변을 살펴본다." -> explore
+        "도망친다." -> flee
+
+label explore:
+    hero "용기를 내서 숲을 탐험하기로 했다."
+    $ courage = 1
+    @ sfx "footsteps.wav"
+    jump encounter
+
+label flee:
+    hero "무서워서 도망쳤다."
+    $ courage = 0
+    jump encounter
+
+label encounter:
+    "갑자기 앞에 거대한 늑대가 나타났다!"
+    @ sfx "wolf_growl.wav"
+    if courage == 1 -> brave else coward
+
+label brave:
+    hero "물러서지 않겠어!"
+    "늑대는 용기에 감탄하여 길을 비켜줬다."
+    call ending_greeting
+    jump ending_good
+
+label coward:
+    hero "으악! 살려줘!"
+    "늑대가 불쌍히 여겨 지나갔다."
+    call ending_greeting
+    jump ending_bad
+
+label ending_greeting:
+    "숲을 빠져나왔다."
+
+label ending_good:
+    hero "이 숲의 비밀을 밝혀내겠어!"
+
+label ending_bad:
+    hero "다시는 숲에 안 올 거야..."

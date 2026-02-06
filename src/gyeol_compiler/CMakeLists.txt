@@ -1,7 +1,11 @@
 # 생성된 헤더 파일의 경로를 변수로 가져옵니다
 set(GENERATED_DIR "${CMAKE_SOURCE_DIR}/src/gyeol_core/include/generated")
 
-add_executable(GyeolCompiler compiler_main.cpp)
+add_executable(GyeolCompiler
+    compiler_main.cpp
+    gyeol_parser.h
+    gyeol_parser.cpp
+)
 
 # FlatBuffers 및 생성된 헤더 경로 포함
 target_include_directories(GyeolCompiler PUBLIC
