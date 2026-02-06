@@ -46,6 +46,8 @@ struct StepResult {
     LineData line;
     std::vector<ChoiceData> choices;
     CommandData command;
+    // 보간된 문자열의 소유권 (const char*가 이 버퍼를 가리킴)
+    std::vector<std::string> ownedStrings_;
 };
 
 // --- Runner (VM) ---
@@ -96,6 +98,13 @@ private:
     const char* poolStr(int32_t index) const;
     void jumpToNode(const char* name);
     void jumpToNodeById(int32_t nameId);
+
+    // 표현식 평가 (RPN 스택 머신)
+    Variant evaluateExpression(const void* exprPtr) const;
+
+    // 문자열 보간 ({변수명} → 값 치환)
+    std::string interpolateText(const char* text) const;
+    static std::string variantToString(const Variant& v);
 
     // Save/Load 헬퍼
     std::string currentNodeName() const;

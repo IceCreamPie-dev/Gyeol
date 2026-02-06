@@ -59,19 +59,44 @@ table Command {
     params:[int];           // 파라미터 값들 (String Pool Index 배열)
 }
 
-// [변수 설정] (hp = 10)
-table SetVar {
-    var_name_id:int;
-    value:ValueData;        // Union (Int, Float, Bool, String)
+// --- 산술 표현식 (RPN 토큰 리스트) ---
+enum ExprOp : byte {
+    PushLiteral,    // 리터럴 값을 스택에 push
+    PushVar,        // 변수 값을 스택에 push
+    Add,            // pop 2, push a + b
+    Sub,            // pop 2, push a - b
+    Mul,            // pop 2, push a * b
+    Div,            // pop 2, push a / b
+    Mod,            // pop 2, push a % b
+    Negate          // pop 1, push -a (단항 마이너스)
 }
 
-// [조건] (hp > 10)
-table Condition {
+table ExprToken {
+    op:ExprOp;
+    literal_value:ValueData;    // PushLiteral일 때 사용
+    var_name_id:int = -1;       // PushVar일 때 사용 (String Pool index)
+}
+
+table Expression {
+    tokens:[ExprToken];
+}
+
+// [변수 설정] (hp = 10, hp = hp + 1)
+table SetVar {
     var_name_id:int;
+    value:ValueData;        // Union (Int, Float, Bool, String) - 단순 리터럴
+    expr:Expression;        // 복합 표현식 (있으면 value보다 우선)
+}
+
+// [조건] (hp > 10, hp - 10 > 0)
+table Condition {
+    var_name_id:int;            // (하위 호환) 단순 변수
     op:Operator;
-    compare_value:ValueData;
-    true_jump_node_id:int;  // 참일 때 점프할 곳 (없으면 다음 줄)
-    false_jump_node_id:int; // 거짓일 때 점프할 곳 (없으면 다음 줄)
+    compare_value:ValueData;    // (하위 호환) 리터럴 비교값
+    true_jump_node_id:int;      // 참일 때 점프할 곳 (없으면 다음 줄)
+    false_jump_node_id:int;     // 거짓일 때 점프할 곳 (없으면 다음 줄)
+    lhs_expr:Expression;        // 좌변 표현식 (있으면 var_name_id 대신 사용)
+    rhs_expr:Expression;        // 우변 표현식 (있으면 compare_value 대신 사용)
 }
 
 // -------------------------------------------------------------------------

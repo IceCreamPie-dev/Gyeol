@@ -49,6 +49,14 @@ struct Command;
 struct CommandBuilder;
 struct CommandT;
 
+struct ExprToken;
+struct ExprTokenBuilder;
+struct ExprTokenT;
+
+struct Expression;
+struct ExpressionBuilder;
+struct ExpressionT;
+
 struct SetVar;
 struct SetVarBuilder;
 struct SetVarT;
@@ -456,6 +464,54 @@ struct OpDataUnion {
 
 bool VerifyOpData(::flatbuffers::Verifier &verifier, const void *obj, OpData type);
 bool VerifyOpDataVector(::flatbuffers::Verifier &verifier, const ::flatbuffers::Vector<::flatbuffers::Offset<void>> *values, const ::flatbuffers::Vector<OpData> *types);
+
+enum class ExprOp : int8_t {
+  PushLiteral = 0,
+  PushVar = 1,
+  Add = 2,
+  Sub = 3,
+  Mul = 4,
+  Div = 5,
+  Mod = 6,
+  Negate = 7,
+  MIN = PushLiteral,
+  MAX = Negate
+};
+
+inline const ExprOp (&EnumValuesExprOp())[8] {
+  static const ExprOp values[] = {
+    ExprOp::PushLiteral,
+    ExprOp::PushVar,
+    ExprOp::Add,
+    ExprOp::Sub,
+    ExprOp::Mul,
+    ExprOp::Div,
+    ExprOp::Mod,
+    ExprOp::Negate
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesExprOp() {
+  static const char * const names[9] = {
+    "PushLiteral",
+    "PushVar",
+    "Add",
+    "Sub",
+    "Mul",
+    "Div",
+    "Mod",
+    "Negate",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameExprOp(ExprOp e) {
+  if (::flatbuffers::IsOutRange(e, ExprOp::PushLiteral, ExprOp::Negate)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesExprOp()[index];
+}
 
 struct BoolValueT : public ::flatbuffers::NativeTable {
   typedef BoolValue TableType;
@@ -999,10 +1055,208 @@ inline ::flatbuffers::Offset<Command> CreateCommandDirect(
 
 ::flatbuffers::Offset<Command> CreateCommand(::flatbuffers::FlatBufferBuilder &_fbb, const CommandT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct ExprTokenT : public ::flatbuffers::NativeTable {
+  typedef ExprToken TableType;
+  ICPDev::Gyeol::Schema::ExprOp op = ICPDev::Gyeol::Schema::ExprOp::PushLiteral;
+  ICPDev::Gyeol::Schema::ValueDataUnion literal_value{};
+  int32_t var_name_id = -1;
+};
+
+struct ExprToken FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef ExprTokenT NativeTableType;
+  typedef ExprTokenBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_OP = 4,
+    VT_LITERAL_VALUE_TYPE = 6,
+    VT_LITERAL_VALUE = 8,
+    VT_VAR_NAME_ID = 10
+  };
+  ICPDev::Gyeol::Schema::ExprOp op() const {
+    return static_cast<ICPDev::Gyeol::Schema::ExprOp>(GetField<int8_t>(VT_OP, 0));
+  }
+  ICPDev::Gyeol::Schema::ValueData literal_value_type() const {
+    return static_cast<ICPDev::Gyeol::Schema::ValueData>(GetField<uint8_t>(VT_LITERAL_VALUE_TYPE, 0));
+  }
+  const void *literal_value() const {
+    return GetPointer<const void *>(VT_LITERAL_VALUE);
+  }
+  template<typename T> const T *literal_value_as() const;
+  const ICPDev::Gyeol::Schema::BoolValue *literal_value_as_BoolValue() const {
+    return literal_value_type() == ICPDev::Gyeol::Schema::ValueData::BoolValue ? static_cast<const ICPDev::Gyeol::Schema::BoolValue *>(literal_value()) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::IntValue *literal_value_as_IntValue() const {
+    return literal_value_type() == ICPDev::Gyeol::Schema::ValueData::IntValue ? static_cast<const ICPDev::Gyeol::Schema::IntValue *>(literal_value()) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::FloatValue *literal_value_as_FloatValue() const {
+    return literal_value_type() == ICPDev::Gyeol::Schema::ValueData::FloatValue ? static_cast<const ICPDev::Gyeol::Schema::FloatValue *>(literal_value()) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::StringRef *literal_value_as_StringRef() const {
+    return literal_value_type() == ICPDev::Gyeol::Schema::ValueData::StringRef ? static_cast<const ICPDev::Gyeol::Schema::StringRef *>(literal_value()) : nullptr;
+  }
+  int32_t var_name_id() const {
+    return GetField<int32_t>(VT_VAR_NAME_ID, -1);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int8_t>(verifier, VT_OP, 1) &&
+           VerifyField<uint8_t>(verifier, VT_LITERAL_VALUE_TYPE, 1) &&
+           VerifyOffset(verifier, VT_LITERAL_VALUE) &&
+           VerifyValueData(verifier, literal_value(), literal_value_type()) &&
+           VerifyField<int32_t>(verifier, VT_VAR_NAME_ID, 4) &&
+           verifier.EndTable();
+  }
+  ExprTokenT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(ExprTokenT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<ExprToken> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ExprTokenT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+template<> inline const ICPDev::Gyeol::Schema::BoolValue *ExprToken::literal_value_as<ICPDev::Gyeol::Schema::BoolValue>() const {
+  return literal_value_as_BoolValue();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::IntValue *ExprToken::literal_value_as<ICPDev::Gyeol::Schema::IntValue>() const {
+  return literal_value_as_IntValue();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::FloatValue *ExprToken::literal_value_as<ICPDev::Gyeol::Schema::FloatValue>() const {
+  return literal_value_as_FloatValue();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::StringRef *ExprToken::literal_value_as<ICPDev::Gyeol::Schema::StringRef>() const {
+  return literal_value_as_StringRef();
+}
+
+struct ExprTokenBuilder {
+  typedef ExprToken Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_op(ICPDev::Gyeol::Schema::ExprOp op) {
+    fbb_.AddElement<int8_t>(ExprToken::VT_OP, static_cast<int8_t>(op), 0);
+  }
+  void add_literal_value_type(ICPDev::Gyeol::Schema::ValueData literal_value_type) {
+    fbb_.AddElement<uint8_t>(ExprToken::VT_LITERAL_VALUE_TYPE, static_cast<uint8_t>(literal_value_type), 0);
+  }
+  void add_literal_value(::flatbuffers::Offset<void> literal_value) {
+    fbb_.AddOffset(ExprToken::VT_LITERAL_VALUE, literal_value);
+  }
+  void add_var_name_id(int32_t var_name_id) {
+    fbb_.AddElement<int32_t>(ExprToken::VT_VAR_NAME_ID, var_name_id, -1);
+  }
+  explicit ExprTokenBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<ExprToken> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<ExprToken>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<ExprToken> CreateExprToken(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ICPDev::Gyeol::Schema::ExprOp op = ICPDev::Gyeol::Schema::ExprOp::PushLiteral,
+    ICPDev::Gyeol::Schema::ValueData literal_value_type = ICPDev::Gyeol::Schema::ValueData::NONE,
+    ::flatbuffers::Offset<void> literal_value = 0,
+    int32_t var_name_id = -1) {
+  ExprTokenBuilder builder_(_fbb);
+  builder_.add_var_name_id(var_name_id);
+  builder_.add_literal_value(literal_value);
+  builder_.add_literal_value_type(literal_value_type);
+  builder_.add_op(op);
+  return builder_.Finish();
+}
+
+struct ExprToken::Traits {
+  using type = ExprToken;
+  static auto constexpr Create = CreateExprToken;
+};
+
+::flatbuffers::Offset<ExprToken> CreateExprToken(::flatbuffers::FlatBufferBuilder &_fbb, const ExprTokenT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct ExpressionT : public ::flatbuffers::NativeTable {
+  typedef Expression TableType;
+  std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::ExprTokenT>> tokens{};
+  ExpressionT() = default;
+  ExpressionT(const ExpressionT &o);
+  ExpressionT(ExpressionT&&) FLATBUFFERS_NOEXCEPT = default;
+  ExpressionT &operator=(ExpressionT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct Expression FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef ExpressionT NativeTableType;
+  typedef ExpressionBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_TOKENS = 4
+  };
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::ExprToken>> *tokens() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::ExprToken>> *>(VT_TOKENS);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_TOKENS) &&
+           verifier.VerifyVector(tokens()) &&
+           verifier.VerifyVectorOfTables(tokens()) &&
+           verifier.EndTable();
+  }
+  ExpressionT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(ExpressionT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<Expression> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ExpressionT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct ExpressionBuilder {
+  typedef Expression Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_tokens(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::ExprToken>>> tokens) {
+    fbb_.AddOffset(Expression::VT_TOKENS, tokens);
+  }
+  explicit ExpressionBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<Expression> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<Expression>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<Expression> CreateExpression(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::ExprToken>>> tokens = 0) {
+  ExpressionBuilder builder_(_fbb);
+  builder_.add_tokens(tokens);
+  return builder_.Finish();
+}
+
+struct Expression::Traits {
+  using type = Expression;
+  static auto constexpr Create = CreateExpression;
+};
+
+inline ::flatbuffers::Offset<Expression> CreateExpressionDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::ExprToken>> *tokens = nullptr) {
+  auto tokens__ = tokens ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::ExprToken>>(*tokens) : 0;
+  return ICPDev::Gyeol::Schema::CreateExpression(
+      _fbb,
+      tokens__);
+}
+
+::flatbuffers::Offset<Expression> CreateExpression(::flatbuffers::FlatBufferBuilder &_fbb, const ExpressionT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct SetVarT : public ::flatbuffers::NativeTable {
   typedef SetVar TableType;
   int32_t var_name_id = 0;
   ICPDev::Gyeol::Schema::ValueDataUnion value{};
+  std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT> expr{};
+  SetVarT() = default;
+  SetVarT(const SetVarT &o);
+  SetVarT(SetVarT&&) FLATBUFFERS_NOEXCEPT = default;
+  SetVarT &operator=(SetVarT o) FLATBUFFERS_NOEXCEPT;
 };
 
 struct SetVar FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -1012,7 +1266,8 @@ struct SetVar FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_VAR_NAME_ID = 4,
     VT_VALUE_TYPE = 6,
-    VT_VALUE = 8
+    VT_VALUE = 8,
+    VT_EXPR = 10
   };
   int32_t var_name_id() const {
     return GetField<int32_t>(VT_VAR_NAME_ID, 0);
@@ -1036,12 +1291,17 @@ struct SetVar FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ICPDev::Gyeol::Schema::StringRef *value_as_StringRef() const {
     return value_type() == ICPDev::Gyeol::Schema::ValueData::StringRef ? static_cast<const ICPDev::Gyeol::Schema::StringRef *>(value()) : nullptr;
   }
+  const ICPDev::Gyeol::Schema::Expression *expr() const {
+    return GetPointer<const ICPDev::Gyeol::Schema::Expression *>(VT_EXPR);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<int32_t>(verifier, VT_VAR_NAME_ID, 4) &&
            VerifyField<uint8_t>(verifier, VT_VALUE_TYPE, 1) &&
            VerifyOffset(verifier, VT_VALUE) &&
            VerifyValueData(verifier, value(), value_type()) &&
+           VerifyOffset(verifier, VT_EXPR) &&
+           verifier.VerifyTable(expr()) &&
            verifier.EndTable();
   }
   SetVarT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1078,6 +1338,9 @@ struct SetVarBuilder {
   void add_value(::flatbuffers::Offset<void> value) {
     fbb_.AddOffset(SetVar::VT_VALUE, value);
   }
+  void add_expr(::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> expr) {
+    fbb_.AddOffset(SetVar::VT_EXPR, expr);
+  }
   explicit SetVarBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1093,8 +1356,10 @@ inline ::flatbuffers::Offset<SetVar> CreateSetVar(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     int32_t var_name_id = 0,
     ICPDev::Gyeol::Schema::ValueData value_type = ICPDev::Gyeol::Schema::ValueData::NONE,
-    ::flatbuffers::Offset<void> value = 0) {
+    ::flatbuffers::Offset<void> value = 0,
+    ::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> expr = 0) {
   SetVarBuilder builder_(_fbb);
+  builder_.add_expr(expr);
   builder_.add_value(value);
   builder_.add_var_name_id(var_name_id);
   builder_.add_value_type(value_type);
@@ -1115,6 +1380,12 @@ struct ConditionT : public ::flatbuffers::NativeTable {
   ICPDev::Gyeol::Schema::ValueDataUnion compare_value{};
   int32_t true_jump_node_id = 0;
   int32_t false_jump_node_id = 0;
+  std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT> lhs_expr{};
+  std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT> rhs_expr{};
+  ConditionT() = default;
+  ConditionT(const ConditionT &o);
+  ConditionT(ConditionT&&) FLATBUFFERS_NOEXCEPT = default;
+  ConditionT &operator=(ConditionT o) FLATBUFFERS_NOEXCEPT;
 };
 
 struct Condition FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -1127,7 +1398,9 @@ struct Condition FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_COMPARE_VALUE_TYPE = 8,
     VT_COMPARE_VALUE = 10,
     VT_TRUE_JUMP_NODE_ID = 12,
-    VT_FALSE_JUMP_NODE_ID = 14
+    VT_FALSE_JUMP_NODE_ID = 14,
+    VT_LHS_EXPR = 16,
+    VT_RHS_EXPR = 18
   };
   int32_t var_name_id() const {
     return GetField<int32_t>(VT_VAR_NAME_ID, 0);
@@ -1160,6 +1433,12 @@ struct Condition FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   int32_t false_jump_node_id() const {
     return GetField<int32_t>(VT_FALSE_JUMP_NODE_ID, 0);
   }
+  const ICPDev::Gyeol::Schema::Expression *lhs_expr() const {
+    return GetPointer<const ICPDev::Gyeol::Schema::Expression *>(VT_LHS_EXPR);
+  }
+  const ICPDev::Gyeol::Schema::Expression *rhs_expr() const {
+    return GetPointer<const ICPDev::Gyeol::Schema::Expression *>(VT_RHS_EXPR);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<int32_t>(verifier, VT_VAR_NAME_ID, 4) &&
@@ -1169,6 +1448,10 @@ struct Condition FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyValueData(verifier, compare_value(), compare_value_type()) &&
            VerifyField<int32_t>(verifier, VT_TRUE_JUMP_NODE_ID, 4) &&
            VerifyField<int32_t>(verifier, VT_FALSE_JUMP_NODE_ID, 4) &&
+           VerifyOffset(verifier, VT_LHS_EXPR) &&
+           verifier.VerifyTable(lhs_expr()) &&
+           VerifyOffset(verifier, VT_RHS_EXPR) &&
+           verifier.VerifyTable(rhs_expr()) &&
            verifier.EndTable();
   }
   ConditionT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1214,6 +1497,12 @@ struct ConditionBuilder {
   void add_false_jump_node_id(int32_t false_jump_node_id) {
     fbb_.AddElement<int32_t>(Condition::VT_FALSE_JUMP_NODE_ID, false_jump_node_id, 0);
   }
+  void add_lhs_expr(::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> lhs_expr) {
+    fbb_.AddOffset(Condition::VT_LHS_EXPR, lhs_expr);
+  }
+  void add_rhs_expr(::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> rhs_expr) {
+    fbb_.AddOffset(Condition::VT_RHS_EXPR, rhs_expr);
+  }
   explicit ConditionBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1232,8 +1521,12 @@ inline ::flatbuffers::Offset<Condition> CreateCondition(
     ICPDev::Gyeol::Schema::ValueData compare_value_type = ICPDev::Gyeol::Schema::ValueData::NONE,
     ::flatbuffers::Offset<void> compare_value = 0,
     int32_t true_jump_node_id = 0,
-    int32_t false_jump_node_id = 0) {
+    int32_t false_jump_node_id = 0,
+    ::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> lhs_expr = 0,
+    ::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> rhs_expr = 0) {
   ConditionBuilder builder_(_fbb);
+  builder_.add_rhs_expr(rhs_expr);
+  builder_.add_lhs_expr(lhs_expr);
   builder_.add_false_jump_node_id(false_jump_node_id);
   builder_.add_true_jump_node_id(true_jump_node_id);
   builder_.add_compare_value(compare_value);
@@ -2302,6 +2595,90 @@ inline ::flatbuffers::Offset<Command> CreateCommand(::flatbuffers::FlatBufferBui
       _params);
 }
 
+inline ExprTokenT *ExprToken::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<ExprTokenT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void ExprToken::UnPackTo(ExprTokenT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = op(); _o->op = _e; }
+  { auto _e = literal_value_type(); _o->literal_value.type = _e; }
+  { auto _e = literal_value(); if (_e) _o->literal_value.value = ICPDev::Gyeol::Schema::ValueDataUnion::UnPack(_e, literal_value_type(), _resolver); }
+  { auto _e = var_name_id(); _o->var_name_id = _e; }
+}
+
+inline ::flatbuffers::Offset<ExprToken> ExprToken::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ExprTokenT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateExprToken(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<ExprToken> CreateExprToken(::flatbuffers::FlatBufferBuilder &_fbb, const ExprTokenT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const ExprTokenT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _op = _o->op;
+  auto _literal_value_type = _o->literal_value.type;
+  auto _literal_value = _o->literal_value.Pack(_fbb);
+  auto _var_name_id = _o->var_name_id;
+  return ICPDev::Gyeol::Schema::CreateExprToken(
+      _fbb,
+      _op,
+      _literal_value_type,
+      _literal_value,
+      _var_name_id);
+}
+
+inline ExpressionT::ExpressionT(const ExpressionT &o) {
+  tokens.reserve(o.tokens.size());
+  for (const auto &tokens_ : o.tokens) { tokens.emplace_back((tokens_) ? new ICPDev::Gyeol::Schema::ExprTokenT(*tokens_) : nullptr); }
+}
+
+inline ExpressionT &ExpressionT::operator=(ExpressionT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(tokens, o.tokens);
+  return *this;
+}
+
+inline ExpressionT *Expression::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<ExpressionT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void Expression::UnPackTo(ExpressionT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = tokens(); if (_e) { _o->tokens.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->tokens[_i]) { _e->Get(_i)->UnPackTo(_o->tokens[_i].get(), _resolver); } else { _o->tokens[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::ExprTokenT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->tokens.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<Expression> Expression::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ExpressionT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateExpression(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<Expression> CreateExpression(::flatbuffers::FlatBufferBuilder &_fbb, const ExpressionT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const ExpressionT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _tokens = _o->tokens.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::ExprToken>> (_o->tokens.size(), [](size_t i, _VectorArgs *__va) { return CreateExprToken(*__va->__fbb, __va->__o->tokens[i].get(), __va->__rehasher); }, &_va ) : 0;
+  return ICPDev::Gyeol::Schema::CreateExpression(
+      _fbb,
+      _tokens);
+}
+
+inline SetVarT::SetVarT(const SetVarT &o)
+      : var_name_id(o.var_name_id),
+        value(o.value),
+        expr((o.expr) ? new ICPDev::Gyeol::Schema::ExpressionT(*o.expr) : nullptr) {
+}
+
+inline SetVarT &SetVarT::operator=(SetVarT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(var_name_id, o.var_name_id);
+  std::swap(value, o.value);
+  std::swap(expr, o.expr);
+  return *this;
+}
+
 inline SetVarT *SetVar::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<SetVarT>();
   UnPackTo(_o.get(), _resolver);
@@ -2314,6 +2691,7 @@ inline void SetVar::UnPackTo(SetVarT *_o, const ::flatbuffers::resolver_function
   { auto _e = var_name_id(); _o->var_name_id = _e; }
   { auto _e = value_type(); _o->value.type = _e; }
   { auto _e = value(); if (_e) _o->value.value = ICPDev::Gyeol::Schema::ValueDataUnion::UnPack(_e, value_type(), _resolver); }
+  { auto _e = expr(); if (_e) { if(_o->expr) { _e->UnPackTo(_o->expr.get(), _resolver); } else { _o->expr = std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT>(_e->UnPack(_resolver)); } } else if (_o->expr) { _o->expr.reset(); } }
 }
 
 inline ::flatbuffers::Offset<SetVar> SetVar::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SetVarT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -2327,11 +2705,34 @@ inline ::flatbuffers::Offset<SetVar> CreateSetVar(::flatbuffers::FlatBufferBuild
   auto _var_name_id = _o->var_name_id;
   auto _value_type = _o->value.type;
   auto _value = _o->value.Pack(_fbb);
+  auto _expr = _o->expr ? CreateExpression(_fbb, _o->expr.get(), _rehasher) : 0;
   return ICPDev::Gyeol::Schema::CreateSetVar(
       _fbb,
       _var_name_id,
       _value_type,
-      _value);
+      _value,
+      _expr);
+}
+
+inline ConditionT::ConditionT(const ConditionT &o)
+      : var_name_id(o.var_name_id),
+        op(o.op),
+        compare_value(o.compare_value),
+        true_jump_node_id(o.true_jump_node_id),
+        false_jump_node_id(o.false_jump_node_id),
+        lhs_expr((o.lhs_expr) ? new ICPDev::Gyeol::Schema::ExpressionT(*o.lhs_expr) : nullptr),
+        rhs_expr((o.rhs_expr) ? new ICPDev::Gyeol::Schema::ExpressionT(*o.rhs_expr) : nullptr) {
+}
+
+inline ConditionT &ConditionT::operator=(ConditionT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(var_name_id, o.var_name_id);
+  std::swap(op, o.op);
+  std::swap(compare_value, o.compare_value);
+  std::swap(true_jump_node_id, o.true_jump_node_id);
+  std::swap(false_jump_node_id, o.false_jump_node_id);
+  std::swap(lhs_expr, o.lhs_expr);
+  std::swap(rhs_expr, o.rhs_expr);
+  return *this;
 }
 
 inline ConditionT *Condition::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -2349,6 +2750,8 @@ inline void Condition::UnPackTo(ConditionT *_o, const ::flatbuffers::resolver_fu
   { auto _e = compare_value(); if (_e) _o->compare_value.value = ICPDev::Gyeol::Schema::ValueDataUnion::UnPack(_e, compare_value_type(), _resolver); }
   { auto _e = true_jump_node_id(); _o->true_jump_node_id = _e; }
   { auto _e = false_jump_node_id(); _o->false_jump_node_id = _e; }
+  { auto _e = lhs_expr(); if (_e) { if(_o->lhs_expr) { _e->UnPackTo(_o->lhs_expr.get(), _resolver); } else { _o->lhs_expr = std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT>(_e->UnPack(_resolver)); } } else if (_o->lhs_expr) { _o->lhs_expr.reset(); } }
+  { auto _e = rhs_expr(); if (_e) { if(_o->rhs_expr) { _e->UnPackTo(_o->rhs_expr.get(), _resolver); } else { _o->rhs_expr = std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT>(_e->UnPack(_resolver)); } } else if (_o->rhs_expr) { _o->rhs_expr.reset(); } }
 }
 
 inline ::flatbuffers::Offset<Condition> Condition::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ConditionT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -2365,6 +2768,8 @@ inline ::flatbuffers::Offset<Condition> CreateCondition(::flatbuffers::FlatBuffe
   auto _compare_value = _o->compare_value.Pack(_fbb);
   auto _true_jump_node_id = _o->true_jump_node_id;
   auto _false_jump_node_id = _o->false_jump_node_id;
+  auto _lhs_expr = _o->lhs_expr ? CreateExpression(_fbb, _o->lhs_expr.get(), _rehasher) : 0;
+  auto _rhs_expr = _o->rhs_expr ? CreateExpression(_fbb, _o->rhs_expr.get(), _rehasher) : 0;
   return ICPDev::Gyeol::Schema::CreateCondition(
       _fbb,
       _var_name_id,
@@ -2372,7 +2777,9 @@ inline ::flatbuffers::Offset<Condition> CreateCondition(::flatbuffers::FlatBuffe
       _compare_value_type,
       _compare_value,
       _true_jump_node_id,
-      _false_jump_node_id);
+      _false_jump_node_id,
+      _lhs_expr,
+      _rhs_expr);
 }
 
 inline InstructionT *Instruction::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {

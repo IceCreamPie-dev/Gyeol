@@ -507,3 +507,318 @@ TEST(RunnerTest, ExternalSetAffectsCondition) {
     ASSERT_EQ(r.type, StepType::LINE);
     EXPECT_STREQ(r.line.text, "yes path");
 }
+
+// --- 산술 표현식 테스트 ---
+
+TEST(RunnerTest, ExprSimpleAdd) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = 1 + 2\n"
+        "    \"done\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    runner.step(); // SetVar + Line
+    EXPECT_EQ(runner.getVariable("x").i, 3);
+}
+
+TEST(RunnerTest, ExprVarRef) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = 10\n"
+        "    $ y = x + 5\n"
+        "    \"done\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    runner.step();
+    EXPECT_EQ(runner.getVariable("y").i, 15);
+}
+
+TEST(RunnerTest, ExprSelfIncrement) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = 10\n"
+        "    $ x = x + 1\n"
+        "    \"done\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    runner.step();
+    EXPECT_EQ(runner.getVariable("x").i, 11);
+}
+
+TEST(RunnerTest, ExprPrecedence) {
+    // 1 + 2 * 3 = 7 (not 9)
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = 1 + 2 * 3\n"
+        "    \"done\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    runner.step();
+    EXPECT_EQ(runner.getVariable("x").i, 7);
+}
+
+TEST(RunnerTest, ExprParentheses) {
+    // (1 + 2) * 3 = 9
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = (1 + 2) * 3\n"
+        "    \"done\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    runner.step();
+    EXPECT_EQ(runner.getVariable("x").i, 9);
+}
+
+TEST(RunnerTest, ExprFloatPromotion) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = 5 + 2.5\n"
+        "    \"done\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    runner.step();
+    EXPECT_EQ(runner.getVariable("x").type, Variant::FLOAT);
+    EXPECT_FLOAT_EQ(runner.getVariable("x").f, 7.5f);
+}
+
+TEST(RunnerTest, ExprDivByZero) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = 10 / 0\n"
+        "    \"done\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    runner.step();
+    EXPECT_EQ(runner.getVariable("x").i, 0); // 안전 기본값
+}
+
+TEST(RunnerTest, ExprWithCondition) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ hp = 100\n"
+        "    $ hp = hp - 60\n"
+        "    if hp < 50 -> low\n"
+        "    \"high hp\"\n"
+        "\n"
+        "label low:\n"
+        "    \"low hp\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "low hp");
+}
+
+TEST(RunnerTest, ExprUnaryMinus) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = -5\n"
+        "    \"done\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    runner.step();
+    EXPECT_EQ(runner.getVariable("x").i, -5);
+}
+
+TEST(RunnerTest, BackwardCompatLiteral) {
+    // 기존 문법 그대로 동작 확인
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ flag = true\n"
+        "    $ name = \"hero\"\n"
+        "    \"done\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    runner.step();
+    EXPECT_TRUE(runner.getVariable("flag").b);
+    EXPECT_EQ(runner.getVariable("name").s, "hero");
+}
+
+// --- 문자열 보간 테스트 ---
+
+TEST(RunnerTest, InterpolateBasic) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ name = \"hero\"\n"
+        "    narrator \"Hello {name}!\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    ASSERT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "Hello hero!");
+}
+
+TEST(RunnerTest, InterpolateMultiple) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ a = \"fire\"\n"
+        "    $ b = \"ice\"\n"
+        "    \"{a} and {b}\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    ASSERT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "fire and ice");
+}
+
+TEST(RunnerTest, InterpolateNoVar) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"plain text\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    ASSERT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "plain text");
+}
+
+TEST(RunnerTest, InterpolateUndefined) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"Hello {missing}!\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    ASSERT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "Hello !");
+}
+
+TEST(RunnerTest, InterpolateInChoice) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ item = \"sword\"\n"
+        "    menu:\n"
+        "        \"Take {item}\" -> take\n"
+        "        \"Leave\" -> leave\n"
+        "\n"
+        "label take:\n"
+        "    \"took\"\n"
+        "\n"
+        "label leave:\n"
+        "    \"left\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    ASSERT_EQ(r.type, StepType::CHOICES);
+    ASSERT_EQ(r.choices.size(), 2u);
+    EXPECT_STREQ(r.choices[0].text, "Take sword");
+    EXPECT_STREQ(r.choices[1].text, "Leave");
+}
+
+TEST(RunnerTest, InterpolateIntVar) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ hp = 100\n"
+        "    \"HP: {hp}\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    ASSERT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "HP: 100");
+}
+
+// --- 조건 표현식 테스트 ---
+
+TEST(RunnerTest, CondExprLHS) {
+    // if hp - 60 > 30 → hp=100, 100-60=40, 40>30 → true
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ hp = 100\n"
+        "    if hp - 60 > 30 -> yes\n"
+        "    \"no\"\n"
+        "\n"
+        "label yes:\n"
+        "    \"yes\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "yes");
+}
+
+TEST(RunnerTest, CondExprRHS) {
+    // if x == y + 1 → x=6, y=5, 5+1=6, 6==6 → true
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = 6\n"
+        "    $ y = 5\n"
+        "    if x == y + 1 -> yes\n"
+        "    \"no\"\n"
+        "\n"
+        "label yes:\n"
+        "    \"yes\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "yes");
+}
+
+TEST(RunnerTest, CondExprBothSides) {
+    // if x + 1 == y → x=4, y=5, 4+1=5, 5==5 → true
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = 4\n"
+        "    $ y = 5\n"
+        "    if x + 1 == y -> yes\n"
+        "    \"no\"\n"
+        "\n"
+        "label yes:\n"
+        "    \"yes\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "yes");
+}
+
+TEST(RunnerTest, CondExprFalse) {
+    // if hp - 50 > 60 → hp=100, 100-50=50, 50>60 → false
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ hp = 100\n"
+        "    if hp - 50 > 60 -> yes else no\n"
+        "\n"
+        "label yes:\n"
+        "    \"yes\"\n"
+        "\n"
+        "label no:\n"
+        "    \"no\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "no");
+}
+
+TEST(RunnerTest, CondExprNoElse) {
+    // else 없이 false → 다음 줄 계속
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = 1\n"
+        "    if x + 1 > 10 -> skip\n"
+        "    \"continued\"\n"
+        "\n"
+        "label skip:\n"
+        "    \"skipped\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "continued");
+}

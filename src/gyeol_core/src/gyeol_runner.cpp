@@ -3,6 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <cstring>
+#include <sstream>
 
 using namespace ICPDev::Gyeol::Schema;
 
@@ -124,6 +125,148 @@ static bool compareVariants(const Variant& lhs, Operator op, const Variant& rhs)
     return false;
 }
 
+// --- 산술 연산 ---
+static Variant applyBinaryOp(const Variant& lhs, ExprOp op, const Variant& rhs) {
+    // Float 하나라도 있으면 float 연산
+    if (lhs.type == Variant::FLOAT || rhs.type == Variant::FLOAT) {
+        float a = (lhs.type == Variant::FLOAT) ? lhs.f :
+                  (lhs.type == Variant::BOOL) ? (lhs.b ? 1.0f : 0.0f) :
+                  static_cast<float>(lhs.i);
+        float b = (rhs.type == Variant::FLOAT) ? rhs.f :
+                  (rhs.type == Variant::BOOL) ? (rhs.b ? 1.0f : 0.0f) :
+                  static_cast<float>(rhs.i);
+        switch (op) {
+            case ExprOp::Add: return Variant::Float(a + b);
+            case ExprOp::Sub: return Variant::Float(a - b);
+            case ExprOp::Mul: return Variant::Float(a * b);
+            case ExprOp::Div: return (b != 0.0f) ? Variant::Float(a / b) : Variant::Float(0.0f);
+            case ExprOp::Mod: {
+                int32_t ai = static_cast<int32_t>(a);
+                int32_t bi = static_cast<int32_t>(b);
+                return (bi != 0) ? Variant::Int(ai % bi) : Variant::Int(0);
+            }
+            default: return Variant::Int(0);
+        }
+    }
+    // INT (BOOL은 INT로 변환)
+    int32_t a = (lhs.type == Variant::BOOL) ? (lhs.b ? 1 : 0) : lhs.i;
+    int32_t b = (rhs.type == Variant::BOOL) ? (rhs.b ? 1 : 0) : rhs.i;
+    switch (op) {
+        case ExprOp::Add: return Variant::Int(a + b);
+        case ExprOp::Sub: return Variant::Int(a - b);
+        case ExprOp::Mul: return Variant::Int(a * b);
+        case ExprOp::Div: return (b != 0) ? Variant::Int(a / b) : Variant::Int(0);
+        case ExprOp::Mod: return (b != 0) ? Variant::Int(a % b) : Variant::Int(0);
+        default: return Variant::Int(0);
+    }
+}
+
+Variant Runner::evaluateExpression(const void* exprPtr) const {
+    auto* expr = static_cast<const Expression*>(exprPtr);
+    if (!expr || !expr->tokens()) return Variant::Int(0);
+
+    auto* pool = asPool(pool_);
+    std::vector<Variant> stack;
+
+    for (flatbuffers::uoffset_t i = 0; i < expr->tokens()->size(); ++i) {
+        auto* token = expr->tokens()->Get(i);
+
+        switch (token->op()) {
+            case ExprOp::PushLiteral: {
+                if (token->literal_value() &&
+                    token->literal_value_type() != ValueData::NONE) {
+                    stack.push_back(readValueData(
+                        token->literal_value(),
+                        token->literal_value_type(), pool));
+                } else {
+                    stack.push_back(Variant::Int(0));
+                }
+                break;
+            }
+            case ExprOp::PushVar: {
+                std::string varName = poolStr(token->var_name_id());
+                auto it = variables_.find(varName);
+                if (it != variables_.end()) {
+                    stack.push_back(it->second);
+                } else {
+                    stack.push_back(Variant::Int(0));
+                }
+                break;
+            }
+            case ExprOp::Add:
+            case ExprOp::Sub:
+            case ExprOp::Mul:
+            case ExprOp::Div:
+            case ExprOp::Mod: {
+                if (stack.size() < 2) return Variant::Int(0);
+                Variant rhs = stack.back(); stack.pop_back();
+                Variant lhs = stack.back(); stack.pop_back();
+                stack.push_back(applyBinaryOp(lhs, token->op(), rhs));
+                break;
+            }
+            case ExprOp::Negate: {
+                if (stack.empty()) return Variant::Int(0);
+                Variant val = stack.back(); stack.pop_back();
+                if (val.type == Variant::FLOAT) {
+                    stack.push_back(Variant::Float(-val.f));
+                } else {
+                    int32_t v = (val.type == Variant::BOOL) ? (val.b ? 1 : 0) : val.i;
+                    stack.push_back(Variant::Int(-v));
+                }
+                break;
+            }
+        }
+    }
+
+    return stack.empty() ? Variant::Int(0) : stack.back();
+}
+
+// --- 문자열 보간 ---
+std::string Runner::variantToString(const Variant& v) {
+    switch (v.type) {
+        case Variant::BOOL:   return v.b ? "true" : "false";
+        case Variant::INT:    return std::to_string(v.i);
+        case Variant::FLOAT: {
+            std::ostringstream oss;
+            oss << v.f;
+            return oss.str();
+        }
+        case Variant::STRING: return v.s;
+    }
+    return "";
+}
+
+std::string Runner::interpolateText(const char* text) const {
+    if (!text) return "";
+
+    // 빠른 경로: { 가 없으면 빈 문자열 반환 (호출측이 pool 포인터 유지)
+    if (std::strchr(text, '{') == nullptr) return "";
+
+    std::string result;
+    const char* p = text;
+    while (*p) {
+        if (*p == '{') {
+            p++; // skip '{'
+            std::string varName;
+            while (*p && *p != '}') {
+                varName += *p;
+                p++;
+            }
+            if (*p == '}') p++; // skip '}'
+
+            auto it = variables_.find(varName);
+            if (it != variables_.end()) {
+                result += variantToString(it->second);
+            }
+            // 미정의 변수: 빈 문자열 (아무것도 추가 안함)
+        } else {
+            result += *p;
+            p++;
+        }
+    }
+    return result;
+}
+
 // --- start ---
 bool Runner::start(const uint8_t* buffer, size_t size) {
     flatbuffers::Verifier verifier(buffer, size);
@@ -144,7 +287,9 @@ bool Runner::start(const uint8_t* buffer, size_t size) {
         for (flatbuffers::uoffset_t i = 0; i < globalVars->size(); ++i) {
             auto* sv = globalVars->Get(i);
             std::string varName = poolStr(sv->var_name_id());
-            if (sv->value() && sv->value_type() != ValueData::NONE) {
+            if (sv->expr()) {
+                variables_[varName] = evaluateExpression(sv->expr());
+            } else if (sv->value() && sv->value_type() != ValueData::NONE) {
                 variables_[varName] = readValueData(sv->value(), sv->value_type(), pool);
             }
         }
@@ -202,7 +347,14 @@ StepResult Runner::step() {
                 result.type = StepType::LINE;
                 result.line.character = (line->character_id() >= 0)
                     ? poolStr(line->character_id()) : nullptr;
-                result.line.text = poolStr(line->text_id());
+                const char* rawText = poolStr(line->text_id());
+                std::string interp = interpolateText(rawText);
+                if (!interp.empty()) {
+                    result.ownedStrings_.push_back(std::move(interp));
+                    result.line.text = result.ownedStrings_.back().c_str();
+                } else {
+                    result.line.text = rawText;
+                }
                 return result;
             }
 
@@ -252,7 +404,14 @@ StepResult Runner::step() {
                 result.type = StepType::CHOICES;
                 for (int k = 0; k < static_cast<int>(pendingChoices_.size()); ++k) {
                     ChoiceData cd;
-                    cd.text = poolStr(pendingChoices_[k].text_id);
+                    const char* rawText = poolStr(pendingChoices_[k].text_id);
+                    std::string interp = interpolateText(rawText);
+                    if (!interp.empty()) {
+                        result.ownedStrings_.push_back(std::move(interp));
+                        cd.text = result.ownedStrings_.back().c_str();
+                    } else {
+                        cd.text = rawText;
+                    }
                     cd.index = k;
                     result.choices.push_back(cd);
                 }
@@ -276,7 +435,9 @@ StepResult Runner::step() {
             case OpData::SetVar: {
                 auto* setvar = instr->data_as_SetVar();
                 std::string varName = poolStr(setvar->var_name_id());
-                if (setvar->value() && setvar->value_type() != ValueData::NONE) {
+                if (setvar->expr()) {
+                    variables_[varName] = evaluateExpression(setvar->expr());
+                } else if (setvar->value() && setvar->value_type() != ValueData::NONE) {
                     variables_[varName] = readValueData(setvar->value(), setvar->value_type(), pool);
                 }
                 continue;
@@ -284,16 +445,24 @@ StepResult Runner::step() {
 
             case OpData::Condition: {
                 auto* cond = instr->data_as_Condition();
-                std::string varName = poolStr(cond->var_name_id());
 
+                // LHS 평가: lhs_expr 있으면 표현식, 없으면 기존 변수 조회
                 Variant lhs = Variant::Int(0);
-                auto it = variables_.find(varName);
-                if (it != variables_.end()) {
-                    lhs = it->second;
+                if (cond->lhs_expr()) {
+                    lhs = evaluateExpression(cond->lhs_expr());
+                } else {
+                    std::string varName = poolStr(cond->var_name_id());
+                    auto it = variables_.find(varName);
+                    if (it != variables_.end()) {
+                        lhs = it->second;
+                    }
                 }
 
+                // RHS 평가: rhs_expr 있으면 표현식, 없으면 기존 리터럴
                 Variant rhs = Variant::Int(0);
-                if (cond->compare_value() && cond->compare_value_type() != ValueData::NONE) {
+                if (cond->rhs_expr()) {
+                    rhs = evaluateExpression(cond->rhs_expr());
+                } else if (cond->compare_value() && cond->compare_value_type() != ValueData::NONE) {
                     rhs = readValueData(cond->compare_value(), cond->compare_value_type(), pool);
                 }
 

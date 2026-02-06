@@ -583,3 +583,138 @@ TEST(ParserTest, ConditionNoElseNoError) {
     );
     EXPECT_FALSE(buf.empty());
 }
+
+// --- 표현식 파싱 테스트 ---
+
+TEST(ParserTest, SetVarSimpleLiteralBackwardCompat) {
+    // 단순 리터럴은 기존 value 필드 사용, expr 없음
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = 42\n"
+        "    \"done\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    EXPECT_EQ(sv->value_type(), ValueData::IntValue);
+    EXPECT_EQ(sv->value_as_IntValue()->val(), 42);
+    EXPECT_EQ(sv->expr(), nullptr); // 단순 리터럴은 expr 없음
+}
+
+TEST(ParserTest, SetVarExpressionAddition) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = 1 + 2\n"
+        "    \"done\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    ASSERT_NE(sv->expr(), nullptr);
+    // RPN: [PushLiteral(1), PushLiteral(2), Add]
+    ASSERT_EQ(sv->expr()->tokens()->size(), 3u);
+    EXPECT_EQ(sv->expr()->tokens()->Get(0)->op(), ExprOp::PushLiteral);
+    EXPECT_EQ(sv->expr()->tokens()->Get(1)->op(), ExprOp::PushLiteral);
+    EXPECT_EQ(sv->expr()->tokens()->Get(2)->op(), ExprOp::Add);
+}
+
+TEST(ParserTest, SetVarExpressionWithVariable) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = y + 1\n"
+        "    \"done\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    ASSERT_NE(sv->expr(), nullptr);
+    // RPN: [PushVar(y), PushLiteral(1), Add]
+    ASSERT_EQ(sv->expr()->tokens()->size(), 3u);
+    EXPECT_EQ(sv->expr()->tokens()->Get(0)->op(), ExprOp::PushVar);
+    EXPECT_GE(sv->expr()->tokens()->Get(0)->var_name_id(), 0);
+    EXPECT_EQ(sv->expr()->tokens()->Get(1)->op(), ExprOp::PushLiteral);
+    EXPECT_EQ(sv->expr()->tokens()->Get(2)->op(), ExprOp::Add);
+}
+
+TEST(ParserTest, SetVarExpressionPrecedence) {
+    // $ x = 1 + 2 * 3 → RPN: [1, 2, 3, Mul, Add]
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = 1 + 2 * 3\n"
+        "    \"done\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    ASSERT_NE(sv->expr(), nullptr);
+    // RPN: [1, 2, 3, Mul, Add]
+    ASSERT_EQ(sv->expr()->tokens()->size(), 5u);
+    EXPECT_EQ(sv->expr()->tokens()->Get(0)->op(), ExprOp::PushLiteral);
+    EXPECT_EQ(sv->expr()->tokens()->Get(1)->op(), ExprOp::PushLiteral);
+    EXPECT_EQ(sv->expr()->tokens()->Get(2)->op(), ExprOp::PushLiteral);
+    EXPECT_EQ(sv->expr()->tokens()->Get(3)->op(), ExprOp::Mul);
+    EXPECT_EQ(sv->expr()->tokens()->Get(4)->op(), ExprOp::Add);
+}
+
+// --- 조건 표현식 파싱 테스트 ---
+
+TEST(ParserTest, ConditionExprLHS) {
+    // if hp - 10 > 0 → lhs_expr 존재
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if hp - 10 > 0 -> target\n"
+        "    \"fallthrough\"\n"
+        "\n"
+        "label target:\n"
+        "    \"hit\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* cond = story->nodes()->Get(0)->lines()->Get(0)->data_as_Condition();
+    ASSERT_NE(cond, nullptr);
+    EXPECT_NE(cond->lhs_expr(), nullptr); // LHS는 표현식
+    EXPECT_EQ(cond->op(), Operator::Greater);
+    // RHS는 리터럴 0
+    EXPECT_EQ(cond->compare_value_type(), ValueData::IntValue);
+    EXPECT_EQ(cond->compare_value_as_IntValue()->val(), 0);
+}
+
+TEST(ParserTest, ConditionExprBothSides) {
+    // if x + y == z → 양쪽 표현식
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if x + y == z -> target\n"
+        "    \"fallthrough\"\n"
+        "\n"
+        "label target:\n"
+        "    \"hit\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* cond = story->nodes()->Get(0)->lines()->Get(0)->data_as_Condition();
+    ASSERT_NE(cond, nullptr);
+    EXPECT_NE(cond->lhs_expr(), nullptr); // LHS 표현식 (x + y)
+    EXPECT_EQ(cond->op(), Operator::Equal);
+    EXPECT_NE(cond->rhs_expr(), nullptr); // RHS 표현식 (z 변수)
+}
+
+TEST(ParserTest, ConditionSimpleBackwardCompat) {
+    // if x == 1 → 기존 방식 (var_name_id + compare_value)
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if x == 1 -> target\n"
+        "    \"fallthrough\"\n"
+        "\n"
+        "label target:\n"
+        "    \"hit\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* cond = story->nodes()->Get(0)->lines()->Get(0)->data_as_Condition();
+    ASSERT_NE(cond, nullptr);
+    EXPECT_EQ(cond->lhs_expr(), nullptr); // 단순 변수 → var_name_id
+    EXPECT_GE(cond->var_name_id(), 0);
+    EXPECT_EQ(cond->op(), Operator::Equal);
+    EXPECT_EQ(cond->compare_value_type(), ValueData::IntValue);
+    EXPECT_EQ(cond->compare_value_as_IntValue()->val(), 1);
+}

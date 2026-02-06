@@ -64,6 +64,12 @@ private:
     bool parseValue(const std::string& text, size_t& pos,
                     ICPDev::Gyeol::Schema::ValueDataUnion& outValue);
 
+    // 표현식 파싱 (Shunting-yard → RPN)
+    bool parseExpression(const std::string& text, size_t& pos,
+                         std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT>& outExpr,
+                         ICPDev::Gyeol::Schema::ValueDataUnion& outSimpleValue,
+                         bool& isSimpleLiteral);
+
     // Jump target 검증
     std::unordered_map<uint64_t, int> instrLineMap_;
     static uint64_t instrKey(size_t nodeIdx, size_t instrIdx) {
