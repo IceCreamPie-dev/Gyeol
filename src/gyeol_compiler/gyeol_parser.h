@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 
 namespace Gyeol {
@@ -62,6 +63,13 @@ private:
     // 값 파싱
     bool parseValue(const std::string& text, size_t& pos,
                     ICPDev::Gyeol::Schema::ValueDataUnion& outValue);
+
+    // Jump target 검증
+    std::unordered_map<uint64_t, int> instrLineMap_;
+    static uint64_t instrKey(size_t nodeIdx, size_t instrIdx) {
+        return (static_cast<uint64_t>(nodeIdx) << 32) | static_cast<uint64_t>(instrIdx);
+    }
+    void validateJumpTargets();
 };
 
 } // namespace Gyeol

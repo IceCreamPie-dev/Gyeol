@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "test_helpers.h"
 #include "gyeol_runner.h"
+#include <set>
 
 using namespace Gyeol;
 
@@ -397,4 +398,112 @@ TEST(RunnerTest, StepAfterEndReturnsEnd) {
     auto r = runner.step(); // should still be END
     EXPECT_EQ(r.type, StepType::END);
     EXPECT_TRUE(runner.isFinished());
+}
+
+// --- Variable API Tests ---
+
+TEST(RunnerTest, GetSetVariable) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ hp = 100\n"
+        "    \"check\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    runner.step(); // SetVar + Line
+
+    EXPECT_TRUE(runner.hasVariable("hp"));
+    auto v = runner.getVariable("hp");
+    EXPECT_EQ(v.type, Variant::INT);
+    EXPECT_EQ(v.i, 100);
+}
+
+TEST(RunnerTest, HasVariable) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ exists = true\n"
+        "    \"check\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    runner.step();
+
+    EXPECT_TRUE(runner.hasVariable("exists"));
+    EXPECT_FALSE(runner.hasVariable("nope"));
+}
+
+TEST(RunnerTest, GetVariableDefault) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"hello\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    // 존재하지 않는 변수는 Int(0) 반환
+    auto v = runner.getVariable("missing");
+    EXPECT_EQ(v.type, Variant::INT);
+    EXPECT_EQ(v.i, 0);
+}
+
+TEST(RunnerTest, SetVariableFromExternal) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"hello\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    // 외부에서 변수 설정
+    runner.setVariable("score", Variant::Int(42));
+    runner.setVariable("name", Variant::String("Player"));
+    runner.setVariable("ratio", Variant::Float(3.14f));
+    runner.setVariable("alive", Variant::Bool(true));
+
+    EXPECT_EQ(runner.getVariable("score").i, 42);
+    EXPECT_EQ(runner.getVariable("name").s, "Player");
+    EXPECT_FLOAT_EQ(runner.getVariable("ratio").f, 3.14f);
+    EXPECT_TRUE(runner.getVariable("alive").b);
+}
+
+TEST(RunnerTest, GetVariableNames) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ a = 1\n"
+        "    $ b = 2\n"
+        "    $ c = 3\n"
+        "    \"done\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    runner.step(); // execute SetVars + Line
+
+    auto names = runner.getVariableNames();
+    EXPECT_EQ(names.size(), 3u);
+
+    // 순서는 보장되지 않으므로 set으로 비교
+    std::set<std::string> nameSet(names.begin(), names.end());
+    EXPECT_TRUE(nameSet.count("a"));
+    EXPECT_TRUE(nameSet.count("b"));
+    EXPECT_TRUE(nameSet.count("c"));
+}
+
+TEST(RunnerTest, ExternalSetAffectsCondition) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if flag == true -> yes\n"
+        "    \"no path\"\n"
+        "\n"
+        "label yes:\n"
+        "    \"yes path\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    // 외부에서 flag = true 설정
+    runner.setVariable("flag", Variant::Bool(true));
+
+    auto r = runner.step();
+    ASSERT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "yes path");
 }

@@ -1,10 +1,35 @@
 ﻿#include "gyeol_parser.h"
 #include <iostream>
 #include <string>
+#include <cstring>
+
+static const char* VERSION = "0.1.0";
+
+static void printUsage() {
+    std::cout << "Gyeol Compiler v" << VERSION << "\n"
+              << "Usage: GyeolCompiler <input.gyeol> [-o output.gyb]\n"
+              << "\n"
+              << "Options:\n"
+              << "  -o <path>    Output file path (default: story.gyb)\n"
+              << "  -h, --help   Show this help message\n"
+              << "  --version    Show version number\n";
+}
 
 int main(int argc, char* argv[]) {
+    // help/version 플래그 체크 (위치 무관)
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "-h") == 0 || std::strcmp(argv[i], "--help") == 0) {
+            printUsage();
+            return 0;
+        }
+        if (std::strcmp(argv[i], "--version") == 0) {
+            std::cout << "GyeolCompiler " << VERSION << std::endl;
+            return 0;
+        }
+    }
+
     if (argc < 2) {
-        std::cerr << "Usage: GyeolCompiler <input.gyeol> [-o output.gyb]" << std::endl;
+        printUsage();
         return 1;
     }
 
@@ -13,7 +38,7 @@ int main(int argc, char* argv[]) {
 
     // -o 옵션
     for (int i = 2; i < argc - 1; ++i) {
-        if (std::string(argv[i]) == "-o") {
+        if (std::strcmp(argv[i], "-o") == 0) {
             outputPath = argv[i + 1];
             break;
         }
@@ -22,12 +47,20 @@ int main(int argc, char* argv[]) {
     Gyeol::Parser parser;
 
     if (!parser.parse(inputPath)) {
-        std::cerr << "Parse error: " << parser.getError() << std::endl;
+        const auto& errors = parser.getErrors();
+        for (const auto& err : errors) {
+            std::cerr << "error: " << err << std::endl;
+        }
+        std::cerr << "\n" << errors.size() << " error(s). Compilation aborted." << std::endl;
         return 1;
     }
 
     if (!parser.compile(outputPath)) {
-        std::cerr << "Compile error: " << parser.getError() << std::endl;
+        const auto& errors = parser.getErrors();
+        for (const auto& err : errors) {
+            std::cerr << "error: " << err << std::endl;
+        }
+        std::cerr << "\n" << errors.size() << " error(s). Compilation failed." << std::endl;
         return 1;
     }
 

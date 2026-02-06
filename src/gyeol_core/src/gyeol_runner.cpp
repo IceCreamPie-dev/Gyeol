@@ -348,6 +348,32 @@ bool Runner::isFinished() const {
     return finished_;
 }
 
+// --- Variable access API ---
+Variant Runner::getVariable(const std::string& name) const {
+    auto it = variables_.find(name);
+    if (it != variables_.end()) {
+        return it->second;
+    }
+    return Variant::Int(0);
+}
+
+void Runner::setVariable(const std::string& name, const Variant& value) {
+    variables_[name] = value;
+}
+
+bool Runner::hasVariable(const std::string& name) const {
+    return variables_.find(name) != variables_.end();
+}
+
+std::vector<std::string> Runner::getVariableNames() const {
+    std::vector<std::string> names;
+    names.reserve(variables_.size());
+    for (const auto& pair : variables_) {
+        names.push_back(pair.first);
+    }
+    return names;
+}
+
 // --- Save/Load 헬퍼 ---
 std::string Runner::nodeNameFromPtr(const void* nodePtr) const {
     auto* node = asNode(nodePtr);

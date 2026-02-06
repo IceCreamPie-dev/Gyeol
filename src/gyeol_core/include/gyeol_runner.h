@@ -56,6 +56,12 @@ public:
     void choose(int index);
     bool isFinished() const;
 
+    // Variable access API
+    Variant getVariable(const std::string& name) const;
+    void setVariable(const std::string& name, const Variant& value);
+    bool hasVariable(const std::string& name) const;
+    std::vector<std::string> getVariableNames() const;
+
     // Save/Load API
     bool saveState(const std::string& filepath) const;
     bool loadState(const std::string& filepath);

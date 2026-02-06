@@ -20,6 +20,9 @@ void StoryPlayer::_bind_methods() {
     ClassDB::bind_method(D_METHOD("is_finished"), &StoryPlayer::is_finished);
     ClassDB::bind_method(D_METHOD("save_state", "path"), &StoryPlayer::save_state);
     ClassDB::bind_method(D_METHOD("load_state", "path"), &StoryPlayer::load_state);
+    ClassDB::bind_method(D_METHOD("get_variable", "name"), &StoryPlayer::get_variable);
+    ClassDB::bind_method(D_METHOD("set_variable", "name", "value"), &StoryPlayer::set_variable);
+    ClassDB::bind_method(D_METHOD("has_variable", "name"), &StoryPlayer::has_variable);
 
     // Signals
     ADD_SIGNAL(MethodInfo("dialogue_line",
@@ -174,4 +177,46 @@ bool StoryPlayer::load_state(const String &path) {
         UtilityFunctions::printerr("[Gyeol] Failed to load state: ", path);
     }
     return ok;
+}
+
+godot::Variant StoryPlayer::get_variable(const String &name) const {
+    std::string n = name.utf8().get_data();
+    if (!runner_.hasVariable(n)) {
+        return godot::Variant(); // nil
+    }
+    Gyeol::Variant v = runner_.getVariable(n);
+    switch (v.type) {
+        case Gyeol::Variant::BOOL:   return godot::Variant(v.b);
+        case Gyeol::Variant::INT:    return godot::Variant(v.i);
+        case Gyeol::Variant::FLOAT:  return godot::Variant(static_cast<double>(v.f));
+        case Gyeol::Variant::STRING: return godot::Variant(String::utf8(v.s.c_str()));
+    }
+    return godot::Variant();
+}
+
+void StoryPlayer::set_variable(const String &name, const godot::Variant &value) {
+    std::string n = name.utf8().get_data();
+    switch (value.get_type()) {
+        case godot::Variant::BOOL:
+            runner_.setVariable(n, Gyeol::Variant::Bool(static_cast<bool>(value)));
+            break;
+        case godot::Variant::INT:
+            runner_.setVariable(n, Gyeol::Variant::Int(static_cast<int32_t>(static_cast<int64_t>(value))));
+            break;
+        case godot::Variant::FLOAT:
+            runner_.setVariable(n, Gyeol::Variant::Float(static_cast<float>(static_cast<double>(value))));
+            break;
+        case godot::Variant::STRING: {
+            String s = value;
+            runner_.setVariable(n, Gyeol::Variant::String(s.utf8().get_data()));
+            break;
+        }
+        default:
+            UtilityFunctions::printerr("[Gyeol] Unsupported variant type for set_variable");
+            break;
+    }
+}
+
+bool StoryPlayer::has_variable(const String &name) const {
+    return runner_.hasVariable(name.utf8().get_data());
 }

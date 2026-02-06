@@ -481,3 +481,105 @@ TEST(ParserErrorTest, ChoiceOutsideMenu) {
     EXPECT_FALSE(parser.parse(path));
     std::remove(path.c_str());
 }
+
+// --- Jump Target Validation Tests ---
+
+TEST(ParserErrorTest, InvalidJumpTarget) {
+    std::string path = "test_jump_err.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    jump nonexistent\n";
+    }
+
+    Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+    EXPECT_TRUE(parser.hasErrors());
+
+    // 에러 메시지에 타겟 이름 포함 확인
+    bool found = false;
+    for (const auto& err : parser.getErrors()) {
+        if (err.find("nonexistent") != std::string::npos &&
+            err.find("does not exist") != std::string::npos) {
+            found = true;
+        }
+    }
+    EXPECT_TRUE(found);
+    std::remove(path.c_str());
+}
+
+TEST(ParserErrorTest, InvalidChoiceTarget) {
+    std::string path = "test_choice_err.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    menu:\n"
+            << "        \"Go\" -> missing_node\n";
+    }
+
+    Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+
+    bool found = false;
+    for (const auto& err : parser.getErrors()) {
+        if (err.find("missing_node") != std::string::npos &&
+            err.find("does not exist") != std::string::npos) {
+            found = true;
+        }
+    }
+    EXPECT_TRUE(found);
+    std::remove(path.c_str());
+}
+
+TEST(ParserErrorTest, InvalidConditionTarget) {
+    std::string path = "test_cond_err.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    if x == 1 -> ghost_node else another_ghost\n";
+    }
+
+    Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+
+    // 두 타겟 모두 에러
+    const auto& errors = parser.getErrors();
+    bool foundTrue = false, foundFalse = false;
+    for (const auto& err : errors) {
+        if (err.find("ghost_node") != std::string::npos) foundTrue = true;
+        if (err.find("another_ghost") != std::string::npos) foundFalse = true;
+    }
+    EXPECT_TRUE(foundTrue);
+    EXPECT_TRUE(foundFalse);
+    std::remove(path.c_str());
+}
+
+TEST(ParserTest, ValidTargetsNoError) {
+    // 모든 타겟이 유효한 스크립트
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    jump nodeA\n"
+        "\n"
+        "label nodeA:\n"
+        "    menu:\n"
+        "        \"Go B\" -> nodeB\n"
+        "\n"
+        "label nodeB:\n"
+        "    if x == 1 -> start\n"
+        "    \"done\"\n"
+    );
+    EXPECT_FALSE(buf.empty()); // 에러 없이 컴파일 성공
+}
+
+TEST(ParserTest, ConditionNoElseNoError) {
+    // else 없는 조건문 (false_jump = -1) → 검증 에러 아님
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if x == 1 -> nodeA\n"
+        "    \"fallthrough\"\n"
+        "\n"
+        "label nodeA:\n"
+        "    \"in A\"\n"
+    );
+    EXPECT_FALSE(buf.empty());
+}

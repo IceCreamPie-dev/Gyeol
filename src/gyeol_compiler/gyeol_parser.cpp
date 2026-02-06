@@ -283,6 +283,12 @@ bool Parser::parseMenuChoiceLine(const std::string& content, int lineNum) {
     auto instr = std::make_unique<InstructionT>();
     instr->data.Set(*choice);
     currentNode_->lines.push_back(std::move(instr));
+
+    // 라인번호 기록 (jump target 검증용)
+    size_t nodeIdx = story_.nodes.size() - 1;
+    size_t instrIdx = currentNode_->lines.size() - 1;
+    instrLineMap_[instrKey(nodeIdx, instrIdx)] = lineNum;
+
     return true;
 }
 
@@ -307,6 +313,12 @@ bool Parser::parseJumpLine(const std::string& content, int lineNum, bool isCall)
     auto instr = std::make_unique<InstructionT>();
     instr->data.Set(*jump);
     currentNode_->lines.push_back(std::move(instr));
+
+    // 라인번호 기록 (jump target 검증용)
+    size_t nodeIdx = story_.nodes.size() - 1;
+    size_t instrIdx = currentNode_->lines.size() - 1;
+    instrLineMap_[instrKey(nodeIdx, instrIdx)] = lineNum;
+
     return true;
 }
 
@@ -438,6 +450,12 @@ bool Parser::parseConditionLine(const std::string& content, int lineNum) {
     auto instr = std::make_unique<InstructionT>();
     instr->data.Set(*cond);
     currentNode_->lines.push_back(std::move(instr));
+
+    // 라인번호 기록 (jump target 검증용)
+    size_t nodeIdx = story_.nodes.size() - 1;
+    size_t instrIdx = currentNode_->lines.size() - 1;
+    instrLineMap_[instrKey(nodeIdx, instrIdx)] = lineNum;
+
     return true;
 }
 
@@ -492,6 +510,7 @@ bool Parser::parse(const std::string& filepath) {
     seenFirstLabel_ = false;
     error_.clear();
     errors_.clear();
+    instrLineMap_.clear();
 
     std::ifstream ifs(filepath);
     if (!ifs.is_open()) {
@@ -608,7 +627,72 @@ bool Parser::parse(const std::string& filepath) {
         return false;
     }
 
+    // Jump target 검증 패스
+    validateJumpTargets();
+
     return errors_.empty();
+}
+
+// =================================================================
+// Jump target 검증
+// =================================================================
+void Parser::validateJumpTargets() {
+    // 모든 노드 이름 수집
+    std::unordered_set<std::string> nodeNames;
+    for (const auto& node : story_.nodes) {
+        nodeNames.insert(node->name);
+    }
+
+    // 모든 instruction 순회하며 타겟 검증
+    for (size_t ni = 0; ni < story_.nodes.size(); ++ni) {
+        const auto& node = story_.nodes[ni];
+        for (size_t ii = 0; ii < node->lines.size(); ++ii) {
+            const auto& instr = node->lines[ii];
+
+            int lineNum = 0;
+            auto it = instrLineMap_.find(instrKey(ni, ii));
+            if (it != instrLineMap_.end()) {
+                lineNum = it->second;
+            }
+
+            switch (instr->data.type) {
+                case OpData::Jump: {
+                    auto* jump = instr->data.AsJump();
+                    const std::string& target = story_.string_pool[jump->target_node_name_id];
+                    if (nodeNames.find(target) == nodeNames.end()) {
+                        addError(lineNum, "jump target '" + target + "' does not exist");
+                    }
+                    break;
+                }
+                case OpData::Choice: {
+                    auto* choice = instr->data.AsChoice();
+                    const std::string& target = story_.string_pool[choice->target_node_name_id];
+                    if (nodeNames.find(target) == nodeNames.end()) {
+                        addError(lineNum, "choice target '" + target + "' does not exist");
+                    }
+                    break;
+                }
+                case OpData::Condition: {
+                    auto* cond = instr->data.AsCondition();
+                    if (cond->true_jump_node_id >= 0) {
+                        const std::string& target = story_.string_pool[cond->true_jump_node_id];
+                        if (nodeNames.find(target) == nodeNames.end()) {
+                            addError(lineNum, "condition true target '" + target + "' does not exist");
+                        }
+                    }
+                    if (cond->false_jump_node_id >= 0) {
+                        const std::string& target = story_.string_pool[cond->false_jump_node_id];
+                        if (nodeNames.find(target) == nodeNames.end()) {
+                            addError(lineNum, "condition false target '" + target + "' does not exist");
+                        }
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+    }
 }
 
 // =================================================================

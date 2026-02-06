@@ -35,6 +35,11 @@ public:
     // Save/Load
     bool save_state(const String &path);
     bool load_state(const String &path);
+
+    // Variable access
+    godot::Variant get_variable(const String &name) const;
+    void set_variable(const String &name, const godot::Variant &value);
+    bool has_variable(const String &name) const;
 };
 
 } // namespace godot
