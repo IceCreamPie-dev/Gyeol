@@ -24,6 +24,20 @@ set(FLATBUFFERS_BUILD_FLATC ON CACHE BOOL "" FORCE) # 컴파일러(flatc)도 같
 FetchContent_MakeAvailable(flatbuffers)
 # ------------------------------------------------------------------
 
+# --- Google Test (FetchContent) ---
+FetchContent_Declare(
+  googletest
+  GIT_REPOSITORY https://github.com/google/googletest.git
+  GIT_TAG        v1.14.0
+)
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
+enable_testing()
+
 # 하위 디렉토리 추가
 add_subdirectory(src/gyeol_core)
 add_subdirectory(src/gyeol_compiler)
+add_subdirectory(src/tests)

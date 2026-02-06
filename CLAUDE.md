@@ -36,8 +36,10 @@ scons platform=windows target=template_debug
 ### Build Targets
 
 - `GyeolCore` — Main engine library (CMake)
+- `GyeolParser` — Parser library (CMake, GyeolCompiler + GyeolTests 공유)
 - `GyeolCompiler` — .gyeol → .gyb compiler (CMake)
 - `GyeolTest` — Console interactive player (CMake)
+- `GyeolTests` — Google Test 유닛 테스트 (CMake)
 - `libgyeol.dll` — Godot GDExtension (SCons)
 
 ## Project Structure
@@ -59,7 +61,11 @@ src/
     compiler_main.cpp    # CLI 엔트리포인트
     gyeol_parser.h       # Parser 클래스 API
     gyeol_parser.cpp     # Line-by-line 파서 구현
-  tests/                 # (Planned)
+  tests/                 # Google Test 유닛 테스트 (42 tests)
+    test_helpers.h       # 테스트 유틸리티 (compileScript, startRunner)
+    test_parser.cpp      # Parser 테스트 (22 cases)
+    test_runner.cpp      # Runner VM 테스트 (16 cases)
+    test_story.cpp       # Story loader 테스트 (4 cases)
 bindings/
   godot_extension/       # GDExtension (SCons 빌드)
     godot-cpp/           # git submodule (4.3 branch)
@@ -143,11 +149,28 @@ label 노드이름:                     # 노드 선언 (첫 label = start_node)
 ## Dependencies
 
 - **FlatBuffers** v24.3.25 (auto-fetched via CMake FetchContent)
+- **Google Test** v1.14.0 (auto-fetched via CMake FetchContent)
 - **godot-cpp** 4.3 branch (git submodule at `bindings/godot_extension/godot-cpp`)
 
 ## Testing
 
-No test framework integrated yet. 전체 파이프라인 테스트:
+Google Test v1.14.0 기반 자동화 테스트 (42 tests):
+
+```bash
+# 유닛 테스트 실행
+./build/src/tests/GyeolTests.exe
+
+# CTest로 실행
+cd build && ctest --output-on-failure
+```
+
+테스트 범위:
+- **ParserTest** (18): 문법 요소별 파싱, 에스케이프, String Pool 중복제거
+- **ParserErrorTest** (4): 에러 케이스 (빈 파일, 잘못된 문법 등)
+- **RunnerTest** (16): VM 실행 흐름, 선택지, Jump/Call, 변수/조건, Command
+- **StoryTest** (4): .gyb 로드/검증, 잘못된 파일 처리
+
+수동 파이프라인 테스트:
 ```bash
 ./build/src/gyeol_compiler/GyeolCompiler.exe test.gyeol           # .gyeol → story.gyb
 ./build/src/gyeol_compiler/GyeolCompiler.exe test.gyeol -o out.gyb # 출력 파일명 지정

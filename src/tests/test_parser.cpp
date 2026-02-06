@@ -1,0 +1,337 @@
+#include <gtest/gtest.h>
+#include "test_helpers.h"
+#include "gyeol_parser.h"
+#include "gyeol_generated.h"
+#include <fstream>
+#include <cstdio>
+
+using namespace Gyeol;
+using namespace ICPDev::Gyeol::Schema;
+
+// --- 파서 기본 기능 ---
+
+TEST(ParserTest, EmptyFileReturnsError) {
+    std::string path = "test_empty.gyeol";
+    { std::ofstream ofs(path); ofs << ""; }
+
+    Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+    EXPECT_FALSE(parser.getError().empty());
+    std::remove(path.c_str());
+}
+
+TEST(ParserTest, CommentOnlyFileReturnsError) {
+    std::string path = "test_comment.gyeol";
+    { std::ofstream ofs(path); ofs << "# comment only\n# another\n"; }
+
+    Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+    std::remove(path.c_str());
+}
+
+TEST(ParserTest, SingleLabel) {
+    std::string path = "test_label.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n    hero \"hello\"\n";
+    }
+
+    Parser parser;
+    EXPECT_TRUE(parser.parse(path));
+    EXPECT_TRUE(parser.compile("test_label.gyb"));
+
+    std::remove(path.c_str());
+    std::remove("test_label.gyb");
+}
+
+TEST(ParserTest, NarrationLine) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"This is narration\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    ASSERT_NE(story, nullptr);
+    ASSERT_EQ(story->nodes()->size(), 1u);
+
+    auto* node = story->nodes()->Get(0);
+    ASSERT_EQ(node->lines()->size(), 1u);
+
+    auto* instr = node->lines()->Get(0);
+    ASSERT_EQ(instr->data_type(), OpData::Line);
+
+    auto* line = instr->data_as_Line();
+    EXPECT_EQ(line->character_id(), -1); // narration
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->text_id()))->c_str(), "This is narration");
+}
+
+TEST(ParserTest, CharacterDialogue) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    hero \"Hello world\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* instr = story->nodes()->Get(0)->lines()->Get(0);
+    auto* line = instr->data_as_Line();
+
+    EXPECT_GE(line->character_id(), 0);
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->character_id()))->c_str(), "hero");
+}
+
+TEST(ParserTest, MenuChoices) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    menu:\n"
+        "        \"Choice A\" -> nodeA\n"
+        "        \"Choice B\" -> nodeB\n"
+        "label nodeA:\n"
+        "    \"A\"\n"
+        "label nodeB:\n"
+        "    \"B\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* startNode = story->nodes()->Get(0);
+    ASSERT_EQ(startNode->lines()->size(), 2u); // 2 choices
+
+    auto* c0 = startNode->lines()->Get(0);
+    auto* c1 = startNode->lines()->Get(1);
+    EXPECT_EQ(c0->data_type(), OpData::Choice);
+    EXPECT_EQ(c1->data_type(), OpData::Choice);
+}
+
+TEST(ParserTest, JumpInstruction) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    jump other\n"
+        "label other:\n"
+        "    \"end\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* instr = story->nodes()->Get(0)->lines()->Get(0);
+    EXPECT_EQ(instr->data_type(), OpData::Jump);
+
+    auto* jump = instr->data_as_Jump();
+    EXPECT_FALSE(jump->is_call());
+}
+
+TEST(ParserTest, CallInstruction) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    call sub\n"
+        "label sub:\n"
+        "    \"sub content\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* instr = story->nodes()->Get(0)->lines()->Get(0);
+    auto* jump = instr->data_as_Jump();
+    EXPECT_TRUE(jump->is_call());
+}
+
+TEST(ParserTest, SetVarBool) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ flag = true\n"
+        "    \"done\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* instr = story->nodes()->Get(0)->lines()->Get(0);
+    EXPECT_EQ(instr->data_type(), OpData::SetVar);
+
+    auto* sv = instr->data_as_SetVar();
+    EXPECT_EQ(sv->value_type(), ValueData::BoolValue);
+}
+
+TEST(ParserTest, SetVarInt) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ score = 42\n"
+        "    \"done\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    EXPECT_EQ(sv->value_type(), ValueData::IntValue);
+    EXPECT_EQ(sv->value_as_IntValue()->val(), 42);
+}
+
+TEST(ParserTest, SetVarFloat) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ rate = 3.14\n"
+        "    \"done\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    EXPECT_EQ(sv->value_type(), ValueData::FloatValue);
+    EXPECT_FLOAT_EQ(sv->value_as_FloatValue()->val(), 3.14f);
+}
+
+TEST(ParserTest, SetVarString) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ name = \"hero\"\n"
+        "    \"done\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    EXPECT_EQ(sv->value_type(), ValueData::StringRef);
+}
+
+TEST(ParserTest, ConditionInstruction) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = 1\n"
+        "    if x == 1 -> yes else no\n"
+        "label yes:\n"
+        "    \"yes\"\n"
+        "label no:\n"
+        "    \"no\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* instr = story->nodes()->Get(0)->lines()->Get(1);
+    EXPECT_EQ(instr->data_type(), OpData::Condition);
+
+    auto* cond = instr->data_as_Condition();
+    EXPECT_EQ(cond->op(), Operator::Equal);
+    EXPECT_GE(cond->true_jump_node_id(), 0);
+    EXPECT_GE(cond->false_jump_node_id(), 0);
+}
+
+TEST(ParserTest, CommandInstruction) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    @ bg \"forest.png\"\n"
+        "    \"done\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* instr = story->nodes()->Get(0)->lines()->Get(0);
+    EXPECT_EQ(instr->data_type(), OpData::Command);
+
+    auto* cmd = instr->data_as_Command();
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(cmd->type_id()))->c_str(), "bg");
+    ASSERT_EQ(cmd->params()->size(), 1u);
+}
+
+TEST(ParserTest, StringPoolDedup) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    hero \"hello\"\n"
+        "    hero \"world\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    // "hero" should appear only once in pool, "hello", "world", "start" = unique entries
+    auto* pool = story->string_pool();
+    int heroCount = 0;
+    for (uint32_t i = 0; i < pool->size(); ++i) {
+        if (std::string(pool->Get(i)->c_str()) == "hero") heroCount++;
+    }
+    EXPECT_EQ(heroCount, 1); // dedup
+}
+
+TEST(ParserTest, MultipleLabels) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"a\"\n"
+        "label mid:\n"
+        "    \"b\"\n"
+        "label end:\n"
+        "    \"c\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    EXPECT_EQ(story->nodes()->size(), 3u);
+    EXPECT_STREQ(story->start_node_name()->c_str(), "start");
+}
+
+TEST(ParserTest, EscapeSequences) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"line1\\nline2\\ttab\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* line = story->nodes()->Get(0)->lines()->Get(0)->data_as_Line();
+    std::string text = story->string_pool()->Get(
+        static_cast<uint32_t>(line->text_id()))->c_str();
+    EXPECT_NE(text.find('\n'), std::string::npos);
+    EXPECT_NE(text.find('\t'), std::string::npos);
+}
+
+TEST(ParserTest, StartNodeIsFirstLabel) {
+    auto buf = GyeolTest::compileScript(
+        "label intro:\n"
+        "    \"hello\"\n"
+        "label main:\n"
+        "    \"world\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    EXPECT_STREQ(story->start_node_name()->c_str(), "intro");
+}
+
+// --- 파서 에러 케이스 ---
+
+TEST(ParserErrorTest, MissingFile) {
+    Parser parser;
+    EXPECT_FALSE(parser.parse("nonexistent_file.gyeol"));
+}
+
+TEST(ParserErrorTest, DialogueOutsideLabel) {
+    std::string path = "test_err1.gyeol";
+    { std::ofstream ofs(path); ofs << "hero \"hello\"\n"; }
+
+    Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+    std::remove(path.c_str());
+}
+
+TEST(ParserErrorTest, MissingQuoteAfterCharacter) {
+    std::string path = "test_err2.gyeol";
+    { std::ofstream ofs(path); ofs << "label start:\n    hero missing_quote\n"; }
+
+    Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+    std::remove(path.c_str());
+}
+
+TEST(ParserErrorTest, ChoiceOutsideMenu) {
+    std::string path = "test_err3.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    hero \"hi\"\n"
+            << "        \"choice\" -> target\n"; // indent 8 but no menu:
+    }
+
+    Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+    std::remove(path.c_str());
+}
