@@ -31,6 +31,10 @@ public:
     void advance();
     void choose(int index);
     bool is_finished() const;
+
+    // Save/Load
+    bool save_state(const String &path);
+    bool load_state(const String &path);
 };
 
 } // namespace godot

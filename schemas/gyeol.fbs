@@ -88,6 +88,41 @@ table Node {
 }
 
 // -------------------------------------------------------------------------
+// Save State (.gys 파일)
+// -------------------------------------------------------------------------
+
+// 저장된 변수 (런타임 상태)
+table SavedVar {
+    name:string;            // 변수 이름 (직접 문자열)
+    value:ValueData;        // 기존 ValueData union 재사용
+    string_value:string;    // STRING 타입일 때 실제 값 (StringRef 대체)
+}
+
+// Call stack 프레임
+table SavedCallFrame {
+    node_name:string;       // 노드 이름
+    pc:uint32;              // program counter
+}
+
+// 대기 중인 선택지
+table SavedPendingChoice {
+    text:string;            // 선택지 텍스트
+    target_node_name:string; // 이동 대상 노드 이름
+}
+
+// 세이브 상태 루트
+table SaveState {
+    version:string;                       // 세이브 포맷 버전
+    story_version:string;                 // 원본 스토리 버전
+    current_node_name:string;             // 현재 노드
+    pc:uint32;                            // program counter
+    finished:bool;                        // 종료 플래그
+    variables:[SavedVar];                 // 런타임 변수
+    call_stack:[SavedCallFrame];          // 콜 스택
+    pending_choices:[SavedPendingChoice]; // 대기 선택지
+}
+
+// -------------------------------------------------------------------------
 // Root Object (파일 전체 구조)
 // -------------------------------------------------------------------------
 

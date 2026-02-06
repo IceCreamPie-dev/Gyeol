@@ -56,6 +56,11 @@ public:
     void choose(int index);
     bool isFinished() const;
 
+    // Save/Load API
+    bool saveState(const std::string& filepath) const;
+    bool loadState(const std::string& filepath);
+    bool hasStory() const { return story_ != nullptr; }
+
 private:
     // forward declarations — 실제 FlatBuffers 타입은 cpp에서 사용
     const void* story_ = nullptr;
@@ -85,6 +90,12 @@ private:
     const char* poolStr(int32_t index) const;
     void jumpToNode(const char* name);
     void jumpToNodeById(int32_t nameId);
+
+    // Save/Load 헬퍼
+    std::string currentNodeName() const;
+    std::string nodeNameFromPtr(const void* nodePtr) const;
+    const void* findNodeByName(const char* name) const;
+    int32_t findStringInPool(const char* str) const;
 };
 
 } // namespace Gyeol

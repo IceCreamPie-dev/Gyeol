@@ -1,6 +1,8 @@
 ﻿#include "gyeol_runner.h"
 #include "gyeol_generated.h"
 #include <iostream>
+#include <fstream>
+#include <cstring>
 
 using namespace ICPDev::Gyeol::Schema;
 
@@ -344,6 +346,229 @@ void Runner::choose(int index) {
 // --- isFinished ---
 bool Runner::isFinished() const {
     return finished_;
+}
+
+// --- Save/Load 헬퍼 ---
+std::string Runner::nodeNameFromPtr(const void* nodePtr) const {
+    auto* node = asNode(nodePtr);
+    if (node && node->name()) {
+        return node->name()->c_str();
+    }
+    return "";
+}
+
+std::string Runner::currentNodeName() const {
+    return nodeNameFromPtr(currentNode_);
+}
+
+const void* Runner::findNodeByName(const char* name) const {
+    auto* story = asStory(story_);
+    if (!story || !story->nodes()) return nullptr;
+    auto* nodes = story->nodes();
+    for (flatbuffers::uoffset_t i = 0; i < nodes->size(); ++i) {
+        auto* node = nodes->Get(i);
+        if (node->name() && std::strcmp(node->name()->c_str(), name) == 0) {
+            return node;
+        }
+    }
+    return nullptr;
+}
+
+int32_t Runner::findStringInPool(const char* str) const {
+    auto* pool = asPool(pool_);
+    if (!pool) return -1;
+    for (flatbuffers::uoffset_t i = 0; i < pool->size(); ++i) {
+        if (std::strcmp(pool->Get(i)->c_str(), str) == 0) {
+            return static_cast<int32_t>(i);
+        }
+    }
+    return -1;
+}
+
+// --- saveState ---
+bool Runner::saveState(const std::string& filepath) const {
+    if (!story_) {
+        std::cerr << "[Gyeol] No story loaded" << std::endl;
+        return false;
+    }
+
+    auto* story = asStory(story_);
+
+    // SaveStateT 객체 생성
+    SaveStateT state;
+    state.version = "1.0";
+    state.story_version = story->version() ? story->version()->c_str() : "";
+    state.current_node_name = currentNodeName();
+    state.pc = pc_;
+    state.finished = finished_;
+
+    // 변수 저장
+    for (auto& pair : variables_) {
+        auto sv = std::make_unique<SavedVarT>();
+        sv->name = pair.first;
+        switch (pair.second.type) {
+            case Variant::BOOL: {
+                auto bv = std::make_unique<BoolValueT>();
+                bv->val = pair.second.b;
+                sv->value.Set(std::move(*bv));
+                break;
+            }
+            case Variant::INT: {
+                auto iv = std::make_unique<IntValueT>();
+                iv->val = pair.second.i;
+                sv->value.Set(std::move(*iv));
+                break;
+            }
+            case Variant::FLOAT: {
+                auto fv = std::make_unique<FloatValueT>();
+                fv->val = pair.second.f;
+                sv->value.Set(std::move(*fv));
+                break;
+            }
+            case Variant::STRING: {
+                // STRING은 string_value 필드에 직접 저장 (pool index 불필요)
+                sv->string_value = pair.second.s;
+                // value union은 비워둠 (타입 구분용으로 StringRef 사용)
+                auto sr = std::make_unique<StringRefT>();
+                sr->index = -1; // 의미 없음, 타입 마커용
+                sv->value.Set(std::move(*sr));
+                break;
+            }
+        }
+        state.variables.push_back(std::move(sv));
+    }
+
+    // Call stack 저장
+    for (auto& frame : callStack_) {
+        auto cf = std::make_unique<SavedCallFrameT>();
+        cf->node_name = nodeNameFromPtr(frame.node);
+        cf->pc = frame.pc;
+        state.call_stack.push_back(std::move(cf));
+    }
+
+    // Pending choices 저장
+    for (auto& pc : pendingChoices_) {
+        auto spc = std::make_unique<SavedPendingChoiceT>();
+        spc->text = poolStr(pc.text_id);
+        spc->target_node_name = poolStr(pc.target_node_name_id);
+        state.pending_choices.push_back(std::move(spc));
+    }
+
+    // FlatBuffers 직렬화
+    flatbuffers::FlatBufferBuilder fbb;
+    auto offset = SaveState::Pack(fbb, &state);
+    fbb.Finish(offset);
+
+    // 파일 쓰기
+    std::ofstream ofs(filepath, std::ios::binary);
+    if (!ofs) {
+        std::cerr << "[Gyeol] Cannot open save file: " << filepath << std::endl;
+        return false;
+    }
+    ofs.write(reinterpret_cast<const char*>(fbb.GetBufferPointer()), fbb.GetSize());
+    return ofs.good();
+}
+
+// --- loadState ---
+bool Runner::loadState(const std::string& filepath) {
+    if (!story_) {
+        std::cerr << "[Gyeol] No story loaded" << std::endl;
+        return false;
+    }
+
+    // 파일 읽기
+    std::ifstream ifs(filepath, std::ios::binary | std::ios::ate);
+    if (!ifs) {
+        std::cerr << "[Gyeol] Cannot open save file: " << filepath << std::endl;
+        return false;
+    }
+
+    auto size = ifs.tellg();
+    ifs.seekg(0, std::ios::beg);
+    std::vector<uint8_t> buf(static_cast<size_t>(size));
+    if (!ifs.read(reinterpret_cast<char*>(buf.data()), size)) {
+        std::cerr << "[Gyeol] Failed to read save file" << std::endl;
+        return false;
+    }
+
+    // 검증
+    flatbuffers::Verifier verifier(buf.data(), buf.size());
+    auto* saveState = flatbuffers::GetRoot<SaveState>(buf.data());
+    if (!saveState->Verify(verifier)) {
+        std::cerr << "[Gyeol] Invalid save file" << std::endl;
+        return false;
+    }
+
+    // 상태 복원
+    finished_ = saveState->finished();
+    pc_ = saveState->pc();
+
+    // 현재 노드 복원
+    if (saveState->current_node_name()) {
+        currentNode_ = findNodeByName(saveState->current_node_name()->c_str());
+        if (!currentNode_ && !finished_) {
+            std::cerr << "[Gyeol] Save state node not found: "
+                      << saveState->current_node_name()->c_str() << std::endl;
+            finished_ = true;
+            return false;
+        }
+    } else {
+        currentNode_ = nullptr;
+    }
+
+    // 변수 복원
+    variables_.clear();
+    auto* vars = saveState->variables();
+    if (vars) {
+        auto* pool = asPool(pool_);
+        for (flatbuffers::uoffset_t i = 0; i < vars->size(); ++i) {
+            auto* sv = vars->Get(i);
+            if (!sv->name()) continue;
+            std::string varName = sv->name()->c_str();
+
+            if (sv->value_type() == ValueData::StringRef) {
+                // STRING 타입: string_value 필드에서 읽기
+                if (sv->string_value()) {
+                    variables_[varName] = Variant::String(sv->string_value()->c_str());
+                } else {
+                    variables_[varName] = Variant::String("");
+                }
+            } else if (sv->value() && sv->value_type() != ValueData::NONE) {
+                variables_[varName] = readValueData(sv->value(), sv->value_type(), pool);
+            }
+        }
+    }
+
+    // Call stack 복원
+    callStack_.clear();
+    auto* stack = saveState->call_stack();
+    if (stack) {
+        for (flatbuffers::uoffset_t i = 0; i < stack->size(); ++i) {
+            auto* frame = stack->Get(i);
+            if (!frame->node_name()) continue;
+            const void* nodePtr = findNodeByName(frame->node_name()->c_str());
+            if (nodePtr) {
+                callStack_.push_back({nodePtr, frame->pc()});
+            }
+        }
+    }
+
+    // Pending choices 복원
+    pendingChoices_.clear();
+    auto* choices = saveState->pending_choices();
+    if (choices) {
+        for (flatbuffers::uoffset_t i = 0; i < choices->size(); ++i) {
+            auto* pc = choices->Get(i);
+            int32_t textId = pc->text() ? findStringInPool(pc->text()->c_str()) : -1;
+            int32_t targetId = pc->target_node_name()
+                ? findStringInPool(pc->target_node_name()->c_str()) : -1;
+            if (textId >= 0 && targetId >= 0) {
+                pendingChoices_.push_back({textId, targetId});
+            }
+        }
+    }
+
+    return true;
 }
 
 } // namespace Gyeol
