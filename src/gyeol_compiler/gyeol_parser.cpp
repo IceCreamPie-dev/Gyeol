@@ -1,4 +1,4 @@
-﻿#include "gyeol_parser.h"
+#include "gyeol_parser.h"
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -22,8 +22,16 @@ int32_t Parser::addString(const std::string& str) {
 }
 
 // --- 유틸리티 ---
+void Parser::addError(int lineNum, const std::string& msg) {
+    std::string formatted = filename_ + ":" + std::to_string(lineNum) + ": " + msg;
+    errors_.push_back(formatted);
+    if (error_.empty()) {
+        error_ = formatted;
+    }
+}
+
 void Parser::setError(int lineNum, const std::string& msg) {
-    error_ = filename_ + ":" + std::to_string(lineNum) + ": " + msg;
+    addError(lineNum, msg);
 }
 
 size_t Parser::countIndent(const std::string& line) {
@@ -154,9 +162,11 @@ bool Parser::parseLabelLine(const std::string& content, int lineNum) {
     }
 
     if (name.empty()) {
-        setError(lineNum, "label name is empty");
+        addError(lineNum, "label name is empty");
         return false;
     }
+
+    seenFirstLabel_ = true;
 
     auto node = std::make_unique<NodeT>();
     node->name = name;
@@ -175,7 +185,7 @@ bool Parser::parseLabelLine(const std::string& content, int lineNum) {
 // --- 대사 ---
 bool Parser::parseDialogueLine(const std::string& content, int lineNum) {
     if (!currentNode_) {
-        setError(lineNum, "dialogue outside of label");
+        addError(lineNum, "dialogue outside of label");
         return false;
     }
 
@@ -196,11 +206,25 @@ bool Parser::parseDialogueLine(const std::string& content, int lineNum) {
 
         skipSpaces(content, pos);
         if (pos >= content.size() || content[pos] != '"') {
-            setError(lineNum, "expected quoted string after character name");
+            addError(lineNum, "expected quoted string after character name");
             return false;
         }
         std::string text = parseQuotedString(content, pos);
         line->text_id = addString(text);
+    }
+
+    // voice_asset_id: #voice:파일명 태그
+    line->voice_asset_id = -1;
+    skipSpaces(content, pos);
+    if (pos < content.size() && content[pos] == '#') {
+        pos++; // skip '#'
+        std::string tag = parseWord(content, pos);
+        if (tag.substr(0, 6) == "voice:") {
+            std::string voiceFile = tag.substr(6);
+            if (!voiceFile.empty()) {
+                line->voice_asset_id = addString(voiceFile);
+            }
+        }
     }
 
     auto instr = std::make_unique<InstructionT>();
@@ -212,7 +236,7 @@ bool Parser::parseDialogueLine(const std::string& content, int lineNum) {
 // --- menu 선택지 ---
 bool Parser::parseMenuChoiceLine(const std::string& content, int lineNum) {
     if (!currentNode_) {
-        setError(lineNum, "choice outside of label");
+        addError(lineNum, "choice outside of label");
         return false;
     }
 
@@ -220,7 +244,7 @@ bool Parser::parseMenuChoiceLine(const std::string& content, int lineNum) {
     skipSpaces(content, pos);
 
     if (pos >= content.size() || content[pos] != '"') {
-        setError(lineNum, "expected quoted string for choice text");
+        addError(lineNum, "expected quoted string for choice text");
         return false;
     }
 
@@ -229,14 +253,14 @@ bool Parser::parseMenuChoiceLine(const std::string& content, int lineNum) {
 
     // -> target
     if (pos + 1 >= content.size() || content[pos] != '-' || content[pos + 1] != '>') {
-        setError(lineNum, "expected '->' after choice text");
+        addError(lineNum, "expected '->' after choice text");
         return false;
     }
     pos += 2; // skip ->
 
     std::string target = parseWord(content, pos);
     if (target.empty()) {
-        setError(lineNum, "expected target node name after '->'");
+        addError(lineNum, "expected target node name after '->'");
         return false;
     }
 
@@ -265,14 +289,14 @@ bool Parser::parseMenuChoiceLine(const std::string& content, int lineNum) {
 // --- jump / call ---
 bool Parser::parseJumpLine(const std::string& content, int lineNum, bool isCall) {
     if (!currentNode_) {
-        setError(lineNum, "jump/call outside of label");
+        addError(lineNum, "jump/call outside of label");
         return false;
     }
 
     size_t pos = isCall ? 4 : 4; // skip "jump" or "call"
     std::string target = parseWord(content, pos);
     if (target.empty()) {
-        setError(lineNum, "expected target node name");
+        addError(lineNum, "expected target node name");
         return false;
     }
 
@@ -286,23 +310,23 @@ bool Parser::parseJumpLine(const std::string& content, int lineNum, bool isCall)
     return true;
 }
 
-// --- $ 변수 = 값 ---
+// --- $ 변수 = 값 (label 내부) ---
 bool Parser::parseSetVarLine(const std::string& content, int lineNum) {
     if (!currentNode_) {
-        setError(lineNum, "variable set outside of label");
+        addError(lineNum, "variable set outside of label");
         return false;
     }
 
     size_t pos = 1; // skip "$"
     std::string varName = parseWord(content, pos);
     if (varName.empty()) {
-        setError(lineNum, "expected variable name after '$'");
+        addError(lineNum, "expected variable name after '$'");
         return false;
     }
 
     skipSpaces(content, pos);
     if (pos >= content.size() || content[pos] != '=') {
-        setError(lineNum, "expected '=' after variable name");
+        addError(lineNum, "expected '=' after variable name");
         return false;
     }
     pos++; // skip '='
@@ -311,7 +335,7 @@ bool Parser::parseSetVarLine(const std::string& content, int lineNum) {
     setvar->var_name_id = addString(varName);
 
     if (!parseValue(content, pos, setvar->value)) {
-        setError(lineNum, "invalid value");
+        addError(lineNum, "invalid value");
         return false;
     }
 
@@ -321,17 +345,45 @@ bool Parser::parseSetVarLine(const std::string& content, int lineNum) {
     return true;
 }
 
+// --- $ 변수 = 값 (global, label 앞) ---
+bool Parser::parseGlobalVarLine(const std::string& content, int lineNum) {
+    size_t pos = 1; // skip "$"
+    std::string varName = parseWord(content, pos);
+    if (varName.empty()) {
+        addError(lineNum, "expected variable name after '$'");
+        return false;
+    }
+
+    skipSpaces(content, pos);
+    if (pos >= content.size() || content[pos] != '=') {
+        addError(lineNum, "expected '=' after variable name");
+        return false;
+    }
+    pos++; // skip '='
+
+    auto setvar = std::make_unique<SetVarT>();
+    setvar->var_name_id = addString(varName);
+
+    if (!parseValue(content, pos, setvar->value)) {
+        addError(lineNum, "invalid value for global variable");
+        return false;
+    }
+
+    story_.global_vars.push_back(std::move(setvar));
+    return true;
+}
+
 // --- if 변수 op 값 -> 참 else 거짓 ---
 bool Parser::parseConditionLine(const std::string& content, int lineNum) {
     if (!currentNode_) {
-        setError(lineNum, "condition outside of label");
+        addError(lineNum, "condition outside of label");
         return false;
     }
 
     size_t pos = 2; // skip "if"
     std::string varName = parseWord(content, pos);
     if (varName.empty()) {
-        setError(lineNum, "expected variable name after 'if'");
+        addError(lineNum, "expected variable name after 'if'");
         return false;
     }
 
@@ -345,7 +397,7 @@ bool Parser::parseConditionLine(const std::string& content, int lineNum) {
     else if (opStr == ">=") op = Operator::GreaterOrEqual;
     else if (opStr == "<=") op = Operator::LessOrEqual;
     else {
-        setError(lineNum, "unknown operator: " + opStr);
+        addError(lineNum, "unknown operator: " + opStr);
         return false;
     }
 
@@ -355,14 +407,14 @@ bool Parser::parseConditionLine(const std::string& content, int lineNum) {
 
     // 비교 값
     if (!parseValue(content, pos, cond->compare_value)) {
-        setError(lineNum, "invalid compare value");
+        addError(lineNum, "invalid compare value");
         return false;
     }
 
     // -> true_node
     skipSpaces(content, pos);
     if (pos + 1 >= content.size() || content[pos] != '-' || content[pos + 1] != '>') {
-        setError(lineNum, "expected '->' after value");
+        addError(lineNum, "expected '->' after value");
         return false;
     }
     pos += 2;
@@ -392,14 +444,14 @@ bool Parser::parseConditionLine(const std::string& content, int lineNum) {
 // --- @ 명령 파라미터... ---
 bool Parser::parseCommandLine(const std::string& content, int lineNum) {
     if (!currentNode_) {
-        setError(lineNum, "command outside of label");
+        addError(lineNum, "command outside of label");
         return false;
     }
 
     size_t pos = 1; // skip "@"
     std::string cmdType = parseWord(content, pos);
     if (cmdType.empty()) {
-        setError(lineNum, "expected command type after '@'");
+        addError(lineNum, "expected command type after '@'");
         return false;
     }
 
@@ -437,11 +489,14 @@ bool Parser::parse(const std::string& filepath) {
     stringMap_.clear();
     currentNode_ = nullptr;
     inMenu_ = false;
+    seenFirstLabel_ = false;
     error_.clear();
+    errors_.clear();
 
     std::ifstream ifs(filepath);
     if (!ifs.is_open()) {
         error_ = "Failed to open file: " + filepath;
+        errors_.push_back(error_);
         return false;
     }
 
@@ -471,16 +526,23 @@ bool Parser::parse(const std::string& filepath) {
 
         size_t indent = countIndent(rawLine);
 
-        // --- 들여쓰기 레벨 0: label ---
+        // --- 들여쓰기 레벨 0: label 또는 global var ---
         if (indent == 0) {
             if (trimmed.substr(0, 5) == "label") {
                 inMenu_ = false;
-                if (!parseLabelLine(trimmed, lineNum)) return false;
+                if (!parseLabelLine(trimmed, lineNum)) continue; // 에러 복구
                 continue;
             }
+
+            // global variable: label 앞에 $ 변수 = 값
+            if (!seenFirstLabel_ && trimmed[0] == '$') {
+                parseGlobalVarLine(trimmed, lineNum);
+                continue;
+            }
+
             // 들여쓰기 0에서 다른 것은 에러
-            setError(lineNum, "unexpected content at column 0 (expected 'label')");
-            return false;
+            addError(lineNum, "unexpected content at column 0 (expected 'label' or global '$')");
+            continue; // 에러 복구
         }
 
         // --- 들여쓰기 레벨 4+: label 내부 ---
@@ -494,63 +556,70 @@ bool Parser::parse(const std::string& filepath) {
 
             // jump
             if (trimmed.substr(0, 4) == "jump" && (trimmed.size() == 4 || trimmed[4] == ' ')) {
-                if (!parseJumpLine(trimmed, lineNum, false)) return false;
+                parseJumpLine(trimmed, lineNum, false);
                 continue;
             }
 
             // call
             if (trimmed.substr(0, 4) == "call" && (trimmed.size() == 4 || trimmed[4] == ' ')) {
-                if (!parseJumpLine(trimmed, lineNum, true)) return false;
+                parseJumpLine(trimmed, lineNum, true);
                 continue;
             }
 
             // $ 변수 설정
             if (trimmed[0] == '$') {
-                if (!parseSetVarLine(trimmed, lineNum)) return false;
+                parseSetVarLine(trimmed, lineNum);
                 continue;
             }
 
             // if 조건문
             if (trimmed.substr(0, 2) == "if" && (trimmed.size() == 2 || trimmed[2] == ' ')) {
-                if (!parseConditionLine(trimmed, lineNum)) return false;
+                parseConditionLine(trimmed, lineNum);
                 continue;
             }
 
             // @ 엔진 명령
             if (trimmed[0] == '@') {
-                if (!parseCommandLine(trimmed, lineNum)) return false;
+                parseCommandLine(trimmed, lineNum);
                 continue;
             }
 
             // 대사 (캐릭터 "대사" 또는 "나레이션")
-            if (!parseDialogueLine(trimmed, lineNum)) return false;
+            parseDialogueLine(trimmed, lineNum);
             continue;
         }
 
         // --- 들여쓰기 레벨 8+: menu 선택지 ---
         if (indent >= 8) {
             if (!inMenu_) {
-                setError(lineNum, "unexpected deep indentation (not inside menu:)");
-                return false;
+                addError(lineNum, "unexpected deep indentation (not inside menu:)");
+                continue; // 에러 복구
             }
 
-            if (!parseMenuChoiceLine(trimmed, lineNum)) return false;
+            parseMenuChoiceLine(trimmed, lineNum);
             continue;
         }
     }
 
     if (story_.nodes.empty()) {
-        error_ = "No labels found in " + filepath;
+        std::string msg = "No labels found in " + filepath;
+        if (error_.empty()) error_ = msg;
+        errors_.push_back(msg);
         return false;
     }
 
-    return true;
+    return errors_.empty();
 }
 
 // =================================================================
 // 컴파일 (.gyb 출력)
 // =================================================================
 bool Parser::compile(const std::string& outputPath) {
+    if (hasErrors()) {
+        if (error_.empty()) error_ = "Cannot compile: parse errors exist";
+        return false;
+    }
+
     flatbuffers::FlatBufferBuilder builder;
 
     auto rootOffset = Story::Pack(builder, &story_);
@@ -559,6 +628,7 @@ bool Parser::compile(const std::string& outputPath) {
     std::ofstream ofs(outputPath, std::ios::binary);
     if (!ofs.is_open()) {
         error_ = "Failed to write: " + outputPath;
+        errors_.push_back(error_);
         return false;
     }
 

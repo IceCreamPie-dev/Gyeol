@@ -297,6 +297,152 @@ TEST(ParserTest, StartNodeIsFirstLabel) {
     EXPECT_STREQ(story->start_node_name()->c_str(), "intro");
 }
 
+// --- 새 기능: voice_asset_id ---
+
+TEST(ParserTest, VoiceAssetTag) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    hero \"hello\" #voice:hero_01.wav\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* line = story->nodes()->Get(0)->lines()->Get(0)->data_as_Line();
+    EXPECT_GE(line->voice_asset_id(), 0);
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->voice_asset_id()))->c_str(), "hero_01.wav");
+}
+
+TEST(ParserTest, VoiceAssetNarration) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"narration\" #voice:nar_01.ogg\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* line = story->nodes()->Get(0)->lines()->Get(0)->data_as_Line();
+    EXPECT_EQ(line->character_id(), -1);
+    EXPECT_GE(line->voice_asset_id(), 0);
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->voice_asset_id()))->c_str(), "nar_01.ogg");
+}
+
+TEST(ParserTest, NoVoiceAsset) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    hero \"hello\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* line = story->nodes()->Get(0)->lines()->Get(0)->data_as_Line();
+    EXPECT_EQ(line->voice_asset_id(), -1);
+}
+
+// --- 새 기능: global_vars ---
+
+TEST(ParserTest, GlobalVarInt) {
+    auto buf = GyeolTest::compileScript(
+        "$ hp = 100\n"
+        "label start:\n"
+        "    \"hello\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    ASSERT_NE(story->global_vars(), nullptr);
+    ASSERT_GE(story->global_vars()->size(), 1u);
+
+    auto* gv = story->global_vars()->Get(0);
+    EXPECT_EQ(gv->value_type(), ValueData::IntValue);
+    EXPECT_EQ(gv->value_as_IntValue()->val(), 100);
+}
+
+TEST(ParserTest, GlobalVarBool) {
+    auto buf = GyeolTest::compileScript(
+        "$ debug = true\n"
+        "label start:\n"
+        "    \"hello\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    ASSERT_NE(story->global_vars(), nullptr);
+    ASSERT_GE(story->global_vars()->size(), 1u);
+
+    auto* gv = story->global_vars()->Get(0);
+    EXPECT_EQ(gv->value_type(), ValueData::BoolValue);
+    EXPECT_TRUE(gv->value_as_BoolValue()->val());
+}
+
+TEST(ParserTest, MultipleGlobalVars) {
+    auto buf = GyeolTest::compileScript(
+        "$ hp = 100\n"
+        "$ name = \"hero\"\n"
+        "$ speed = 1.5\n"
+        "label start:\n"
+        "    \"hello\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    ASSERT_NE(story->global_vars(), nullptr);
+    EXPECT_EQ(story->global_vars()->size(), 3u);
+}
+
+TEST(ParserTest, GlobalVarsInitializedInRunner) {
+    auto buf = GyeolTest::compileScript(
+        "$ courage = 5\n"
+        "label start:\n"
+        "    if courage == 5 -> yes else no\n"
+        "label yes:\n"
+        "    hero \"correct\"\n"
+        "label no:\n"
+        "    hero \"wrong\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "correct");
+}
+
+// --- 새 기능: 에러 복구 ---
+
+TEST(ParserErrorTest, MultipleErrorsCollected) {
+    std::string path = "test_multi_err.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    hero missing_quote\n"     // error 1
+            << "    hero \"valid line\"\n"     // ok
+            << "    hero another_missing\n";  // error 2
+    }
+
+    Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+    EXPECT_GE(parser.getErrors().size(), 2u); // 2개 이상 에러 수집
+    std::remove(path.c_str());
+}
+
+TEST(ParserErrorTest, ErrorRecoveryStillParses) {
+    std::string path = "test_recovery.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    hero missing_quote\n"     // error - but continue
+            << "    hero \"valid\"\n";        // should be parsed
+    }
+
+    Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+    EXPECT_TRUE(parser.hasErrors());
+    std::remove(path.c_str());
+}
+
 // --- 파서 에러 케이스 ---
 
 TEST(ParserErrorTest, MissingFile) {

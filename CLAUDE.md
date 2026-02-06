@@ -106,13 +106,19 @@ demo/
   - `Variant` 타입으로 변수 저장 (Bool/Int/Float/String)
   - Call stack으로 Jump is_call=true 지원 (서브루틴 호출/복귀)
 - **Parser** — Ren'Py 스타일 순수 C++ line-by-line 파서, 외부 의존성 없음
+  - 에러 복구: 첫 에러에서 멈추지 않고 모든 에러 수집 (`getErrors()`)
+  - global_vars: label 앞 `$ var = val` 선언 → Story.global_vars에 저장
+  - voice_asset_id: 대사 뒤 `#voice:파일명` 태그로 보이스 에셋 연결
 - **GDExtension** — StoryPlayer 노드, Signal 기반 (dialogue_line, choices_presented, command_received, story_ended)
 
 ## .gyeol 스크립트 문법
 
 ```
+$ 전역변수 = 값                     # Global variable (label 앞에 선언)
+
 label 노드이름:                     # 노드 선언 (첫 label = start_node)
     캐릭터 "대사"                   # Line (캐릭터 대사)
+    캐릭터 "대사" #voice:파일명      # Line + voice asset
     "나레이션 텍스트"                # Line (character_id = -1)
     menu:                          # 선택지 블록
         "선택지 텍스트" -> 노드      # Choice
@@ -165,8 +171,8 @@ cd build && ctest --output-on-failure
 ```
 
 테스트 범위:
-- **ParserTest** (18): 문법 요소별 파싱, 에스케이프, String Pool 중복제거
-- **ParserErrorTest** (4): 에러 케이스 (빈 파일, 잘못된 문법 등)
+- **ParserTest** (25): 문법 요소별 파싱, 에스케이프, String Pool, voice_asset, global_vars
+- **ParserErrorTest** (6): 에러 케이스, 에러 복구, 다중 에러 수집
 - **RunnerTest** (16): VM 실행 흐름, 선택지, Jump/Call, 변수/조건, Command
 - **StoryTest** (4): .gyb 로드/검증, 잘못된 파일 처리
 
