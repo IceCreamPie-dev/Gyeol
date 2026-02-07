@@ -1,0 +1,103 @@
+{
+  "name": "gyeol-lang",
+  "displayName": "Gyeol Language",
+  "description": "Language support for Gyeol (.gyeol) narrative scripts",
+  "version": "0.1.0",
+  "publisher": "icpdev",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Debuggers"
+  ],
+  "activationEvents": [
+    "onLanguage:gyeol"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "gyeol",
+        "aliases": [
+          "Gyeol",
+          "gyeol"
+        ],
+        "extensions": [
+          ".gyeol"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "gyeol",
+        "scopeName": "source.gyeol",
+        "path": "./syntaxes/gyeol.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Gyeol",
+      "properties": {
+        "gyeol.lsp.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to GyeolLSP executable"
+        },
+        "gyeol.debugger.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to GyeolDebugger executable"
+        }
+      }
+    },
+    "breakpoints": [
+      {
+        "language": "gyeol"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "gyeol",
+        "label": "Gyeol Debug",
+        "program": "./out/debugAdapter.js",
+        "runtime": "node",
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "story"
+            ],
+            "properties": {
+              "story": {
+                "type": "string",
+                "description": "Path to .gyb story file",
+                "default": "${workspaceFolder}/story.gyb"
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "gyeol",
+            "request": "launch",
+            "name": "Debug Gyeol Story",
+            "story": "${workspaceFolder}/story.gyb"
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "^18.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.0"
+  }
+}

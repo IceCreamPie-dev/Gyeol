@@ -12,6 +12,7 @@ Ren'Py의 연출력 + Ink의 구조적 강점 + Yarn의 유연함을 통합한 C
 - ~~**Step 2:** VM 로직 — Stepper, 변수/조건문 처리, 선택지 분기, 콘솔 플레이~~ (완료)
 - ~~**Step 3:** 텍스트 파서 — .gyeol 스크립트 → .gyb 컴파일 (순수 C++ 파서)~~ (완료)
 - ~~**Step 4:** Godot 연동 — GDExtension, StoryPlayer 노드, Signal 기반 UI 연결~~ (완료)
+- ~~**Step 5:** 개발 도구 — LSP 서버 + CLI 디버거 + VS Code 확장~~ (완료)
 
 ## Build System
 
@@ -40,6 +41,8 @@ scons platform=windows target=template_debug
 - `GyeolCompiler` — .gyeol → .gyb compiler (CMake)
 - `GyeolTest` — Console interactive player (CMake)
 - `GyeolTests` — Google Test 유닛 테스트 (CMake)
+- `GyeolLSP` — Language Server Protocol 서버 (CMake)
+- `GyeolDebugger` — CLI 인터랙티브 디버거 (CMake)
 - `libgyeol.dll` — Godot GDExtension (SCons)
 
 ## Project Structure
@@ -67,6 +70,13 @@ src/
     test_runner.cpp      # Runner VM 테스트 (96 cases)
     test_story.cpp       # Story loader 테스트 (4 cases)
     test_saveload.cpp    # Save/Load 라운드트립 테스트 (13 cases)
+  gyeol_lsp/             # Language Server Protocol 서버
+    lsp_main.cpp         # JSON-RPC stdin/stdout 이벤트 루프
+    lsp_server.h/cpp     # LSP 프로토콜 핸들러 (completion, definition, hover, symbol)
+    gyeol_analyzer.h/cpp # 경량 텍스트 분석기 (심볼 추출 + Parser 기반 진단)
+  gyeol_debugger/        # CLI 인터랙티브 디버거
+    debugger_main.cpp    # CLI 엔트리포인트
+    gyeol_debugger.h/cpp # REPL 디버거 (breakpoint, step, locals, where, info)
 bindings/
   godot_extension/       # GDExtension (SCons 빌드)
     godot-cpp/           # git submodule (4.3 branch)
@@ -76,6 +86,12 @@ bindings/
     SConstruct
   unity_plugin/          # Unity Native Plugin (planned)
   wasm/                  # WebAssembly (planned)
+editors/
+  vscode/                # VS Code 확장 (gyeol-lang)
+    package.json         # 확장 설정 (LSP, 디버거, 문법 하이라이팅)
+    language-configuration.json  # 주석, 괄호, 들여쓰기 규칙
+    syntaxes/gyeol.tmLanguage.json  # TextMate 문법 (구문 하이라이팅)
+    src/extension.ts     # LSP 클라이언트 연결
 demo/
   godot/                 # Godot 데모 프로젝트
     project.godot
@@ -145,6 +161,22 @@ demo/
   - voice_asset_id: 대사 뒤 `#voice:파일명` 태그로 보이스 에셋 연결 (하위 호환)
   - elif 체인: `if`/`elif`/`else` → 순차 Condition + Jump 변환 (스키마/런너 변경 없음)
 - **Compiler CLI** — `GyeolCompiler <input> [-o output] [--export-strings csv]`, `-h`/`--help`, `--version`, 다중 에러 출력
+- **LSP Server** — JSON-RPC over stdin/stdout, VS Code 연동
+  - Diagnostics: Parser 에러 → 실시간 진단 (textDocument/publishDiagnostics)
+  - Completion: 키워드, label, 변수, 내장 함수 자동완성
+  - Go to Definition: label/변수 선언 위치로 이동
+  - Hover: 키워드 설명, label 시그니처, 변수 스코프 정보
+  - Document Symbols: label (Function), 변수 (Variable) 아웃라인
+  - nlohmann/json v3.11.3 (FetchContent)
+- **Debugger** — CLI 인터랙티브 디버거 (`GyeolDebugger <story.gyb>`)
+  - Runner Debug API: breakpoint, step mode, location, call stack, node inspection
+  - REPL 커맨드: step/continue/break/delete/locals/print/set/where/nodes/info/choose/restart
+  - Breakpoint: 노드명:PC 기반, 추가/삭제/목록/클리어
+  - Step mode: 매 instruction 단위 실행, step()/continue() 전환
+  - Variable inspection: locals/print/set — 런타임 변수 조회/수정
+  - Call stack: where — 현재 위치 + 콜 스택 + 방문 횟수
+  - Node inspection: nodes — 전체 노드 목록, info NODE — instruction 상세 보기
+  - ANSI 색상 출력, 약어 커맨드 (s/c/b/d/l/p/w/n/i/ch/r/q)
 - **GDExtension** — StoryPlayer 노드, Signal 기반 (dialogue_line[+tags], choices_presented, command_received, story_ended)
   - `save_state(path)` / `load_state(path)` — Godot 경로 (res://, user://) 지원
   - `get_variable(name)` / `set_variable(name, value)` / `has_variable(name)` — 변수 접근
@@ -237,15 +269,17 @@ label 함수(a, b):                   # 함수 선언 (매개변수 바인딩, �
 
 - **FlatBuffers** v24.3.25 (auto-fetched via CMake FetchContent)
 - **Google Test** v1.14.0 (auto-fetched via CMake FetchContent)
+- **nlohmann/json** v3.11.3 (auto-fetched via CMake FetchContent, LSP only)
 - **godot-cpp** 4.3 branch (git submodule at `bindings/godot_extension/godot-cpp`)
 
 ## Testing
 
-Google Test v1.14.0 기반 자동화 테스트 (233 tests):
+Google Test v1.14.0 기반 자동화 테스트 (284 tests):
 
 ```bash
 # 유닛 테스트 실행
-./build/src/tests/GyeolTests.exe
+./build/src/tests/GyeolTests          # Core + Parser + Runner (254 tests)
+./build/src/tests/GyeolLSPTests       # LSP Analyzer + Server (30 tests)
 
 # CTest로 실행
 cd build && ctest --output-on-failure
@@ -255,8 +289,11 @@ cd build && ctest --output-on-failure
 - **ParserTest** (83): 문법 요소별 파싱, 에스케이프, String Pool, voice_asset, 태그 시스템, global_vars, jump 검증, 표현식, 조건 표현식, 논리 연산자, elif 체인, random 블록, Line ID, Import (병합/다중파일/global vars/string pool공유/start_node/순서/중첩), Return (리터럴/변수/표현식/문자열/bool/bare), CallWithReturn (파싱/검증), Function Parameters (label params/call args/empty parens/expression args/single param), Visit Count (표현식/조건/맨문자/산술조합)
 - **ParserErrorTest** (25): 에러 케이스, 에러 복구, 다중 에러 수집, 잘못된 jump/choice/condition/random 타겟, elif/else 검증, Import (순환감지/자기참조/파일없음/중복label/경로오류), Return (label밖/잘못된타겟/잘못된표현식), Function Parameters (중복param/unclosed paren/jump args/empty arg)
 - **RunnerTest** (106): VM 실행 흐름, 선택지, Jump/Call, 변수/조건, Command, 변수 API, 산술 표현식, 문자열 보간, 인라인 조건 텍스트, 태그 노출, 조건 표현식, 논리 연산자, elif 체인, random 분기, 로케일 오버레이/폴백/보간/클리어, Import 통합 (노드 jump/global vars), CallWithReturn (리터럴/변수/표현식/문자열/float/bool), Return (bare/implicit/no-frame), 중첩 call return, 기존 call 호환, Function Parameters (단일/다중 param, 로컬 스코프, 전역 섀도잉, 표현식 인자, return+params, 중첩, 기본값, 하위 호환), Visit Count (기본/미방문/bool/표현식/조건분기/비교/보간/인라인조건/API)
+- **DebugAPITest** (21): Breakpoint 관리 (추가/삭제/클리어/조회), Step mode 제어, Location 정보 (노드/PC/타입), Call stack 조회, Node 목록/instruction 수/상세 정보, Instruction 타입별 info (Line/Choice/Jump/Command/SetVar/Condition/Random/Return/CallWithReturn), Step mode 실행 흐름, Breakpoint hit/resume, 하위 호환 (디버그 미사용 시 동일 동작), 다른 노드 breakpoint
 - **StoryTest** (4): .gyb 로드/검증, 잘못된 파일 처리
 - **SaveLoadTest** (15): 라운드트립, 선택지/변수/콜스택 저장복원, 에러 케이스, CallWithReturn 프레임 저장복원, 하위 호환, Function Parameters (섀도 변수 포함 프레임 저장복원, 하위 호환), Visit Count (방문횟수 저장복원, 하위 호환)
+- **AnalyzerTest** (13): Label 스캔 (이름/줄번호/파라미터), 변수 스캔 (전역/로컬/중복제거), Jump/Call/Choice 참조, 주석/빈 내용 무시, Parser 기반 진단 (유효/무효 스크립트)
+- **LspServerTest** (17): Initialize (capabilities), Shutdown/Exit, DidOpen/DidChange/DidClose 진단 게시, Completion (키워드/라벨/변수/내장함수), Go to Definition (라벨/변수), Hover (키워드/라벨/파라미터), Document Symbols, 알 수 없는 메서드 에러
 
 수동 파이프라인 테스트:
 ```bash

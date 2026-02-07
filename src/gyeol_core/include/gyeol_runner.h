@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <unordered_map>
 #include <random>
+#include <set>
 
 namespace Gyeol {
 
@@ -86,6 +87,42 @@ public:
     int32_t getVisitCount(const std::string& nodeName) const;
     bool hasVisited(const std::string& nodeName) const;
 
+    // --- Debug API ---
+    struct DebugLocation {
+        std::string nodeName;
+        uint32_t pc = 0;
+        std::string instructionType;  // "Line", "Choice", "Jump", "Command", "SetVar", "Condition", "Random", "Return", "CallWithReturn"
+    };
+
+    struct CallFrameInfo {
+        std::string nodeName;
+        uint32_t pc;
+        std::string returnVarName;
+        std::vector<std::string> paramNames;
+    };
+
+    // Breakpoint management
+    void addBreakpoint(const std::string& nodeName, uint32_t pc);
+    void removeBreakpoint(const std::string& nodeName, uint32_t pc);
+    void clearBreakpoints();
+    bool hasBreakpoint(const std::string& nodeName, uint32_t pc) const;
+    std::vector<std::pair<std::string, uint32_t>> getBreakpoints() const;
+
+    // Step control
+    void setStepMode(bool enabled);  // When true, step() pauses after each instruction
+    bool isStepMode() const;
+
+    // Debug info
+    DebugLocation getLocation() const;  // Current node + PC + instruction type
+    std::vector<CallFrameInfo> getCallStack() const;  // Human-readable call stack
+    std::string getCurrentNodeName() const;  // Convenience wrapper
+    uint32_t getCurrentPC() const;
+
+    // Node inspection
+    std::vector<std::string> getNodeNames() const;  // List all node names in story
+    uint32_t getNodeInstructionCount(const std::string& nodeName) const;  // # of instructions in a node
+    std::string getInstructionInfo(const std::string& nodeName, uint32_t pc) const;  // Human-readable instruction description
+
 private:
     // forward declarations — 실제 FlatBuffers 타입은 cpp에서 사용
     const void* story_ = nullptr;
@@ -133,6 +170,11 @@ private:
 
     // 노드 방문 횟수
     std::unordered_map<std::string, uint32_t> visitCounts_;
+
+    // Debug state
+    std::set<std::pair<std::string, uint32_t>> breakpoints_;
+    bool stepMode_ = false;
+    bool hitBreakpoint_ = false;
 
     // 헬퍼
     const char* poolStr(int32_t index) const;

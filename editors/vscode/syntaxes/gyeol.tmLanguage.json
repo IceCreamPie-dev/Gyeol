@@ -1,0 +1,570 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Gyeol",
+  "scopeName": "source.gyeol",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#import" },
+    { "include": "#label" },
+    { "include": "#variable-assignment" },
+    { "include": "#command" },
+    { "include": "#menu-keyword" },
+    { "include": "#random-keyword" },
+    { "include": "#return-statement" },
+    { "include": "#call-statement" },
+    { "include": "#jump-statement" },
+    { "include": "#elif-statement" },
+    { "include": "#else-statement" },
+    { "include": "#if-statement" },
+    { "include": "#choice-line" },
+    { "include": "#random-weight-line" },
+    { "include": "#dialogue-with-character" },
+    { "include": "#narration" },
+    { "include": "#boolean" },
+    { "include": "#number" },
+    { "include": "#string" }
+  ],
+  "repository": {
+    "comment": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.gyeol",
+          "match": "^\\s*#.*$"
+        }
+      ]
+    },
+    "import": {
+      "patterns": [
+        {
+          "match": "^\\s*(import)\\s+(\"[^\"]*\")",
+          "captures": {
+            "1": { "name": "keyword.control.import.gyeol" },
+            "2": { "name": "string.quoted.double.gyeol" }
+          }
+        }
+      ]
+    },
+    "label": {
+      "patterns": [
+        {
+          "match": "^\\s*(label)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(\\([^)]*\\))?\\s*(:)",
+          "captures": {
+            "1": { "name": "keyword.control.label.gyeol" },
+            "2": { "name": "entity.name.function.gyeol" },
+            "3": {
+              "patterns": [
+                {
+                  "match": "[a-zA-Z_][a-zA-Z0-9_]*",
+                  "name": "variable.parameter.gyeol"
+                }
+              ]
+            },
+            "4": { "name": "punctuation.definition.label.gyeol" }
+          }
+        }
+      ]
+    },
+    "variable-assignment": {
+      "patterns": [
+        {
+          "begin": "^\\s*(\\$)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(=)\\s*(call)\\b",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.variable.gyeol" },
+            "2": { "name": "variable.other.gyeol" },
+            "3": { "name": "keyword.operator.assignment.gyeol" },
+            "4": { "name": "keyword.control.call.gyeol" }
+          },
+          "end": "$",
+          "patterns": [
+            { "include": "#function-call-args" },
+            {
+              "match": "[a-zA-Z_][a-zA-Z0-9_]*",
+              "name": "entity.name.function.reference.gyeol"
+            }
+          ]
+        },
+        {
+          "begin": "^\\s*(\\$)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(=)",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.variable.gyeol" },
+            "2": { "name": "variable.other.gyeol" },
+            "3": { "name": "keyword.operator.assignment.gyeol" }
+          },
+          "end": "$",
+          "patterns": [
+            { "include": "#inline-comment-tag" },
+            { "include": "#builtin-function" },
+            { "include": "#boolean" },
+            { "include": "#number" },
+            { "include": "#string" },
+            { "include": "#expression-operators" },
+            {
+              "match": "[a-zA-Z_][a-zA-Z0-9_]*",
+              "name": "variable.other.gyeol"
+            }
+          ]
+        }
+      ]
+    },
+    "command": {
+      "patterns": [
+        {
+          "begin": "^\\s*(@)\\s*([a-zA-Z_][a-zA-Z0-9_]*)",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.command.gyeol" },
+            "2": { "name": "support.function.command.gyeol" }
+          },
+          "end": "$",
+          "patterns": [
+            { "include": "#string" },
+            { "include": "#number" },
+            { "include": "#boolean" },
+            {
+              "match": "[^\\s]+",
+              "name": "variable.parameter.command.gyeol"
+            }
+          ]
+        }
+      ]
+    },
+    "menu-keyword": {
+      "patterns": [
+        {
+          "match": "^\\s*(menu)\\s*(:)",
+          "captures": {
+            "1": { "name": "keyword.control.menu.gyeol" },
+            "2": { "name": "punctuation.definition.menu.gyeol" }
+          }
+        }
+      ]
+    },
+    "random-keyword": {
+      "patterns": [
+        {
+          "match": "^\\s*(random)\\s*(:)",
+          "captures": {
+            "1": { "name": "keyword.control.random.gyeol" },
+            "2": { "name": "punctuation.definition.random.gyeol" }
+          }
+        }
+      ]
+    },
+    "return-statement": {
+      "patterns": [
+        {
+          "begin": "^\\s*(return)\\b",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.return.gyeol" }
+          },
+          "end": "$",
+          "patterns": [
+            { "include": "#builtin-function" },
+            { "include": "#boolean" },
+            { "include": "#number" },
+            { "include": "#string" },
+            { "include": "#expression-operators" },
+            {
+              "match": "[a-zA-Z_][a-zA-Z0-9_]*",
+              "name": "variable.other.gyeol"
+            }
+          ]
+        }
+      ]
+    },
+    "jump-statement": {
+      "patterns": [
+        {
+          "match": "^\\s*(jump)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.control.jump.gyeol" },
+            "2": { "name": "entity.name.function.reference.gyeol" }
+          }
+        }
+      ]
+    },
+    "call-statement": {
+      "patterns": [
+        {
+          "begin": "^\\s*(call)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.call.gyeol" },
+            "2": { "name": "entity.name.function.reference.gyeol" }
+          },
+          "end": "$",
+          "patterns": [
+            { "include": "#function-call-args" }
+          ]
+        }
+      ]
+    },
+    "if-statement": {
+      "patterns": [
+        {
+          "begin": "^\\s*(if)\\b",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.if.gyeol" }
+          },
+          "end": "$",
+          "patterns": [
+            { "include": "#condition-body" }
+          ]
+        }
+      ]
+    },
+    "elif-statement": {
+      "patterns": [
+        {
+          "begin": "^\\s*(elif)\\b",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.elif.gyeol" }
+          },
+          "end": "$",
+          "patterns": [
+            { "include": "#condition-body" }
+          ]
+        }
+      ]
+    },
+    "else-statement": {
+      "patterns": [
+        {
+          "match": "^\\s*(else)\\s*(->)\\s*([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.control.else.gyeol" },
+            "2": { "name": "keyword.operator.arrow.gyeol" },
+            "3": { "name": "entity.name.function.reference.gyeol" }
+          }
+        }
+      ]
+    },
+    "condition-body": {
+      "patterns": [
+        { "include": "#builtin-function" },
+        {
+          "match": "(->)\\s*([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.operator.arrow.gyeol" },
+            "2": { "name": "entity.name.function.reference.gyeol" }
+          }
+        },
+        {
+          "match": "\\b(else)\\b",
+          "name": "keyword.control.else.gyeol"
+        },
+        {
+          "match": "\\b(and|or|not)\\b",
+          "name": "keyword.operator.logical.gyeol"
+        },
+        {
+          "match": "(==|!=|>=|<=|>|<)",
+          "name": "keyword.operator.comparison.gyeol"
+        },
+        { "include": "#boolean" },
+        { "include": "#number" },
+        { "include": "#string" },
+        {
+          "match": "[a-zA-Z_][a-zA-Z0-9_]*",
+          "name": "variable.other.gyeol"
+        }
+      ]
+    },
+    "choice-line": {
+      "patterns": [
+        {
+          "begin": "^\\s*(\")",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.string.begin.gyeol" }
+          },
+          "end": "(\")\\s*(?:(->)\\s*([a-zA-Z_][a-zA-Z0-9_]*)(?:\\s+(if)\\b(.*))?)?\\s*$",
+          "endCaptures": {
+            "1": { "name": "punctuation.definition.string.end.gyeol" },
+            "2": { "name": "keyword.operator.arrow.gyeol" },
+            "3": { "name": "entity.name.function.reference.gyeol" },
+            "4": { "name": "keyword.control.if.gyeol" },
+            "5": {
+              "patterns": [
+                { "include": "#builtin-function" },
+                {
+                  "match": "\\b(and|or|not)\\b",
+                  "name": "keyword.operator.logical.gyeol"
+                },
+                {
+                  "match": "(==|!=|>=|<=|>|<)",
+                  "name": "keyword.operator.comparison.gyeol"
+                },
+                { "include": "#boolean" },
+                { "include": "#number" },
+                {
+                  "match": "[a-zA-Z_][a-zA-Z0-9_]*",
+                  "name": "variable.other.gyeol"
+                }
+              ]
+            }
+          },
+          "name": "meta.choice.gyeol",
+          "contentName": "string.quoted.double.gyeol",
+          "patterns": [
+            { "include": "#string-interpolation" },
+            { "include": "#string-inline-condition" }
+          ]
+        }
+      ]
+    },
+    "random-weight-line": {
+      "patterns": [
+        {
+          "match": "^\\s*(\\d+)?\\s*(->)\\s*([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "constant.numeric.weight.gyeol" },
+            "2": { "name": "keyword.operator.arrow.gyeol" },
+            "3": { "name": "entity.name.function.reference.gyeol" }
+          }
+        }
+      ]
+    },
+    "dialogue-with-character": {
+      "patterns": [
+        {
+          "begin": "^\\s*([a-zA-Z_\\u3131-\\u318E\\u3200-\\u321E\\u3260-\\u327E\\uAC00-\\uD7A3\\u4E00-\\u9FFF][a-zA-Z0-9_\\u3131-\\u318E\\u3200-\\u321E\\u3260-\\u327E\\uAC00-\\uD7A3\\u4E00-\\u9FFF]*)\\s+(\")",
+          "beginCaptures": {
+            "1": { "name": "entity.name.type.character.gyeol" },
+            "2": { "name": "punctuation.definition.string.begin.gyeol" }
+          },
+          "end": "(\")(.*)$",
+          "endCaptures": {
+            "1": { "name": "punctuation.definition.string.end.gyeol" },
+            "2": {
+              "patterns": [
+                { "include": "#dialogue-tags" }
+              ]
+            }
+          },
+          "contentName": "string.quoted.double.gyeol",
+          "patterns": [
+            { "include": "#string-interpolation" },
+            { "include": "#string-inline-condition" }
+          ]
+        }
+      ]
+    },
+    "narration": {
+      "patterns": [
+        {
+          "begin": "^(\\s*)(\")",
+          "beginCaptures": {
+            "2": { "name": "punctuation.definition.string.begin.gyeol" }
+          },
+          "end": "(\")(.*)$",
+          "endCaptures": {
+            "1": { "name": "punctuation.definition.string.end.gyeol" },
+            "2": {
+              "patterns": [
+                { "include": "#dialogue-tags" }
+              ]
+            }
+          },
+          "contentName": "string.quoted.double.gyeol",
+          "patterns": [
+            { "include": "#string-interpolation" },
+            { "include": "#string-inline-condition" }
+          ]
+        }
+      ]
+    },
+    "dialogue-tags": {
+      "patterns": [
+        {
+          "match": "(#)([a-zA-Z_][a-zA-Z0-9_]*)(?:(:)([^\\s#]*))?",
+          "captures": {
+            "1": { "name": "punctuation.definition.tag.gyeol" },
+            "2": { "name": "comment.block.documentation.tag.gyeol" },
+            "3": { "name": "punctuation.separator.tag.gyeol" },
+            "4": { "name": "comment.block.documentation.tag.gyeol" }
+          }
+        }
+      ]
+    },
+    "string": {
+      "patterns": [
+        {
+          "begin": "\"",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.string.begin.gyeol" }
+          },
+          "end": "\"",
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.string.end.gyeol" }
+          },
+          "name": "string.quoted.double.gyeol",
+          "patterns": [
+            { "include": "#string-interpolation" },
+            { "include": "#string-inline-condition" },
+            { "include": "#string-escape" }
+          ]
+        }
+      ]
+    },
+    "string-interpolation": {
+      "patterns": [
+        {
+          "match": "(\\{)([a-zA-Z_][a-zA-Z0-9_]*)(\\})",
+          "captures": {
+            "1": { "name": "punctuation.definition.interpolation.begin.gyeol" },
+            "2": { "name": "variable.other.interpolation.gyeol" },
+            "3": { "name": "punctuation.definition.interpolation.end.gyeol" }
+          }
+        },
+        {
+          "begin": "(\\{)(visit_count|visited)(\\()",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.interpolation.begin.gyeol" },
+            "2": { "name": "support.function.builtin.gyeol" },
+            "3": { "name": "punctuation.definition.arguments.begin.gyeol" }
+          },
+          "end": "(\\))(\\})",
+          "endCaptures": {
+            "1": { "name": "punctuation.definition.arguments.end.gyeol" },
+            "2": { "name": "punctuation.definition.interpolation.end.gyeol" }
+          },
+          "patterns": [
+            { "include": "#string" },
+            {
+              "match": "[a-zA-Z_][a-zA-Z0-9_]*",
+              "name": "entity.name.function.reference.gyeol"
+            }
+          ]
+        }
+      ]
+    },
+    "string-inline-condition": {
+      "patterns": [
+        {
+          "match": "(\\{)(if)\\b",
+          "captures": {
+            "1": { "name": "punctuation.definition.interpolation.begin.gyeol" },
+            "2": { "name": "keyword.control.interpolation.gyeol" }
+          }
+        },
+        {
+          "match": "(\\{)(else)(\\})",
+          "captures": {
+            "1": { "name": "punctuation.definition.interpolation.begin.gyeol" },
+            "2": { "name": "keyword.control.interpolation.gyeol" },
+            "3": { "name": "punctuation.definition.interpolation.end.gyeol" }
+          }
+        },
+        {
+          "match": "(\\{)(endif)(\\})",
+          "captures": {
+            "1": { "name": "punctuation.definition.interpolation.begin.gyeol" },
+            "2": { "name": "keyword.control.interpolation.gyeol" },
+            "3": { "name": "punctuation.definition.interpolation.end.gyeol" }
+          }
+        }
+      ]
+    },
+    "string-escape": {
+      "patterns": [
+        {
+          "match": "\\\\[\"\\\\n{}]",
+          "name": "constant.character.escape.gyeol"
+        }
+      ]
+    },
+    "builtin-function": {
+      "patterns": [
+        {
+          "begin": "\\b(visit_count|visited)(\\()",
+          "beginCaptures": {
+            "1": { "name": "support.function.builtin.gyeol" },
+            "2": { "name": "punctuation.definition.arguments.begin.gyeol" }
+          },
+          "end": "\\)",
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.arguments.end.gyeol" }
+          },
+          "patterns": [
+            { "include": "#string" },
+            {
+              "match": "[a-zA-Z_][a-zA-Z0-9_]*",
+              "name": "entity.name.function.reference.gyeol"
+            }
+          ]
+        }
+      ]
+    },
+    "function-call-args": {
+      "patterns": [
+        {
+          "begin": "\\(",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.arguments.begin.gyeol" }
+          },
+          "end": "\\)",
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.arguments.end.gyeol" }
+          },
+          "patterns": [
+            { "include": "#builtin-function" },
+            { "include": "#boolean" },
+            { "include": "#number" },
+            { "include": "#string" },
+            { "include": "#expression-operators" },
+            {
+              "match": ",",
+              "name": "punctuation.separator.comma.gyeol"
+            },
+            {
+              "match": "[a-zA-Z_][a-zA-Z0-9_]*",
+              "name": "variable.other.gyeol"
+            }
+          ]
+        }
+      ]
+    },
+    "expression-operators": {
+      "patterns": [
+        {
+          "match": "\\b(and|or|not)\\b",
+          "name": "keyword.operator.logical.gyeol"
+        },
+        {
+          "match": "(==|!=|>=|<=|>|<)",
+          "name": "keyword.operator.comparison.gyeol"
+        },
+        {
+          "match": "(\\+|-|\\*|/|%)",
+          "name": "keyword.operator.arithmetic.gyeol"
+        }
+      ]
+    },
+    "boolean": {
+      "patterns": [
+        {
+          "match": "\\b(true|false)\\b",
+          "name": "constant.language.boolean.gyeol"
+        }
+      ]
+    },
+    "number": {
+      "patterns": [
+        {
+          "match": "\\b\\d+\\.\\d+\\b",
+          "name": "constant.numeric.float.gyeol"
+        },
+        {
+          "match": "\\b\\d+\\b",
+          "name": "constant.numeric.integer.gyeol"
+        }
+      ]
+    },
+    "inline-comment-tag": {
+      "patterns": [
+        {
+          "match": "#.*$",
+          "name": "comment.line.number-sign.gyeol"
+        }
+      ]
+    }
+  }
+}
