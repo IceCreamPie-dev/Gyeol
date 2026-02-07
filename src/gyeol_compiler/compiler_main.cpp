@@ -11,6 +11,7 @@ static void printUsage() {
               << "\n"
               << "Options:\n"
               << "  -o <path>    Output file path (default: story.gyb)\n"
+              << "  --export-strings <path>  Export translatable strings to CSV\n"
               << "  -h, --help   Show this help message\n"
               << "  --version    Show version number\n";
 }
@@ -35,12 +36,14 @@ int main(int argc, char* argv[]) {
 
     std::string inputPath = argv[1];
     std::string outputPath = "story.gyb";
+    std::string exportPath;
 
-    // -o 옵션
+    // 옵션 파싱
     for (int i = 2; i < argc - 1; ++i) {
         if (std::strcmp(argv[i], "-o") == 0) {
             outputPath = argv[i + 1];
-            break;
+        } else if (std::strcmp(argv[i], "--export-strings") == 0) {
+            exportPath = argv[i + 1];
         }
     }
 
@@ -53,6 +56,13 @@ int main(int argc, char* argv[]) {
         }
         std::cerr << "\n" << errors.size() << " error(s). Compilation aborted." << std::endl;
         return 1;
+    }
+
+    // CSV 추출 (--export-strings)
+    if (!exportPath.empty()) {
+        if (!parser.exportStrings(exportPath)) {
+            return 1;
+        }
     }
 
     if (!parser.compile(outputPath)) {

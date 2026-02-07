@@ -23,6 +23,9 @@ public:
     const std::vector<std::string>& getErrors() const { return errors_; }
     bool hasErrors() const { return !errors_.empty(); }
 
+    // 번역 대상 문자열 CSV 추출
+    bool exportStrings(const std::string& outputPath) const;
+
 private:
     ICPDev::Gyeol::Schema::StoryT story_;
     std::string error_;
@@ -32,6 +35,11 @@ private:
     // String Pool 관리 (중복 제거)
     std::unordered_map<std::string, int32_t> stringMap_;
     int32_t addString(const std::string& str);
+    int32_t addStringWithId(const std::string& str, const std::string& lineId);
+
+    // Line ID 추적 (string_pool과 병렬)
+    std::vector<std::string> lineIds_;
+    std::string currentNodeName_;
 
     // 현재 파싱 상태
     ICPDev::Gyeol::Schema::NodeT* currentNode_ = nullptr;
@@ -71,6 +79,14 @@ private:
     bool parseRandomBranchLine(const std::string& content, int lineNum);
     void flushRandomBlock(int lineNum);
     bool parseCommandLine(const std::string& content, int lineNum);
+    bool parseReturnLine(const std::string& content, int lineNum);
+
+    // 매개변수/인자 파싱 헬퍼
+    bool parseParamList(const std::string& content, size_t& pos,
+                        std::vector<std::string>& outParamNames, int lineNum);
+    bool parseArgList(const std::string& content, size_t& pos,
+                      std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT>>& outArgExprs,
+                      int lineNum);
 
     // 값 파싱
     bool parseValue(const std::string& text, size_t& pos,
@@ -93,6 +109,17 @@ private:
         return (static_cast<uint64_t>(nodeIdx) << 32) | static_cast<uint64_t>(instrIdx);
     }
     void validateJumpTargets();
+
+    // Line ID 생성 헬퍼
+    static std::string hashText(const std::string& text);
+
+    // --- Import tracking ---
+    std::unordered_set<std::string> importedFiles_;  // 절대 경로 (순환 감지)
+    bool isMainFile_ = true;       // 메인 파일 여부 (start_node 결정용)
+    bool startNodeSet_ = false;    // start_node_name 설정 완료 여부
+
+    // 단일 파일 파싱 (state 리셋 없이, import 재귀 호출용)
+    bool parseFile(const std::string& filepath);
 };
 
 } // namespace Gyeol

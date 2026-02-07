@@ -4,6 +4,7 @@
 #include <fstream>
 #include <cstring>
 #include <sstream>
+#include <algorithm>
 
 using namespace ICPDev::Gyeol::Schema;
 
@@ -24,6 +25,11 @@ const char* Runner::poolStr(int32_t index) const {
     if (!pool || index < 0 || index >= static_cast<int32_t>(pool->size())) {
         return "";
     }
+    // 로케일 오버레이 우선
+    if (!localePool_.empty() && index < static_cast<int32_t>(localePool_.size())
+        && !localePool_[static_cast<size_t>(index)].empty()) {
+        return localePool_[static_cast<size_t>(index)].c_str();
+    }
     return pool->Get(static_cast<flatbuffers::uoffset_t>(index))->c_str();
 }
 
@@ -41,6 +47,7 @@ void Runner::jumpToNode(const char* name) {
         if (node->name() && std::strcmp(node->name()->c_str(), name) == 0) {
             currentNode_ = node;
             pc_ = 0;
+            visitCounts_[name]++;
             return;
         }
     }
@@ -71,6 +78,19 @@ static Variant readValueData(
                 return Variant::String(pool->Get(static_cast<flatbuffers::uoffset_t>(idx))->c_str());
             }
             return Variant::String("");
+        }
+        case ValueData::ListValue: {
+            auto* lv = static_cast<const ListValue*>(valuePtr);
+            std::vector<std::string> items;
+            if (lv->items()) {
+                for (flatbuffers::uoffset_t j = 0; j < lv->items()->size(); ++j) {
+                    int32_t idx = lv->items()->Get(j);
+                    if (pool && idx >= 0 && idx < static_cast<int32_t>(pool->size())) {
+                        items.push_back(pool->Get(static_cast<flatbuffers::uoffset_t>(idx))->c_str());
+                    }
+                }
+            }
+            return Variant::List(std::move(items));
         }
         default:
             return Variant::Int(0);
@@ -132,6 +152,7 @@ static bool variantToBool(const Variant& v) {
         case Variant::INT:    return v.i != 0;
         case Variant::FLOAT:  return v.f != 0.0f;
         case Variant::STRING: return !v.s.empty();
+        case Variant::LIST:   return !v.list.empty();
     }
     return false;
 }
@@ -270,6 +291,44 @@ Variant Runner::evaluateExpression(const void* exprPtr) const {
                 stack.push_back(Variant::Bool(!variantToBool(val)));
                 break;
             }
+            // --- 함수 연산자 ---
+            case ExprOp::PushVisitCount: {
+                std::string nodeName = poolStr(token->var_name_id());
+                auto it = visitCounts_.find(nodeName);
+                stack.push_back(Variant::Int(it != visitCounts_.end()
+                    ? static_cast<int32_t>(it->second) : 0));
+                break;
+            }
+            case ExprOp::PushVisited: {
+                std::string nodeName = poolStr(token->var_name_id());
+                auto it = visitCounts_.find(nodeName);
+                stack.push_back(Variant::Bool(it != visitCounts_.end() && it->second > 0));
+                break;
+            }
+            // --- 리스트 연산자 ---
+            case ExprOp::ListContains: {
+                if (stack.size() < 2) return Variant::Int(0);
+                Variant rhs = stack.back(); stack.pop_back(); // 검색할 문자열
+                Variant lhs = stack.back(); stack.pop_back(); // 리스트
+                if (lhs.type == Variant::LIST) {
+                    std::string needle = (rhs.type == Variant::STRING) ? rhs.s : variantToString(rhs);
+                    bool found = std::find(lhs.list.begin(), lhs.list.end(), needle) != lhs.list.end();
+                    stack.push_back(Variant::Bool(found));
+                } else {
+                    stack.push_back(Variant::Bool(false));
+                }
+                break;
+            }
+            case ExprOp::ListLength: {
+                std::string varName = poolStr(token->var_name_id());
+                auto it = variables_.find(varName);
+                if (it != variables_.end() && it->second.type == Variant::LIST) {
+                    stack.push_back(Variant::Int(static_cast<int32_t>(it->second.list.size())));
+                } else {
+                    stack.push_back(Variant::Int(0));
+                }
+                break;
+            }
         }
     }
 
@@ -287,6 +346,14 @@ std::string Runner::variantToString(const Variant& v) {
             return oss.str();
         }
         case Variant::STRING: return v.s;
+        case Variant::LIST: {
+            std::string result;
+            for (size_t i = 0; i < v.list.size(); ++i) {
+                if (i > 0) result += ", ";
+                result += v.list[i];
+            }
+            return result;
+        }
     }
     return "";
 }
@@ -301,25 +368,268 @@ std::string Runner::interpolateText(const char* text) const {
     const char* p = text;
     while (*p) {
         if (*p == '{') {
-            p++; // skip '{'
-            std::string varName;
-            while (*p && *p != '}') {
-                varName += *p;
-                p++;
-            }
-            if (*p == '}') p++; // skip '}'
+            // '}' 까지 태그 추출
+            const char* start = p + 1;
+            const char* end = start;
+            while (*end && *end != '}') end++;
+            std::string tag(start, end);
+            if (*end == '}') end++;
 
-            auto it = variables_.find(varName);
-            if (it != variables_.end()) {
-                result += variantToString(it->second);
+            if (tag.size() > 3 && tag.substr(0, 3) == "if ") {
+                // --- 인라인 조건 분기 처리 ---
+                std::string condStr = tag.substr(3);
+                bool condResult = evaluateInlineCondition(condStr);
+
+                // {if}...{else}...{endif} 텍스트 수집
+                p = end; // '{if ...}' 다음
+                std::string trueBranch, falseBranch;
+                bool inElse = false;
+                int depth = 1;
+
+                while (*p && depth > 0) {
+                    if (*p == '{') {
+                        const char* ts = p + 1;
+                        const char* te = ts;
+                        while (*te && *te != '}') te++;
+                        std::string innerTag(ts, te);
+                        if (*te == '}') te++;
+
+                        if (innerTag.size() > 3 && innerTag.substr(0, 3) == "if ") {
+                            depth++;
+                            if (inElse) falseBranch += std::string(p, te);
+                            else trueBranch += std::string(p, te);
+                            p = te;
+                        } else if (innerTag == "else" && depth == 1) {
+                            inElse = true;
+                            p = te;
+                        } else if (innerTag == "endif") {
+                            depth--;
+                            if (depth == 0) {
+                                p = te;
+                            } else {
+                                if (inElse) falseBranch += std::string(p, te);
+                                else trueBranch += std::string(p, te);
+                                p = te;
+                            }
+                        } else {
+                            // 일반 {var} 태그 — 분기 텍스트에 포함
+                            if (inElse) falseBranch += std::string(p, te);
+                            else trueBranch += std::string(p, te);
+                            p = te;
+                        }
+                    } else {
+                        if (inElse) falseBranch += *p;
+                        else trueBranch += *p;
+                        p++;
+                    }
+                }
+
+                // 선택된 분기를 재귀 보간
+                const std::string& chosen = condResult ? trueBranch : falseBranch;
+                std::string interp = interpolateText(chosen.c_str());
+                result += interp.empty() ? chosen : interp;
+            } else {
+                p = end;
+                // --- 함수 호출 보간 ---
+                if (tag.size() > 13 && tag.substr(0, 12) == "visit_count(" && tag.back() == ')') {
+                    std::string nodeName = tag.substr(12, tag.size() - 13);
+                    if (nodeName.size() >= 2 && nodeName.front() == '"' && nodeName.back() == '"')
+                        nodeName = nodeName.substr(1, nodeName.size() - 2);
+                    auto it = visitCounts_.find(nodeName);
+                    int32_t count = (it != visitCounts_.end()) ? static_cast<int32_t>(it->second) : 0;
+                    result += std::to_string(count);
+                } else if (tag.size() > 9 && tag.substr(0, 8) == "visited(" && tag.back() == ')') {
+                    std::string nodeName = tag.substr(8, tag.size() - 9);
+                    if (nodeName.size() >= 2 && nodeName.front() == '"' && nodeName.back() == '"')
+                        nodeName = nodeName.substr(1, nodeName.size() - 2);
+                    auto it = visitCounts_.find(nodeName);
+                    result += (it != visitCounts_.end() && it->second > 0) ? "true" : "false";
+                } else if (tag.size() > 5 && tag.substr(0, 4) == "len(" && tag.back() == ')') {
+                    // --- len() 함수 보간 ---
+                    std::string listVarName = tag.substr(4, tag.size() - 5);
+                    if (listVarName.size() >= 2 && listVarName.front() == '"' && listVarName.back() == '"')
+                        listVarName = listVarName.substr(1, listVarName.size() - 2);
+                    auto it = variables_.find(listVarName);
+                    if (it != variables_.end() && it->second.type == Variant::LIST) {
+                        result += std::to_string(it->second.list.size());
+                    } else {
+                        result += "0";
+                    }
+                } else {
+                    // --- 기존 변수 보간 ---
+                    auto it = variables_.find(tag);
+                    if (it != variables_.end()) {
+                        result += variantToString(it->second);
+                    }
+                    // 미정의 변수: 빈 문자열 (아무것도 추가 안함)
+                }
             }
-            // 미정의 변수: 빈 문자열 (아무것도 추가 안함)
         } else {
             result += *p;
             p++;
         }
     }
     return result;
+}
+
+// --- 인라인 조건 평가 ---
+bool Runner::evaluateInlineCondition(const std::string& condStr) const {
+    // 공백으로 토큰 분리
+    // 패턴 1: "varname" (truthiness)
+    // 패턴 2: "var op literal" (비교)
+
+    size_t pos = 0;
+    // 앞뒤 공백 스킵
+    while (pos < condStr.size() && condStr[pos] == ' ') pos++;
+
+    // 첫 토큰 (변수명)
+    std::string varName;
+    while (pos < condStr.size() && condStr[pos] != ' ') {
+        varName += condStr[pos]; pos++;
+    }
+    while (pos < condStr.size() && condStr[pos] == ' ') pos++;
+
+    // visit_count(X) / visited(X) 함수 호출 감지
+    bool isFuncCall = false;
+    Variant lhs = Variant::Int(0);
+
+    if (varName.size() > 13 && varName.substr(0, 12) == "visit_count(" && varName.back() == ')') {
+        std::string nodeName = varName.substr(12, varName.size() - 13);
+        if (nodeName.size() >= 2 && nodeName.front() == '"' && nodeName.back() == '"')
+            nodeName = nodeName.substr(1, nodeName.size() - 2);
+        auto it = visitCounts_.find(nodeName);
+        lhs = Variant::Int(it != visitCounts_.end() ? static_cast<int32_t>(it->second) : 0);
+        isFuncCall = true;
+    } else if (varName.size() > 9 && varName.substr(0, 8) == "visited(" && varName.back() == ')') {
+        std::string nodeName = varName.substr(8, varName.size() - 9);
+        if (nodeName.size() >= 2 && nodeName.front() == '"' && nodeName.back() == '"')
+            nodeName = nodeName.substr(1, nodeName.size() - 2);
+        auto it = visitCounts_.find(nodeName);
+        lhs = Variant::Bool(it != visitCounts_.end() && it->second > 0);
+        isFuncCall = true;
+    } else if (varName.size() > 5 && varName.substr(0, 4) == "len(" && varName.back() == ')') {
+        std::string listVarName = varName.substr(4, varName.size() - 5);
+        if (listVarName.size() >= 2 && listVarName.front() == '"' && listVarName.back() == '"')
+            listVarName = listVarName.substr(1, listVarName.size() - 2);
+        auto it = variables_.find(listVarName);
+        if (it != variables_.end() && it->second.type == Variant::LIST) {
+            lhs = Variant::Int(static_cast<int32_t>(it->second.list.size()));
+        }
+        isFuncCall = true;
+    }
+
+    // 연산자 없으면 truthiness 체크
+    if (pos >= condStr.size()) {
+        if (isFuncCall) return variantToBool(lhs);
+        auto it = variables_.find(varName);
+        if (it == variables_.end()) return false;
+        return variantToBool(it->second);
+    }
+
+    // 연산자 추출
+    std::string opStr;
+    while (pos < condStr.size() && condStr[pos] != ' ') {
+        opStr += condStr[pos]; pos++;
+    }
+    while (pos < condStr.size() && condStr[pos] == ' ') pos++;
+
+    // 우변 리터럴 추출
+    std::string rhs = condStr.substr(pos);
+    // 앞뒤 공백 제거
+    while (!rhs.empty() && rhs.back() == ' ') rhs.pop_back();
+
+    // 좌변 변수 조회
+    if (!isFuncCall) {
+        auto it = variables_.find(varName);
+        if (it != variables_.end()) lhs = it->second;
+    }
+
+    // 우변 리터럴 파싱
+    Variant rhsVal = Variant::Int(0);
+    if (rhs == "true") { rhsVal = Variant::Bool(true); }
+    else if (rhs == "false") { rhsVal = Variant::Bool(false); }
+    else if (rhs.size() >= 2 && rhs.front() == '"' && rhs.back() == '"') {
+        rhsVal = Variant::String(rhs.substr(1, rhs.size() - 2));
+    } else {
+        // 숫자 파싱 시도
+        bool hasDecimal = (rhs.find('.') != std::string::npos);
+        if (hasDecimal) {
+            rhsVal = Variant::Float(std::strtof(rhs.c_str(), nullptr));
+        } else {
+            rhsVal = Variant::Int(static_cast<int32_t>(std::strtol(rhs.c_str(), nullptr, 10)));
+        }
+    }
+
+    // "in" 연산자 특별 처리 (좌변=검색값, 우변=리스트 변수명)
+    if (opStr == "in") {
+        std::string listVarName = rhs;
+        auto it = variables_.find(listVarName);
+        if (it != variables_.end() && it->second.type == Variant::LIST) {
+            std::string needle;
+            if (varName.size() >= 2 && varName.front() == '"' && varName.back() == '"') {
+                needle = varName.substr(1, varName.size() - 2);
+            } else if (isFuncCall) {
+                needle = variantToString(lhs);
+            } else if (lhs.type == Variant::STRING) {
+                needle = lhs.s;
+            } else {
+                needle = variantToString(lhs);
+            }
+            return std::find(it->second.list.begin(), it->second.list.end(), needle) != it->second.list.end();
+        }
+        return false;
+    }
+
+    // 연산자 매핑 + 비교
+    Operator op = Operator::Equal;
+    if (opStr == "==") op = Operator::Equal;
+    else if (opStr == "!=") op = Operator::NotEqual;
+    else if (opStr == ">") op = Operator::Greater;
+    else if (opStr == "<") op = Operator::Less;
+    else if (opStr == ">=") op = Operator::GreaterOrEqual;
+    else if (opStr == "<=") op = Operator::LessOrEqual;
+
+    return compareVariants(lhs, op, rhsVal);
+}
+
+// --- 함수 매개변수 바인딩/복원 ---
+void Runner::bindParameters(const void* targetNodePtr,
+                            const std::vector<Variant>& argValues,
+                            CallFrame& frame) {
+    auto* targetNode = asNode(targetNodePtr);
+    if (!targetNode || !targetNode->param_ids() || targetNode->param_ids()->size() == 0)
+        return;
+
+    auto paramCount = targetNode->param_ids()->size();
+    for (flatbuffers::uoffset_t i = 0; i < paramCount; ++i) {
+        std::string paramName = poolStr(targetNode->param_ids()->Get(i));
+        frame.paramNames.push_back(paramName);
+
+        // 기존 값 저장 (또는 존재하지 않았음을 기록)
+        auto it = variables_.find(paramName);
+        if (it != variables_.end()) {
+            frame.shadowedVars.push_back({paramName, it->second, true});
+        } else {
+            frame.shadowedVars.push_back({paramName, Variant::Int(0), false});
+        }
+
+        // 새 값 바인딩
+        if (i < static_cast<flatbuffers::uoffset_t>(argValues.size())) {
+            variables_[paramName] = argValues[i];
+        } else {
+            variables_[paramName] = Variant::Int(0); // 부족한 인자 기본값
+        }
+    }
+}
+
+void Runner::restoreShadowedVars(const CallFrame& frame) {
+    for (auto& sv : frame.shadowedVars) {
+        if (sv.existed) {
+            variables_[sv.name] = sv.value;
+        } else {
+            variables_.erase(sv.name);
+        }
+    }
 }
 
 // --- start ---
@@ -333,6 +643,10 @@ bool Runner::start(const uint8_t* buffer, size_t size) {
     story_ = GetStory(buffer);
     auto* story = asStory(story_);
     pool_ = story->string_pool();
+
+    // 로케일 초기화
+    localePool_.clear();
+    currentLocale_.clear();
 
     // global_vars 초기화
     variables_.clear();
@@ -353,6 +667,8 @@ bool Runner::start(const uint8_t* buffer, size_t size) {
     // start_node로 이동
     callStack_.clear();
     pendingChoices_.clear();
+    visitCounts_.clear();
+    hasPendingReturn_ = false;
     rng_.seed(std::random_device{}());
     finished_ = false;
 
@@ -383,6 +699,16 @@ StepResult Runner::step() {
             if (!callStack_.empty()) {
                 auto frame = callStack_.back();
                 callStack_.pop_back();
+
+                // 섀도된 변수 먼저 복원
+                restoreShadowedVars(frame);
+
+                // 명시적 return이 있었으면 반환값 저장
+                if (hasPendingReturn_ && !frame.returnVarName.empty()) {
+                    variables_[frame.returnVarName] = pendingReturnValue_;
+                }
+                hasPendingReturn_ = false;
+
                 currentNode_ = frame.node;
                 pc_ = frame.pc;
                 node = asNode(currentNode_);
@@ -410,6 +736,16 @@ StepResult Runner::step() {
                     result.line.text = result.ownedStrings_.back().c_str();
                 } else {
                     result.line.text = rawText;
+                }
+                // tags 채우기
+                if (line->tags()) {
+                    for (flatbuffers::uoffset_t t = 0; t < line->tags()->size(); ++t) {
+                        auto* tag = line->tags()->Get(t);
+                        result.line.tags.emplace_back(
+                            poolStr(tag->key_id()),
+                            poolStr(tag->value_id())
+                        );
+                    }
                 }
                 return result;
             }
@@ -477,9 +813,24 @@ StepResult Runner::step() {
             case OpData::Jump: {
                 auto* jump = instr->data_as_Jump();
                 if (jump->is_call()) {
-                    callStack_.push_back({currentNode_, pc_});
+                    // 1. 호출자 컨텍스트에서 인자 평가
+                    std::vector<Variant> argValues;
+                    if (jump->arg_exprs()) {
+                        for (flatbuffers::uoffset_t ai = 0; ai < jump->arg_exprs()->size(); ++ai) {
+                            argValues.push_back(evaluateExpression(jump->arg_exprs()->Get(ai)));
+                        }
+                    }
+                    // 2. call frame push
+                    callStack_.push_back({currentNode_, pc_, "", {}, {}});
+                    // 3. 대상 노드로 이동
+                    jumpToNodeById(jump->target_node_name_id());
+                    // 4. 매개변수 바인딩
+                    if (!finished_) {
+                        bindParameters(currentNode_, argValues, callStack_.back());
+                    }
+                } else {
+                    jumpToNodeById(jump->target_node_name_id());
                 }
-                jumpToNodeById(jump->target_node_name_id());
                 node = asNode(currentNode_);
                 if (finished_) {
                     result.type = StepType::END;
@@ -491,10 +842,38 @@ StepResult Runner::step() {
             case OpData::SetVar: {
                 auto* setvar = instr->data_as_SetVar();
                 std::string varName = poolStr(setvar->var_name_id());
+                Variant newVal = Variant::Int(0);
                 if (setvar->expr()) {
-                    variables_[varName] = evaluateExpression(setvar->expr());
+                    newVal = evaluateExpression(setvar->expr());
                 } else if (setvar->value() && setvar->value_type() != ValueData::NONE) {
-                    variables_[varName] = readValueData(setvar->value(), setvar->value_type(), pool);
+                    newVal = readValueData(setvar->value(), setvar->value_type(), pool);
+                }
+
+                switch (setvar->assign_op()) {
+                    case AssignOp::Assign:
+                        variables_[varName] = newVal;
+                        break;
+                    case AssignOp::Append: {
+                        auto& existing = variables_[varName];
+                        if (existing.type == Variant::LIST) {
+                            std::string item = (newVal.type == Variant::STRING) ? newVal.s : variantToString(newVal);
+                            if (std::find(existing.list.begin(), existing.list.end(), item) == existing.list.end()) {
+                                existing.list.push_back(item);
+                            }
+                        } else {
+                            variables_[varName] = newVal;
+                        }
+                        break;
+                    }
+                    case AssignOp::Remove: {
+                        auto it = variables_.find(varName);
+                        if (it != variables_.end() && it->second.type == Variant::LIST) {
+                            std::string item = (newVal.type == Variant::STRING) ? newVal.s : variantToString(newVal);
+                            auto& list = it->second.list;
+                            list.erase(std::remove(list.begin(), list.end(), item), list.end());
+                        }
+                        break;
+                    }
                 }
                 continue;
             }
@@ -587,6 +966,78 @@ StepResult Runner::step() {
                 return result;
             }
 
+            case OpData::Return: {
+                auto* ret = instr->data_as_Return();
+                // 반환값 평가
+                if (ret->expr()) {
+                    pendingReturnValue_ = evaluateExpression(ret->expr());
+                    hasPendingReturn_ = true;
+                } else if (ret->value() && ret->value_type() != ValueData::NONE) {
+                    pendingReturnValue_ = readValueData(ret->value(), ret->value_type(), pool);
+                    hasPendingReturn_ = true;
+                } else {
+                    // bare "return" (값 없음)
+                    hasPendingReturn_ = false;
+                }
+
+                // call stack pop
+                if (!callStack_.empty()) {
+                    auto frame = callStack_.back();
+                    callStack_.pop_back();
+
+                    // 섀도된 변수 먼저 복원
+                    restoreShadowedVars(frame);
+
+                    // 반환값 저장 (호출자 스코프)
+                    if (hasPendingReturn_ && !frame.returnVarName.empty()) {
+                        variables_[frame.returnVarName] = pendingReturnValue_;
+                    }
+                    hasPendingReturn_ = false;
+
+                    currentNode_ = frame.node;
+                    pc_ = frame.pc;
+                    node = asNode(currentNode_);
+                    continue;
+                }
+
+                // call stack 비어있으면 스토리 종료
+                hasPendingReturn_ = false;
+                finished_ = true;
+                result.type = StepType::END;
+                return result;
+            }
+
+            case OpData::CallWithReturn: {
+                auto* cwr = instr->data_as_CallWithReturn();
+                std::string returnVarName = poolStr(cwr->return_var_name_id());
+
+                // 1. 호출자 컨텍스트에서 인자 평가
+                std::vector<Variant> argValues;
+                if (cwr->arg_exprs()) {
+                    for (flatbuffers::uoffset_t ai = 0; ai < cwr->arg_exprs()->size(); ++ai) {
+                        argValues.push_back(evaluateExpression(cwr->arg_exprs()->Get(ai)));
+                    }
+                }
+
+                // 2. call stack에 반환변수 이름 포함하여 push
+                callStack_.push_back({currentNode_, pc_, returnVarName, {}, {}});
+
+                // 3. 대상 노드로 이동
+                jumpToNodeById(cwr->target_node_name_id());
+
+                // 4. 매개변수 바인딩
+                if (!finished_) {
+                    bindParameters(currentNode_, argValues, callStack_.back());
+                }
+
+                node = asNode(currentNode_);
+                if (finished_) {
+                    result.type = StepType::END;
+                    return result;
+                }
+                continue;
+            }
+
             default:
                 continue;
         }
@@ -638,6 +1089,17 @@ std::vector<std::string> Runner::getVariableNames() const {
         names.push_back(pair.first);
     }
     return names;
+}
+
+// --- Visit tracking API ---
+int32_t Runner::getVisitCount(const std::string& nodeName) const {
+    auto it = visitCounts_.find(nodeName);
+    return (it != visitCounts_.end()) ? static_cast<int32_t>(it->second) : 0;
+}
+
+bool Runner::hasVisited(const std::string& nodeName) const {
+    auto it = visitCounts_.find(nodeName);
+    return (it != visitCounts_.end() && it->second > 0);
 }
 
 // --- Save/Load 헬퍼 ---
@@ -726,6 +1188,16 @@ bool Runner::saveState(const std::string& filepath) const {
                 sv->value.Set(std::move(*sr));
                 break;
             }
+            case Variant::LIST: {
+                // LIST는 list_items 필드에 직접 저장
+                for (const auto& item : pair.second.list) {
+                    sv->list_items.push_back(item);
+                }
+                // value union은 ListValue 타입 마커용
+                auto lv = std::make_unique<ListValueT>();
+                sv->value.Set(std::move(*lv));
+                break;
+            }
         }
         state.variables.push_back(std::move(sv));
     }
@@ -735,6 +1207,54 @@ bool Runner::saveState(const std::string& filepath) const {
         auto cf = std::make_unique<SavedCallFrameT>();
         cf->node_name = nodeNameFromPtr(frame.node);
         cf->pc = frame.pc;
+        cf->return_var_name = frame.returnVarName;
+
+        // 섀도된 변수 저장
+        for (auto& sv : frame.shadowedVars) {
+            auto ssv = std::make_unique<SavedShadowedVarT>();
+            ssv->name = sv.name;
+            ssv->existed = sv.existed;
+            switch (sv.value.type) {
+                case Variant::BOOL: {
+                    auto bv = std::make_unique<BoolValueT>();
+                    bv->val = sv.value.b;
+                    ssv->value.Set(std::move(*bv));
+                    break;
+                }
+                case Variant::INT: {
+                    auto iv = std::make_unique<IntValueT>();
+                    iv->val = sv.value.i;
+                    ssv->value.Set(std::move(*iv));
+                    break;
+                }
+                case Variant::FLOAT: {
+                    auto fv = std::make_unique<FloatValueT>();
+                    fv->val = sv.value.f;
+                    ssv->value.Set(std::move(*fv));
+                    break;
+                }
+                case Variant::STRING: {
+                    ssv->string_value = sv.value.s;
+                    auto sr = std::make_unique<StringRefT>();
+                    sr->index = -1;
+                    ssv->value.Set(std::move(*sr));
+                    break;
+                }
+                case Variant::LIST: {
+                    for (const auto& item : sv.value.list) {
+                        ssv->list_items.push_back(item);
+                    }
+                    auto lv = std::make_unique<ListValueT>();
+                    ssv->value.Set(std::move(*lv));
+                    break;
+                }
+            }
+            cf->shadowed_vars.push_back(std::move(ssv));
+        }
+
+        // 매개변수 이름 저장
+        cf->param_names = frame.paramNames;
+
         state.call_stack.push_back(std::move(cf));
     }
 
@@ -744,6 +1264,14 @@ bool Runner::saveState(const std::string& filepath) const {
         spc->text = poolStr(pc.text_id);
         spc->target_node_name = poolStr(pc.target_node_name_id);
         state.pending_choices.push_back(std::move(spc));
+    }
+
+    // Visit counts 저장
+    for (auto& pair : visitCounts_) {
+        auto vc = std::make_unique<SavedVisitCountT>();
+        vc->node_name = pair.first;
+        vc->count = pair.second;
+        state.visit_counts.push_back(std::move(vc));
     }
 
     // FlatBuffers 직렬화
@@ -825,6 +1353,15 @@ bool Runner::loadState(const std::string& filepath) {
                 } else {
                     variables_[varName] = Variant::String("");
                 }
+            } else if (sv->value_type() == ValueData::ListValue) {
+                // LIST 타입: list_items 필드에서 읽기
+                std::vector<std::string> items;
+                if (sv->list_items()) {
+                    for (flatbuffers::uoffset_t j = 0; j < sv->list_items()->size(); ++j) {
+                        items.push_back(sv->list_items()->Get(j)->c_str());
+                    }
+                }
+                variables_[varName] = Variant::List(std::move(items));
             } else if (sv->value() && sv->value_type() != ValueData::NONE) {
                 variables_[varName] = readValueData(sv->value(), sv->value_type(), pool);
             }
@@ -840,10 +1377,49 @@ bool Runner::loadState(const std::string& filepath) {
             if (!frame->node_name()) continue;
             const void* nodePtr = findNodeByName(frame->node_name()->c_str());
             if (nodePtr) {
-                callStack_.push_back({nodePtr, frame->pc()});
+                std::string retVar = frame->return_var_name()
+                    ? frame->return_var_name()->c_str() : "";
+
+                CallFrame cf = {nodePtr, frame->pc(), retVar, {}, {}};
+
+                // 섀도된 변수 복원 (하위 호환: nullptr 체크)
+                if (frame->shadowed_vars()) {
+                    for (flatbuffers::uoffset_t j = 0; j < frame->shadowed_vars()->size(); ++j) {
+                        auto* ssv = frame->shadowed_vars()->Get(j);
+                        ShadowedVar sv;
+                        sv.name = ssv->name() ? ssv->name()->c_str() : "";
+                        sv.existed = ssv->existed();
+                        if (ssv->value_type() == ValueData::StringRef) {
+                            sv.value = ssv->string_value()
+                                ? Variant::String(ssv->string_value()->c_str())
+                                : Variant::String("");
+                        } else if (ssv->value_type() == ValueData::ListValue) {
+                            std::vector<std::string> items;
+                            if (ssv->list_items()) {
+                                for (flatbuffers::uoffset_t k = 0; k < ssv->list_items()->size(); ++k) {
+                                    items.push_back(ssv->list_items()->Get(k)->c_str());
+                                }
+                            }
+                            sv.value = Variant::List(std::move(items));
+                        } else if (ssv->value() && ssv->value_type() != ValueData::NONE) {
+                            sv.value = readValueData(ssv->value(), ssv->value_type(), asPool(pool_));
+                        }
+                        cf.shadowedVars.push_back(std::move(sv));
+                    }
+                }
+
+                // 매개변수 이름 복원 (하위 호환: nullptr 체크)
+                if (frame->param_names()) {
+                    for (flatbuffers::uoffset_t j = 0; j < frame->param_names()->size(); ++j) {
+                        cf.paramNames.push_back(frame->param_names()->Get(j)->c_str());
+                    }
+                }
+
+                callStack_.push_back(std::move(cf));
             }
         }
     }
+    hasPendingReturn_ = false;
 
     // Pending choices 복원
     pendingChoices_.clear();
@@ -860,7 +1436,109 @@ bool Runner::loadState(const std::string& filepath) {
         }
     }
 
+    // Visit counts 복원
+    visitCounts_.clear();
+    auto* vcs = saveState->visit_counts();
+    if (vcs) {
+        for (flatbuffers::uoffset_t i = 0; i < vcs->size(); ++i) {
+            auto* vc = vcs->Get(i);
+            if (vc->node_name()) {
+                visitCounts_[vc->node_name()->c_str()] = vc->count();
+            }
+        }
+    }
+
     return true;
+}
+
+// --- CSV 파싱 헬퍼 ---
+static std::vector<std::string> parseCSVLine(const std::string& line) {
+    std::vector<std::string> result;
+    std::string cur;
+    bool inQ = false;
+    for (size_t i = 0; i < line.size(); ++i) {
+        char c = line[i];
+        if (c == '"') {
+            if (inQ && i + 1 < line.size() && line[i + 1] == '"') {
+                cur += '"';
+                i++;
+            } else {
+                inQ = !inQ;
+            }
+        } else if (c == ',' && !inQ) {
+            result.push_back(cur);
+            cur.clear();
+        } else {
+            cur += c;
+        }
+    }
+    result.push_back(cur);
+    return result;
+}
+
+// --- Locale API ---
+bool Runner::loadLocale(const std::string& csvPath) {
+    auto* story = asStory(story_);
+    auto* pool = asPool(pool_);
+    auto* lineIds = story ? story->line_ids() : nullptr;
+    if (!pool || !lineIds || lineIds->size() == 0) {
+        std::cerr << "[Gyeol] No line_ids in story\n";
+        return false;
+    }
+
+    std::ifstream ifs(csvPath);
+    if (!ifs.is_open()) {
+        std::cerr << "[Gyeol] Failed to open locale: " << csvPath << "\n";
+        return false;
+    }
+
+    // line_id → pool index 매핑
+    std::unordered_map<std::string, int32_t> idMap;
+    for (flatbuffers::uoffset_t i = 0; i < lineIds->size(); ++i) {
+        auto* s = lineIds->Get(i);
+        if (s && s->size() > 0) {
+            idMap[s->str()] = static_cast<int32_t>(i);
+        }
+    }
+
+    localePool_.clear();
+    localePool_.resize(pool->size());
+
+    std::string line;
+    std::getline(ifs, line); // 헤더 스킵
+    int count = 0;
+    while (std::getline(ifs, line)) {
+        if (line.empty()) continue;
+        // Windows CRLF 처리
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        auto cols = parseCSVLine(line);
+        if (cols.size() < 5) continue;
+        auto it = idMap.find(cols[0]);
+        if (it != idMap.end()) {
+            localePool_[static_cast<size_t>(it->second)] = cols[4];
+            count++;
+        }
+    }
+
+    // 로케일 이름 추출 (파일명에서)
+    size_t slash = csvPath.find_last_of("/\\");
+    size_t dot = csvPath.find_last_of('.');
+    size_t nameStart = (slash == std::string::npos) ? 0 : slash + 1;
+    currentLocale_ = csvPath.substr(nameStart,
+        (dot == std::string::npos || dot < nameStart) ? std::string::npos : dot - nameStart);
+
+    return true;
+}
+
+void Runner::clearLocale() {
+    localePool_.clear();
+    currentLocale_.clear();
+}
+
+std::string Runner::getLocale() const {
+    return currentLocale_;
 }
 
 } // namespace Gyeol

@@ -18,7 +18,7 @@ func _ready():
 		story_player.start()
 		story_player.advance()
 
-func _on_dialogue_line(character: String, text: String):
+func _on_dialogue_line(character: String, text: String, tags: Dictionary):
 	_clear_choices()
 	if character.is_empty():
 		dialogue_label.text = text

@@ -33,6 +33,14 @@ struct StringRef;
 struct StringRefBuilder;
 struct StringRefT;
 
+struct ListValue;
+struct ListValueBuilder;
+struct ListValueT;
+
+struct Tag;
+struct TagBuilder;
+struct TagT;
+
 struct Line;
 struct LineBuilder;
 struct LineT;
@@ -73,6 +81,14 @@ struct Random;
 struct RandomBuilder;
 struct RandomT;
 
+struct Return;
+struct ReturnBuilder;
+struct ReturnT;
+
+struct CallWithReturn;
+struct CallWithReturnBuilder;
+struct CallWithReturnT;
+
 struct Instruction;
 struct InstructionBuilder;
 struct InstructionT;
@@ -85,6 +101,10 @@ struct SavedVar;
 struct SavedVarBuilder;
 struct SavedVarT;
 
+struct SavedShadowedVar;
+struct SavedShadowedVarBuilder;
+struct SavedShadowedVarT;
+
 struct SavedCallFrame;
 struct SavedCallFrameBuilder;
 struct SavedCallFrameT;
@@ -92,6 +112,10 @@ struct SavedCallFrameT;
 struct SavedPendingChoice;
 struct SavedPendingChoiceBuilder;
 struct SavedPendingChoiceT;
+
+struct SavedVisitCount;
+struct SavedVisitCountBuilder;
+struct SavedVisitCountT;
 
 struct SaveState;
 struct SaveStateBuilder;
@@ -143,41 +167,77 @@ inline const char *EnumNameOperator(Operator e) {
   return EnumNamesOperator()[index];
 }
 
+enum class AssignOp : int8_t {
+  Assign = 0,
+  Append = 1,
+  Remove = 2,
+  MIN = Assign,
+  MAX = Remove
+};
+
+inline const AssignOp (&EnumValuesAssignOp())[3] {
+  static const AssignOp values[] = {
+    AssignOp::Assign,
+    AssignOp::Append,
+    AssignOp::Remove
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesAssignOp() {
+  static const char * const names[4] = {
+    "Assign",
+    "Append",
+    "Remove",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameAssignOp(AssignOp e) {
+  if (::flatbuffers::IsOutRange(e, AssignOp::Assign, AssignOp::Remove)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesAssignOp()[index];
+}
+
 enum class ValueData : uint8_t {
   NONE = 0,
   BoolValue = 1,
   IntValue = 2,
   FloatValue = 3,
   StringRef = 4,
+  ListValue = 5,
   MIN = NONE,
-  MAX = StringRef
+  MAX = ListValue
 };
 
-inline const ValueData (&EnumValuesValueData())[5] {
+inline const ValueData (&EnumValuesValueData())[6] {
   static const ValueData values[] = {
     ValueData::NONE,
     ValueData::BoolValue,
     ValueData::IntValue,
     ValueData::FloatValue,
-    ValueData::StringRef
+    ValueData::StringRef,
+    ValueData::ListValue
   };
   return values;
 }
 
 inline const char * const *EnumNamesValueData() {
-  static const char * const names[6] = {
+  static const char * const names[7] = {
     "NONE",
     "BoolValue",
     "IntValue",
     "FloatValue",
     "StringRef",
+    "ListValue",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameValueData(ValueData e) {
-  if (::flatbuffers::IsOutRange(e, ValueData::NONE, ValueData::StringRef)) return "";
+  if (::flatbuffers::IsOutRange(e, ValueData::NONE, ValueData::ListValue)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesValueData()[index];
 }
@@ -202,6 +262,10 @@ template<> struct ValueDataTraits<ICPDev::Gyeol::Schema::StringRef> {
   static const ValueData enum_value = ValueData::StringRef;
 };
 
+template<> struct ValueDataTraits<ICPDev::Gyeol::Schema::ListValue> {
+  static const ValueData enum_value = ValueData::ListValue;
+};
+
 template<typename T> struct ValueDataUnionTraits {
   static const ValueData enum_value = ValueData::NONE;
 };
@@ -220,6 +284,10 @@ template<> struct ValueDataUnionTraits<ICPDev::Gyeol::Schema::FloatValueT> {
 
 template<> struct ValueDataUnionTraits<ICPDev::Gyeol::Schema::StringRefT> {
   static const ValueData enum_value = ValueData::StringRef;
+};
+
+template<> struct ValueDataUnionTraits<ICPDev::Gyeol::Schema::ListValueT> {
+  static const ValueData enum_value = ValueData::ListValue;
 };
 
 struct ValueDataUnion {
@@ -284,6 +352,14 @@ struct ValueDataUnion {
     return type == ValueData::StringRef ?
       reinterpret_cast<const ICPDev::Gyeol::Schema::StringRefT *>(value) : nullptr;
   }
+  ICPDev::Gyeol::Schema::ListValueT *AsListValue() {
+    return type == ValueData::ListValue ?
+      reinterpret_cast<ICPDev::Gyeol::Schema::ListValueT *>(value) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::ListValueT *AsListValue() const {
+    return type == ValueData::ListValue ?
+      reinterpret_cast<const ICPDev::Gyeol::Schema::ListValueT *>(value) : nullptr;
+  }
 };
 
 bool VerifyValueData(::flatbuffers::Verifier &verifier, const void *obj, ValueData type);
@@ -298,11 +374,13 @@ enum class OpData : uint8_t {
   SetVar = 5,
   Condition = 6,
   Random = 7,
+  Return = 8,
+  CallWithReturn = 9,
   MIN = NONE,
-  MAX = Random
+  MAX = CallWithReturn
 };
 
-inline const OpData (&EnumValuesOpData())[8] {
+inline const OpData (&EnumValuesOpData())[10] {
   static const OpData values[] = {
     OpData::NONE,
     OpData::Line,
@@ -311,13 +389,15 @@ inline const OpData (&EnumValuesOpData())[8] {
     OpData::Command,
     OpData::SetVar,
     OpData::Condition,
-    OpData::Random
+    OpData::Random,
+    OpData::Return,
+    OpData::CallWithReturn
   };
   return values;
 }
 
 inline const char * const *EnumNamesOpData() {
-  static const char * const names[9] = {
+  static const char * const names[11] = {
     "NONE",
     "Line",
     "Choice",
@@ -326,13 +406,15 @@ inline const char * const *EnumNamesOpData() {
     "SetVar",
     "Condition",
     "Random",
+    "Return",
+    "CallWithReturn",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameOpData(OpData e) {
-  if (::flatbuffers::IsOutRange(e, OpData::NONE, OpData::Random)) return "";
+  if (::flatbuffers::IsOutRange(e, OpData::NONE, OpData::CallWithReturn)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesOpData()[index];
 }
@@ -369,6 +451,14 @@ template<> struct OpDataTraits<ICPDev::Gyeol::Schema::Random> {
   static const OpData enum_value = OpData::Random;
 };
 
+template<> struct OpDataTraits<ICPDev::Gyeol::Schema::Return> {
+  static const OpData enum_value = OpData::Return;
+};
+
+template<> struct OpDataTraits<ICPDev::Gyeol::Schema::CallWithReturn> {
+  static const OpData enum_value = OpData::CallWithReturn;
+};
+
 template<typename T> struct OpDataUnionTraits {
   static const OpData enum_value = OpData::NONE;
 };
@@ -399,6 +489,14 @@ template<> struct OpDataUnionTraits<ICPDev::Gyeol::Schema::ConditionT> {
 
 template<> struct OpDataUnionTraits<ICPDev::Gyeol::Schema::RandomT> {
   static const OpData enum_value = OpData::Random;
+};
+
+template<> struct OpDataUnionTraits<ICPDev::Gyeol::Schema::ReturnT> {
+  static const OpData enum_value = OpData::Return;
+};
+
+template<> struct OpDataUnionTraits<ICPDev::Gyeol::Schema::CallWithReturnT> {
+  static const OpData enum_value = OpData::CallWithReturn;
 };
 
 struct OpDataUnion {
@@ -487,6 +585,22 @@ struct OpDataUnion {
     return type == OpData::Random ?
       reinterpret_cast<const ICPDev::Gyeol::Schema::RandomT *>(value) : nullptr;
   }
+  ICPDev::Gyeol::Schema::ReturnT *AsReturn() {
+    return type == OpData::Return ?
+      reinterpret_cast<ICPDev::Gyeol::Schema::ReturnT *>(value) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::ReturnT *AsReturn() const {
+    return type == OpData::Return ?
+      reinterpret_cast<const ICPDev::Gyeol::Schema::ReturnT *>(value) : nullptr;
+  }
+  ICPDev::Gyeol::Schema::CallWithReturnT *AsCallWithReturn() {
+    return type == OpData::CallWithReturn ?
+      reinterpret_cast<ICPDev::Gyeol::Schema::CallWithReturnT *>(value) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::CallWithReturnT *AsCallWithReturn() const {
+    return type == OpData::CallWithReturn ?
+      reinterpret_cast<const ICPDev::Gyeol::Schema::CallWithReturnT *>(value) : nullptr;
+  }
 };
 
 bool VerifyOpData(::flatbuffers::Verifier &verifier, const void *obj, OpData type);
@@ -510,11 +624,15 @@ enum class ExprOp : int8_t {
   And = 14,
   Or = 15,
   Not = 16,
+  PushVisitCount = 17,
+  PushVisited = 18,
+  ListContains = 19,
+  ListLength = 20,
   MIN = PushLiteral,
-  MAX = Not
+  MAX = ListLength
 };
 
-inline const ExprOp (&EnumValuesExprOp())[17] {
+inline const ExprOp (&EnumValuesExprOp())[21] {
   static const ExprOp values[] = {
     ExprOp::PushLiteral,
     ExprOp::PushVar,
@@ -532,13 +650,17 @@ inline const ExprOp (&EnumValuesExprOp())[17] {
     ExprOp::CmpLe,
     ExprOp::And,
     ExprOp::Or,
-    ExprOp::Not
+    ExprOp::Not,
+    ExprOp::PushVisitCount,
+    ExprOp::PushVisited,
+    ExprOp::ListContains,
+    ExprOp::ListLength
   };
   return values;
 }
 
 inline const char * const *EnumNamesExprOp() {
-  static const char * const names[18] = {
+  static const char * const names[22] = {
     "PushLiteral",
     "PushVar",
     "Add",
@@ -556,13 +678,17 @@ inline const char * const *EnumNamesExprOp() {
     "And",
     "Or",
     "Not",
+    "PushVisitCount",
+    "PushVisited",
+    "ListContains",
+    "ListLength",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameExprOp(ExprOp e) {
-  if (::flatbuffers::IsOutRange(e, ExprOp::PushLiteral, ExprOp::Not)) return "";
+  if (::flatbuffers::IsOutRange(e, ExprOp::PushLiteral, ExprOp::ListLength)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesExprOp()[index];
 }
@@ -799,11 +925,153 @@ struct StringRef::Traits {
 
 ::flatbuffers::Offset<StringRef> CreateStringRef(::flatbuffers::FlatBufferBuilder &_fbb, const StringRefT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct ListValueT : public ::flatbuffers::NativeTable {
+  typedef ListValue TableType;
+  std::vector<int32_t> items{};
+};
+
+struct ListValue FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef ListValueT NativeTableType;
+  typedef ListValueBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_ITEMS = 4
+  };
+  const ::flatbuffers::Vector<int32_t> *items() const {
+    return GetPointer<const ::flatbuffers::Vector<int32_t> *>(VT_ITEMS);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_ITEMS) &&
+           verifier.VerifyVector(items()) &&
+           verifier.EndTable();
+  }
+  ListValueT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(ListValueT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<ListValue> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ListValueT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct ListValueBuilder {
+  typedef ListValue Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_items(::flatbuffers::Offset<::flatbuffers::Vector<int32_t>> items) {
+    fbb_.AddOffset(ListValue::VT_ITEMS, items);
+  }
+  explicit ListValueBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<ListValue> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<ListValue>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<ListValue> CreateListValue(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::Vector<int32_t>> items = 0) {
+  ListValueBuilder builder_(_fbb);
+  builder_.add_items(items);
+  return builder_.Finish();
+}
+
+struct ListValue::Traits {
+  using type = ListValue;
+  static auto constexpr Create = CreateListValue;
+};
+
+inline ::flatbuffers::Offset<ListValue> CreateListValueDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const std::vector<int32_t> *items = nullptr) {
+  auto items__ = items ? _fbb.CreateVector<int32_t>(*items) : 0;
+  return ICPDev::Gyeol::Schema::CreateListValue(
+      _fbb,
+      items__);
+}
+
+::flatbuffers::Offset<ListValue> CreateListValue(::flatbuffers::FlatBufferBuilder &_fbb, const ListValueT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct TagT : public ::flatbuffers::NativeTable {
+  typedef Tag TableType;
+  int32_t key_id = 0;
+  int32_t value_id = 0;
+};
+
+struct Tag FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef TagT NativeTableType;
+  typedef TagBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_KEY_ID = 4,
+    VT_VALUE_ID = 6
+  };
+  int32_t key_id() const {
+    return GetField<int32_t>(VT_KEY_ID, 0);
+  }
+  int32_t value_id() const {
+    return GetField<int32_t>(VT_VALUE_ID, 0);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int32_t>(verifier, VT_KEY_ID, 4) &&
+           VerifyField<int32_t>(verifier, VT_VALUE_ID, 4) &&
+           verifier.EndTable();
+  }
+  TagT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(TagT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<Tag> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const TagT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct TagBuilder {
+  typedef Tag Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_key_id(int32_t key_id) {
+    fbb_.AddElement<int32_t>(Tag::VT_KEY_ID, key_id, 0);
+  }
+  void add_value_id(int32_t value_id) {
+    fbb_.AddElement<int32_t>(Tag::VT_VALUE_ID, value_id, 0);
+  }
+  explicit TagBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<Tag> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<Tag>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<Tag> CreateTag(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    int32_t key_id = 0,
+    int32_t value_id = 0) {
+  TagBuilder builder_(_fbb);
+  builder_.add_value_id(value_id);
+  builder_.add_key_id(key_id);
+  return builder_.Finish();
+}
+
+struct Tag::Traits {
+  using type = Tag;
+  static auto constexpr Create = CreateTag;
+};
+
+::flatbuffers::Offset<Tag> CreateTag(::flatbuffers::FlatBufferBuilder &_fbb, const TagT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct LineT : public ::flatbuffers::NativeTable {
   typedef Line TableType;
   int32_t character_id = -1;
   int32_t text_id = 0;
   int32_t voice_asset_id = -1;
+  std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::TagT>> tags{};
+  LineT() = default;
+  LineT(const LineT &o);
+  LineT(LineT&&) FLATBUFFERS_NOEXCEPT = default;
+  LineT &operator=(LineT o) FLATBUFFERS_NOEXCEPT;
 };
 
 struct Line FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -813,7 +1081,8 @@ struct Line FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_CHARACTER_ID = 4,
     VT_TEXT_ID = 6,
-    VT_VOICE_ASSET_ID = 8
+    VT_VOICE_ASSET_ID = 8,
+    VT_TAGS = 10
   };
   int32_t character_id() const {
     return GetField<int32_t>(VT_CHARACTER_ID, -1);
@@ -824,11 +1093,17 @@ struct Line FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   int32_t voice_asset_id() const {
     return GetField<int32_t>(VT_VOICE_ASSET_ID, -1);
   }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>> *tags() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>> *>(VT_TAGS);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<int32_t>(verifier, VT_CHARACTER_ID, 4) &&
            VerifyField<int32_t>(verifier, VT_TEXT_ID, 4) &&
            VerifyField<int32_t>(verifier, VT_VOICE_ASSET_ID, 4) &&
+           VerifyOffset(verifier, VT_TAGS) &&
+           verifier.VerifyVector(tags()) &&
+           verifier.VerifyVectorOfTables(tags()) &&
            verifier.EndTable();
   }
   LineT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -849,6 +1124,9 @@ struct LineBuilder {
   void add_voice_asset_id(int32_t voice_asset_id) {
     fbb_.AddElement<int32_t>(Line::VT_VOICE_ASSET_ID, voice_asset_id, -1);
   }
+  void add_tags(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>>> tags) {
+    fbb_.AddOffset(Line::VT_TAGS, tags);
+  }
   explicit LineBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -864,8 +1142,10 @@ inline ::flatbuffers::Offset<Line> CreateLine(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     int32_t character_id = -1,
     int32_t text_id = 0,
-    int32_t voice_asset_id = -1) {
+    int32_t voice_asset_id = -1,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>>> tags = 0) {
   LineBuilder builder_(_fbb);
+  builder_.add_tags(tags);
   builder_.add_voice_asset_id(voice_asset_id);
   builder_.add_text_id(text_id);
   builder_.add_character_id(character_id);
@@ -876,6 +1156,21 @@ struct Line::Traits {
   using type = Line;
   static auto constexpr Create = CreateLine;
 };
+
+inline ::flatbuffers::Offset<Line> CreateLineDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    int32_t character_id = -1,
+    int32_t text_id = 0,
+    int32_t voice_asset_id = -1,
+    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>> *tags = nullptr) {
+  auto tags__ = tags ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>>(*tags) : 0;
+  return ICPDev::Gyeol::Schema::CreateLine(
+      _fbb,
+      character_id,
+      text_id,
+      voice_asset_id,
+      tags__);
+}
 
 ::flatbuffers::Offset<Line> CreateLine(::flatbuffers::FlatBufferBuilder &_fbb, const LineT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
@@ -963,6 +1258,11 @@ struct JumpT : public ::flatbuffers::NativeTable {
   typedef Jump TableType;
   int32_t target_node_name_id = 0;
   bool is_call = false;
+  std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT>> arg_exprs{};
+  JumpT() = default;
+  JumpT(const JumpT &o);
+  JumpT(JumpT&&) FLATBUFFERS_NOEXCEPT = default;
+  JumpT &operator=(JumpT o) FLATBUFFERS_NOEXCEPT;
 };
 
 struct Jump FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -971,7 +1271,8 @@ struct Jump FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   struct Traits;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_TARGET_NODE_NAME_ID = 4,
-    VT_IS_CALL = 6
+    VT_IS_CALL = 6,
+    VT_ARG_EXPRS = 8
   };
   int32_t target_node_name_id() const {
     return GetField<int32_t>(VT_TARGET_NODE_NAME_ID, 0);
@@ -979,10 +1280,16 @@ struct Jump FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   bool is_call() const {
     return GetField<uint8_t>(VT_IS_CALL, 0) != 0;
   }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression>> *arg_exprs() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression>> *>(VT_ARG_EXPRS);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<int32_t>(verifier, VT_TARGET_NODE_NAME_ID, 4) &&
            VerifyField<uint8_t>(verifier, VT_IS_CALL, 1) &&
+           VerifyOffset(verifier, VT_ARG_EXPRS) &&
+           verifier.VerifyVector(arg_exprs()) &&
+           verifier.VerifyVectorOfTables(arg_exprs()) &&
            verifier.EndTable();
   }
   JumpT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1000,6 +1307,9 @@ struct JumpBuilder {
   void add_is_call(bool is_call) {
     fbb_.AddElement<uint8_t>(Jump::VT_IS_CALL, static_cast<uint8_t>(is_call), 0);
   }
+  void add_arg_exprs(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression>>> arg_exprs) {
+    fbb_.AddOffset(Jump::VT_ARG_EXPRS, arg_exprs);
+  }
   explicit JumpBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1014,8 +1324,10 @@ struct JumpBuilder {
 inline ::flatbuffers::Offset<Jump> CreateJump(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     int32_t target_node_name_id = 0,
-    bool is_call = false) {
+    bool is_call = false,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression>>> arg_exprs = 0) {
   JumpBuilder builder_(_fbb);
+  builder_.add_arg_exprs(arg_exprs);
   builder_.add_target_node_name_id(target_node_name_id);
   builder_.add_is_call(is_call);
   return builder_.Finish();
@@ -1025,6 +1337,19 @@ struct Jump::Traits {
   using type = Jump;
   static auto constexpr Create = CreateJump;
 };
+
+inline ::flatbuffers::Offset<Jump> CreateJumpDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    int32_t target_node_name_id = 0,
+    bool is_call = false,
+    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression>> *arg_exprs = nullptr) {
+  auto arg_exprs__ = arg_exprs ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression>>(*arg_exprs) : 0;
+  return ICPDev::Gyeol::Schema::CreateJump(
+      _fbb,
+      target_node_name_id,
+      is_call,
+      arg_exprs__);
+}
 
 ::flatbuffers::Offset<Jump> CreateJump(::flatbuffers::FlatBufferBuilder &_fbb, const JumpT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
@@ -1148,6 +1473,9 @@ struct ExprToken FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ICPDev::Gyeol::Schema::StringRef *literal_value_as_StringRef() const {
     return literal_value_type() == ICPDev::Gyeol::Schema::ValueData::StringRef ? static_cast<const ICPDev::Gyeol::Schema::StringRef *>(literal_value()) : nullptr;
   }
+  const ICPDev::Gyeol::Schema::ListValue *literal_value_as_ListValue() const {
+    return literal_value_type() == ICPDev::Gyeol::Schema::ValueData::ListValue ? static_cast<const ICPDev::Gyeol::Schema::ListValue *>(literal_value()) : nullptr;
+  }
   int32_t var_name_id() const {
     return GetField<int32_t>(VT_VAR_NAME_ID, -1);
   }
@@ -1179,6 +1507,10 @@ template<> inline const ICPDev::Gyeol::Schema::FloatValue *ExprToken::literal_va
 
 template<> inline const ICPDev::Gyeol::Schema::StringRef *ExprToken::literal_value_as<ICPDev::Gyeol::Schema::StringRef>() const {
   return literal_value_as_StringRef();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::ListValue *ExprToken::literal_value_as<ICPDev::Gyeol::Schema::ListValue>() const {
+  return literal_value_as_ListValue();
 }
 
 struct ExprTokenBuilder {
@@ -1307,6 +1639,7 @@ struct SetVarT : public ::flatbuffers::NativeTable {
   int32_t var_name_id = 0;
   ICPDev::Gyeol::Schema::ValueDataUnion value{};
   std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT> expr{};
+  ICPDev::Gyeol::Schema::AssignOp assign_op = ICPDev::Gyeol::Schema::AssignOp::Assign;
   SetVarT() = default;
   SetVarT(const SetVarT &o);
   SetVarT(SetVarT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1321,7 +1654,8 @@ struct SetVar FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_VAR_NAME_ID = 4,
     VT_VALUE_TYPE = 6,
     VT_VALUE = 8,
-    VT_EXPR = 10
+    VT_EXPR = 10,
+    VT_ASSIGN_OP = 12
   };
   int32_t var_name_id() const {
     return GetField<int32_t>(VT_VAR_NAME_ID, 0);
@@ -1345,8 +1679,14 @@ struct SetVar FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ICPDev::Gyeol::Schema::StringRef *value_as_StringRef() const {
     return value_type() == ICPDev::Gyeol::Schema::ValueData::StringRef ? static_cast<const ICPDev::Gyeol::Schema::StringRef *>(value()) : nullptr;
   }
+  const ICPDev::Gyeol::Schema::ListValue *value_as_ListValue() const {
+    return value_type() == ICPDev::Gyeol::Schema::ValueData::ListValue ? static_cast<const ICPDev::Gyeol::Schema::ListValue *>(value()) : nullptr;
+  }
   const ICPDev::Gyeol::Schema::Expression *expr() const {
     return GetPointer<const ICPDev::Gyeol::Schema::Expression *>(VT_EXPR);
+  }
+  ICPDev::Gyeol::Schema::AssignOp assign_op() const {
+    return static_cast<ICPDev::Gyeol::Schema::AssignOp>(GetField<int8_t>(VT_ASSIGN_OP, 0));
   }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1356,6 +1696,7 @@ struct SetVar FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyValueData(verifier, value(), value_type()) &&
            VerifyOffset(verifier, VT_EXPR) &&
            verifier.VerifyTable(expr()) &&
+           VerifyField<int8_t>(verifier, VT_ASSIGN_OP, 1) &&
            verifier.EndTable();
   }
   SetVarT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1379,6 +1720,10 @@ template<> inline const ICPDev::Gyeol::Schema::StringRef *SetVar::value_as<ICPDe
   return value_as_StringRef();
 }
 
+template<> inline const ICPDev::Gyeol::Schema::ListValue *SetVar::value_as<ICPDev::Gyeol::Schema::ListValue>() const {
+  return value_as_ListValue();
+}
+
 struct SetVarBuilder {
   typedef SetVar Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
@@ -1394,6 +1739,9 @@ struct SetVarBuilder {
   }
   void add_expr(::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> expr) {
     fbb_.AddOffset(SetVar::VT_EXPR, expr);
+  }
+  void add_assign_op(ICPDev::Gyeol::Schema::AssignOp assign_op) {
+    fbb_.AddElement<int8_t>(SetVar::VT_ASSIGN_OP, static_cast<int8_t>(assign_op), 0);
   }
   explicit SetVarBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -1411,11 +1759,13 @@ inline ::flatbuffers::Offset<SetVar> CreateSetVar(
     int32_t var_name_id = 0,
     ICPDev::Gyeol::Schema::ValueData value_type = ICPDev::Gyeol::Schema::ValueData::NONE,
     ::flatbuffers::Offset<void> value = 0,
-    ::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> expr = 0) {
+    ::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> expr = 0,
+    ICPDev::Gyeol::Schema::AssignOp assign_op = ICPDev::Gyeol::Schema::AssignOp::Assign) {
   SetVarBuilder builder_(_fbb);
   builder_.add_expr(expr);
   builder_.add_value(value);
   builder_.add_var_name_id(var_name_id);
+  builder_.add_assign_op(assign_op);
   builder_.add_value_type(value_type);
   return builder_.Finish();
 }
@@ -1483,6 +1833,9 @@ struct Condition FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ICPDev::Gyeol::Schema::StringRef *compare_value_as_StringRef() const {
     return compare_value_type() == ICPDev::Gyeol::Schema::ValueData::StringRef ? static_cast<const ICPDev::Gyeol::Schema::StringRef *>(compare_value()) : nullptr;
   }
+  const ICPDev::Gyeol::Schema::ListValue *compare_value_as_ListValue() const {
+    return compare_value_type() == ICPDev::Gyeol::Schema::ValueData::ListValue ? static_cast<const ICPDev::Gyeol::Schema::ListValue *>(compare_value()) : nullptr;
+  }
   int32_t true_jump_node_id() const {
     return GetField<int32_t>(VT_TRUE_JUMP_NODE_ID, 0);
   }
@@ -1534,6 +1887,10 @@ template<> inline const ICPDev::Gyeol::Schema::FloatValue *Condition::compare_va
 
 template<> inline const ICPDev::Gyeol::Schema::StringRef *Condition::compare_value_as<ICPDev::Gyeol::Schema::StringRef>() const {
   return compare_value_as_StringRef();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::ListValue *Condition::compare_value_as<ICPDev::Gyeol::Schema::ListValue>() const {
+  return compare_value_as_ListValue();
 }
 
 struct ConditionBuilder {
@@ -1751,6 +2108,226 @@ inline ::flatbuffers::Offset<Random> CreateRandomDirect(
 
 ::flatbuffers::Offset<Random> CreateRandom(::flatbuffers::FlatBufferBuilder &_fbb, const RandomT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct ReturnT : public ::flatbuffers::NativeTable {
+  typedef Return TableType;
+  std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT> expr{};
+  ICPDev::Gyeol::Schema::ValueDataUnion value{};
+  ReturnT() = default;
+  ReturnT(const ReturnT &o);
+  ReturnT(ReturnT&&) FLATBUFFERS_NOEXCEPT = default;
+  ReturnT &operator=(ReturnT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct Return FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef ReturnT NativeTableType;
+  typedef ReturnBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_EXPR = 4,
+    VT_VALUE_TYPE = 6,
+    VT_VALUE = 8
+  };
+  const ICPDev::Gyeol::Schema::Expression *expr() const {
+    return GetPointer<const ICPDev::Gyeol::Schema::Expression *>(VT_EXPR);
+  }
+  ICPDev::Gyeol::Schema::ValueData value_type() const {
+    return static_cast<ICPDev::Gyeol::Schema::ValueData>(GetField<uint8_t>(VT_VALUE_TYPE, 0));
+  }
+  const void *value() const {
+    return GetPointer<const void *>(VT_VALUE);
+  }
+  template<typename T> const T *value_as() const;
+  const ICPDev::Gyeol::Schema::BoolValue *value_as_BoolValue() const {
+    return value_type() == ICPDev::Gyeol::Schema::ValueData::BoolValue ? static_cast<const ICPDev::Gyeol::Schema::BoolValue *>(value()) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::IntValue *value_as_IntValue() const {
+    return value_type() == ICPDev::Gyeol::Schema::ValueData::IntValue ? static_cast<const ICPDev::Gyeol::Schema::IntValue *>(value()) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::FloatValue *value_as_FloatValue() const {
+    return value_type() == ICPDev::Gyeol::Schema::ValueData::FloatValue ? static_cast<const ICPDev::Gyeol::Schema::FloatValue *>(value()) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::StringRef *value_as_StringRef() const {
+    return value_type() == ICPDev::Gyeol::Schema::ValueData::StringRef ? static_cast<const ICPDev::Gyeol::Schema::StringRef *>(value()) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::ListValue *value_as_ListValue() const {
+    return value_type() == ICPDev::Gyeol::Schema::ValueData::ListValue ? static_cast<const ICPDev::Gyeol::Schema::ListValue *>(value()) : nullptr;
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_EXPR) &&
+           verifier.VerifyTable(expr()) &&
+           VerifyField<uint8_t>(verifier, VT_VALUE_TYPE, 1) &&
+           VerifyOffset(verifier, VT_VALUE) &&
+           VerifyValueData(verifier, value(), value_type()) &&
+           verifier.EndTable();
+  }
+  ReturnT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(ReturnT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<Return> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ReturnT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+template<> inline const ICPDev::Gyeol::Schema::BoolValue *Return::value_as<ICPDev::Gyeol::Schema::BoolValue>() const {
+  return value_as_BoolValue();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::IntValue *Return::value_as<ICPDev::Gyeol::Schema::IntValue>() const {
+  return value_as_IntValue();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::FloatValue *Return::value_as<ICPDev::Gyeol::Schema::FloatValue>() const {
+  return value_as_FloatValue();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::StringRef *Return::value_as<ICPDev::Gyeol::Schema::StringRef>() const {
+  return value_as_StringRef();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::ListValue *Return::value_as<ICPDev::Gyeol::Schema::ListValue>() const {
+  return value_as_ListValue();
+}
+
+struct ReturnBuilder {
+  typedef Return Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_expr(::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> expr) {
+    fbb_.AddOffset(Return::VT_EXPR, expr);
+  }
+  void add_value_type(ICPDev::Gyeol::Schema::ValueData value_type) {
+    fbb_.AddElement<uint8_t>(Return::VT_VALUE_TYPE, static_cast<uint8_t>(value_type), 0);
+  }
+  void add_value(::flatbuffers::Offset<void> value) {
+    fbb_.AddOffset(Return::VT_VALUE, value);
+  }
+  explicit ReturnBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<Return> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<Return>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<Return> CreateReturn(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> expr = 0,
+    ICPDev::Gyeol::Schema::ValueData value_type = ICPDev::Gyeol::Schema::ValueData::NONE,
+    ::flatbuffers::Offset<void> value = 0) {
+  ReturnBuilder builder_(_fbb);
+  builder_.add_value(value);
+  builder_.add_expr(expr);
+  builder_.add_value_type(value_type);
+  return builder_.Finish();
+}
+
+struct Return::Traits {
+  using type = Return;
+  static auto constexpr Create = CreateReturn;
+};
+
+::flatbuffers::Offset<Return> CreateReturn(::flatbuffers::FlatBufferBuilder &_fbb, const ReturnT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct CallWithReturnT : public ::flatbuffers::NativeTable {
+  typedef CallWithReturn TableType;
+  int32_t target_node_name_id = 0;
+  int32_t return_var_name_id = 0;
+  std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT>> arg_exprs{};
+  CallWithReturnT() = default;
+  CallWithReturnT(const CallWithReturnT &o);
+  CallWithReturnT(CallWithReturnT&&) FLATBUFFERS_NOEXCEPT = default;
+  CallWithReturnT &operator=(CallWithReturnT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct CallWithReturn FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef CallWithReturnT NativeTableType;
+  typedef CallWithReturnBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_TARGET_NODE_NAME_ID = 4,
+    VT_RETURN_VAR_NAME_ID = 6,
+    VT_ARG_EXPRS = 8
+  };
+  int32_t target_node_name_id() const {
+    return GetField<int32_t>(VT_TARGET_NODE_NAME_ID, 0);
+  }
+  int32_t return_var_name_id() const {
+    return GetField<int32_t>(VT_RETURN_VAR_NAME_ID, 0);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression>> *arg_exprs() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression>> *>(VT_ARG_EXPRS);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int32_t>(verifier, VT_TARGET_NODE_NAME_ID, 4) &&
+           VerifyField<int32_t>(verifier, VT_RETURN_VAR_NAME_ID, 4) &&
+           VerifyOffset(verifier, VT_ARG_EXPRS) &&
+           verifier.VerifyVector(arg_exprs()) &&
+           verifier.VerifyVectorOfTables(arg_exprs()) &&
+           verifier.EndTable();
+  }
+  CallWithReturnT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(CallWithReturnT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<CallWithReturn> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CallWithReturnT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct CallWithReturnBuilder {
+  typedef CallWithReturn Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_target_node_name_id(int32_t target_node_name_id) {
+    fbb_.AddElement<int32_t>(CallWithReturn::VT_TARGET_NODE_NAME_ID, target_node_name_id, 0);
+  }
+  void add_return_var_name_id(int32_t return_var_name_id) {
+    fbb_.AddElement<int32_t>(CallWithReturn::VT_RETURN_VAR_NAME_ID, return_var_name_id, 0);
+  }
+  void add_arg_exprs(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression>>> arg_exprs) {
+    fbb_.AddOffset(CallWithReturn::VT_ARG_EXPRS, arg_exprs);
+  }
+  explicit CallWithReturnBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<CallWithReturn> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<CallWithReturn>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<CallWithReturn> CreateCallWithReturn(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    int32_t target_node_name_id = 0,
+    int32_t return_var_name_id = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression>>> arg_exprs = 0) {
+  CallWithReturnBuilder builder_(_fbb);
+  builder_.add_arg_exprs(arg_exprs);
+  builder_.add_return_var_name_id(return_var_name_id);
+  builder_.add_target_node_name_id(target_node_name_id);
+  return builder_.Finish();
+}
+
+struct CallWithReturn::Traits {
+  using type = CallWithReturn;
+  static auto constexpr Create = CreateCallWithReturn;
+};
+
+inline ::flatbuffers::Offset<CallWithReturn> CreateCallWithReturnDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    int32_t target_node_name_id = 0,
+    int32_t return_var_name_id = 0,
+    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression>> *arg_exprs = nullptr) {
+  auto arg_exprs__ = arg_exprs ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression>>(*arg_exprs) : 0;
+  return ICPDev::Gyeol::Schema::CreateCallWithReturn(
+      _fbb,
+      target_node_name_id,
+      return_var_name_id,
+      arg_exprs__);
+}
+
+::flatbuffers::Offset<CallWithReturn> CreateCallWithReturn(::flatbuffers::FlatBufferBuilder &_fbb, const CallWithReturnT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct InstructionT : public ::flatbuffers::NativeTable {
   typedef Instruction TableType;
   ICPDev::Gyeol::Schema::OpDataUnion data{};
@@ -1792,6 +2369,12 @@ struct Instruction FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ICPDev::Gyeol::Schema::Random *data_as_Random() const {
     return data_type() == ICPDev::Gyeol::Schema::OpData::Random ? static_cast<const ICPDev::Gyeol::Schema::Random *>(data()) : nullptr;
   }
+  const ICPDev::Gyeol::Schema::Return *data_as_Return() const {
+    return data_type() == ICPDev::Gyeol::Schema::OpData::Return ? static_cast<const ICPDev::Gyeol::Schema::Return *>(data()) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::CallWithReturn *data_as_CallWithReturn() const {
+    return data_type() == ICPDev::Gyeol::Schema::OpData::CallWithReturn ? static_cast<const ICPDev::Gyeol::Schema::CallWithReturn *>(data()) : nullptr;
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_DATA_TYPE, 1) &&
@@ -1830,6 +2413,14 @@ template<> inline const ICPDev::Gyeol::Schema::Condition *Instruction::data_as<I
 
 template<> inline const ICPDev::Gyeol::Schema::Random *Instruction::data_as<ICPDev::Gyeol::Schema::Random>() const {
   return data_as_Random();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::Return *Instruction::data_as<ICPDev::Gyeol::Schema::Return>() const {
+  return data_as_Return();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::CallWithReturn *Instruction::data_as<ICPDev::Gyeol::Schema::CallWithReturn>() const {
+  return data_as_CallWithReturn();
 }
 
 struct InstructionBuilder {
@@ -1874,6 +2465,7 @@ struct NodeT : public ::flatbuffers::NativeTable {
   typedef Node TableType;
   std::string name{};
   std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::InstructionT>> lines{};
+  std::vector<int32_t> param_ids{};
   NodeT() = default;
   NodeT(const NodeT &o);
   NodeT(NodeT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1886,7 +2478,8 @@ struct Node FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   struct Traits;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_NAME = 4,
-    VT_LINES = 6
+    VT_LINES = 6,
+    VT_PARAM_IDS = 8
   };
   const ::flatbuffers::String *name() const {
     return GetPointer<const ::flatbuffers::String *>(VT_NAME);
@@ -1906,6 +2499,9 @@ struct Node FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Instruction>> *lines() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Instruction>> *>(VT_LINES);
   }
+  const ::flatbuffers::Vector<int32_t> *param_ids() const {
+    return GetPointer<const ::flatbuffers::Vector<int32_t> *>(VT_PARAM_IDS);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffsetRequired(verifier, VT_NAME) &&
@@ -1913,6 +2509,8 @@ struct Node FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_LINES) &&
            verifier.VerifyVector(lines()) &&
            verifier.VerifyVectorOfTables(lines()) &&
+           VerifyOffset(verifier, VT_PARAM_IDS) &&
+           verifier.VerifyVector(param_ids()) &&
            verifier.EndTable();
   }
   NodeT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1930,6 +2528,9 @@ struct NodeBuilder {
   void add_lines(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Instruction>>> lines) {
     fbb_.AddOffset(Node::VT_LINES, lines);
   }
+  void add_param_ids(::flatbuffers::Offset<::flatbuffers::Vector<int32_t>> param_ids) {
+    fbb_.AddOffset(Node::VT_PARAM_IDS, param_ids);
+  }
   explicit NodeBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1945,8 +2546,10 @@ struct NodeBuilder {
 inline ::flatbuffers::Offset<Node> CreateNode(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<::flatbuffers::String> name = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Instruction>>> lines = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Instruction>>> lines = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<int32_t>> param_ids = 0) {
   NodeBuilder builder_(_fbb);
+  builder_.add_param_ids(param_ids);
   builder_.add_lines(lines);
   builder_.add_name(name);
   return builder_.Finish();
@@ -1960,13 +2563,16 @@ struct Node::Traits {
 inline ::flatbuffers::Offset<Node> CreateNodeDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const char *name = nullptr,
-    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Instruction>> *lines = nullptr) {
+    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Instruction>> *lines = nullptr,
+    const std::vector<int32_t> *param_ids = nullptr) {
   auto name__ = name ? _fbb.CreateString(name) : 0;
   auto lines__ = lines ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Instruction>>(*lines) : 0;
+  auto param_ids__ = param_ids ? _fbb.CreateVector<int32_t>(*param_ids) : 0;
   return ICPDev::Gyeol::Schema::CreateNode(
       _fbb,
       name__,
-      lines__);
+      lines__,
+      param_ids__);
 }
 
 ::flatbuffers::Offset<Node> CreateNode(::flatbuffers::FlatBufferBuilder &_fbb, const NodeT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1976,6 +2582,7 @@ struct SavedVarT : public ::flatbuffers::NativeTable {
   std::string name{};
   ICPDev::Gyeol::Schema::ValueDataUnion value{};
   std::string string_value{};
+  std::vector<std::string> list_items{};
 };
 
 struct SavedVar FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -1986,7 +2593,8 @@ struct SavedVar FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_NAME = 4,
     VT_VALUE_TYPE = 6,
     VT_VALUE = 8,
-    VT_STRING_VALUE = 10
+    VT_STRING_VALUE = 10,
+    VT_LIST_ITEMS = 12
   };
   const ::flatbuffers::String *name() const {
     return GetPointer<const ::flatbuffers::String *>(VT_NAME);
@@ -2010,8 +2618,14 @@ struct SavedVar FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ICPDev::Gyeol::Schema::StringRef *value_as_StringRef() const {
     return value_type() == ICPDev::Gyeol::Schema::ValueData::StringRef ? static_cast<const ICPDev::Gyeol::Schema::StringRef *>(value()) : nullptr;
   }
+  const ICPDev::Gyeol::Schema::ListValue *value_as_ListValue() const {
+    return value_type() == ICPDev::Gyeol::Schema::ValueData::ListValue ? static_cast<const ICPDev::Gyeol::Schema::ListValue *>(value()) : nullptr;
+  }
   const ::flatbuffers::String *string_value() const {
     return GetPointer<const ::flatbuffers::String *>(VT_STRING_VALUE);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *list_items() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_LIST_ITEMS);
   }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2022,6 +2636,9 @@ struct SavedVar FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyValueData(verifier, value(), value_type()) &&
            VerifyOffset(verifier, VT_STRING_VALUE) &&
            verifier.VerifyString(string_value()) &&
+           VerifyOffset(verifier, VT_LIST_ITEMS) &&
+           verifier.VerifyVector(list_items()) &&
+           verifier.VerifyVectorOfStrings(list_items()) &&
            verifier.EndTable();
   }
   SavedVarT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2045,6 +2662,10 @@ template<> inline const ICPDev::Gyeol::Schema::StringRef *SavedVar::value_as<ICP
   return value_as_StringRef();
 }
 
+template<> inline const ICPDev::Gyeol::Schema::ListValue *SavedVar::value_as<ICPDev::Gyeol::Schema::ListValue>() const {
+  return value_as_ListValue();
+}
+
 struct SavedVarBuilder {
   typedef SavedVar Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
@@ -2060,6 +2681,9 @@ struct SavedVarBuilder {
   }
   void add_string_value(::flatbuffers::Offset<::flatbuffers::String> string_value) {
     fbb_.AddOffset(SavedVar::VT_STRING_VALUE, string_value);
+  }
+  void add_list_items(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> list_items) {
+    fbb_.AddOffset(SavedVar::VT_LIST_ITEMS, list_items);
   }
   explicit SavedVarBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -2077,8 +2701,10 @@ inline ::flatbuffers::Offset<SavedVar> CreateSavedVar(
     ::flatbuffers::Offset<::flatbuffers::String> name = 0,
     ICPDev::Gyeol::Schema::ValueData value_type = ICPDev::Gyeol::Schema::ValueData::NONE,
     ::flatbuffers::Offset<void> value = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> string_value = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> string_value = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> list_items = 0) {
   SavedVarBuilder builder_(_fbb);
+  builder_.add_list_items(list_items);
   builder_.add_string_value(string_value);
   builder_.add_value(value);
   builder_.add_name(name);
@@ -2096,23 +2722,207 @@ inline ::flatbuffers::Offset<SavedVar> CreateSavedVarDirect(
     const char *name = nullptr,
     ICPDev::Gyeol::Schema::ValueData value_type = ICPDev::Gyeol::Schema::ValueData::NONE,
     ::flatbuffers::Offset<void> value = 0,
-    const char *string_value = nullptr) {
+    const char *string_value = nullptr,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *list_items = nullptr) {
   auto name__ = name ? _fbb.CreateString(name) : 0;
   auto string_value__ = string_value ? _fbb.CreateString(string_value) : 0;
+  auto list_items__ = list_items ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*list_items) : 0;
   return ICPDev::Gyeol::Schema::CreateSavedVar(
       _fbb,
       name__,
       value_type,
       value,
-      string_value__);
+      string_value__,
+      list_items__);
 }
 
 ::flatbuffers::Offset<SavedVar> CreateSavedVar(::flatbuffers::FlatBufferBuilder &_fbb, const SavedVarT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct SavedShadowedVarT : public ::flatbuffers::NativeTable {
+  typedef SavedShadowedVar TableType;
+  std::string name{};
+  ICPDev::Gyeol::Schema::ValueDataUnion value{};
+  std::string string_value{};
+  bool existed = true;
+  std::vector<std::string> list_items{};
+};
+
+struct SavedShadowedVar FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SavedShadowedVarT NativeTableType;
+  typedef SavedShadowedVarBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_NAME = 4,
+    VT_VALUE_TYPE = 6,
+    VT_VALUE = 8,
+    VT_STRING_VALUE = 10,
+    VT_EXISTED = 12,
+    VT_LIST_ITEMS = 14
+  };
+  const ::flatbuffers::String *name() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_NAME);
+  }
+  ICPDev::Gyeol::Schema::ValueData value_type() const {
+    return static_cast<ICPDev::Gyeol::Schema::ValueData>(GetField<uint8_t>(VT_VALUE_TYPE, 0));
+  }
+  const void *value() const {
+    return GetPointer<const void *>(VT_VALUE);
+  }
+  template<typename T> const T *value_as() const;
+  const ICPDev::Gyeol::Schema::BoolValue *value_as_BoolValue() const {
+    return value_type() == ICPDev::Gyeol::Schema::ValueData::BoolValue ? static_cast<const ICPDev::Gyeol::Schema::BoolValue *>(value()) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::IntValue *value_as_IntValue() const {
+    return value_type() == ICPDev::Gyeol::Schema::ValueData::IntValue ? static_cast<const ICPDev::Gyeol::Schema::IntValue *>(value()) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::FloatValue *value_as_FloatValue() const {
+    return value_type() == ICPDev::Gyeol::Schema::ValueData::FloatValue ? static_cast<const ICPDev::Gyeol::Schema::FloatValue *>(value()) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::StringRef *value_as_StringRef() const {
+    return value_type() == ICPDev::Gyeol::Schema::ValueData::StringRef ? static_cast<const ICPDev::Gyeol::Schema::StringRef *>(value()) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::ListValue *value_as_ListValue() const {
+    return value_type() == ICPDev::Gyeol::Schema::ValueData::ListValue ? static_cast<const ICPDev::Gyeol::Schema::ListValue *>(value()) : nullptr;
+  }
+  const ::flatbuffers::String *string_value() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_STRING_VALUE);
+  }
+  bool existed() const {
+    return GetField<uint8_t>(VT_EXISTED, 1) != 0;
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *list_items() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_LIST_ITEMS);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_NAME) &&
+           verifier.VerifyString(name()) &&
+           VerifyField<uint8_t>(verifier, VT_VALUE_TYPE, 1) &&
+           VerifyOffset(verifier, VT_VALUE) &&
+           VerifyValueData(verifier, value(), value_type()) &&
+           VerifyOffset(verifier, VT_STRING_VALUE) &&
+           verifier.VerifyString(string_value()) &&
+           VerifyField<uint8_t>(verifier, VT_EXISTED, 1) &&
+           VerifyOffset(verifier, VT_LIST_ITEMS) &&
+           verifier.VerifyVector(list_items()) &&
+           verifier.VerifyVectorOfStrings(list_items()) &&
+           verifier.EndTable();
+  }
+  SavedShadowedVarT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SavedShadowedVarT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SavedShadowedVar> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SavedShadowedVarT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+template<> inline const ICPDev::Gyeol::Schema::BoolValue *SavedShadowedVar::value_as<ICPDev::Gyeol::Schema::BoolValue>() const {
+  return value_as_BoolValue();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::IntValue *SavedShadowedVar::value_as<ICPDev::Gyeol::Schema::IntValue>() const {
+  return value_as_IntValue();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::FloatValue *SavedShadowedVar::value_as<ICPDev::Gyeol::Schema::FloatValue>() const {
+  return value_as_FloatValue();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::StringRef *SavedShadowedVar::value_as<ICPDev::Gyeol::Schema::StringRef>() const {
+  return value_as_StringRef();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::ListValue *SavedShadowedVar::value_as<ICPDev::Gyeol::Schema::ListValue>() const {
+  return value_as_ListValue();
+}
+
+struct SavedShadowedVarBuilder {
+  typedef SavedShadowedVar Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_name(::flatbuffers::Offset<::flatbuffers::String> name) {
+    fbb_.AddOffset(SavedShadowedVar::VT_NAME, name);
+  }
+  void add_value_type(ICPDev::Gyeol::Schema::ValueData value_type) {
+    fbb_.AddElement<uint8_t>(SavedShadowedVar::VT_VALUE_TYPE, static_cast<uint8_t>(value_type), 0);
+  }
+  void add_value(::flatbuffers::Offset<void> value) {
+    fbb_.AddOffset(SavedShadowedVar::VT_VALUE, value);
+  }
+  void add_string_value(::flatbuffers::Offset<::flatbuffers::String> string_value) {
+    fbb_.AddOffset(SavedShadowedVar::VT_STRING_VALUE, string_value);
+  }
+  void add_existed(bool existed) {
+    fbb_.AddElement<uint8_t>(SavedShadowedVar::VT_EXISTED, static_cast<uint8_t>(existed), 1);
+  }
+  void add_list_items(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> list_items) {
+    fbb_.AddOffset(SavedShadowedVar::VT_LIST_ITEMS, list_items);
+  }
+  explicit SavedShadowedVarBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SavedShadowedVar> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SavedShadowedVar>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SavedShadowedVar> CreateSavedShadowedVar(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> name = 0,
+    ICPDev::Gyeol::Schema::ValueData value_type = ICPDev::Gyeol::Schema::ValueData::NONE,
+    ::flatbuffers::Offset<void> value = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> string_value = 0,
+    bool existed = true,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> list_items = 0) {
+  SavedShadowedVarBuilder builder_(_fbb);
+  builder_.add_list_items(list_items);
+  builder_.add_string_value(string_value);
+  builder_.add_value(value);
+  builder_.add_name(name);
+  builder_.add_existed(existed);
+  builder_.add_value_type(value_type);
+  return builder_.Finish();
+}
+
+struct SavedShadowedVar::Traits {
+  using type = SavedShadowedVar;
+  static auto constexpr Create = CreateSavedShadowedVar;
+};
+
+inline ::flatbuffers::Offset<SavedShadowedVar> CreateSavedShadowedVarDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *name = nullptr,
+    ICPDev::Gyeol::Schema::ValueData value_type = ICPDev::Gyeol::Schema::ValueData::NONE,
+    ::flatbuffers::Offset<void> value = 0,
+    const char *string_value = nullptr,
+    bool existed = true,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *list_items = nullptr) {
+  auto name__ = name ? _fbb.CreateString(name) : 0;
+  auto string_value__ = string_value ? _fbb.CreateString(string_value) : 0;
+  auto list_items__ = list_items ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*list_items) : 0;
+  return ICPDev::Gyeol::Schema::CreateSavedShadowedVar(
+      _fbb,
+      name__,
+      value_type,
+      value,
+      string_value__,
+      existed,
+      list_items__);
+}
+
+::flatbuffers::Offset<SavedShadowedVar> CreateSavedShadowedVar(::flatbuffers::FlatBufferBuilder &_fbb, const SavedShadowedVarT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct SavedCallFrameT : public ::flatbuffers::NativeTable {
   typedef SavedCallFrame TableType;
   std::string node_name{};
   uint32_t pc = 0;
+  std::string return_var_name{};
+  std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::SavedShadowedVarT>> shadowed_vars{};
+  std::vector<std::string> param_names{};
+  SavedCallFrameT() = default;
+  SavedCallFrameT(const SavedCallFrameT &o);
+  SavedCallFrameT(SavedCallFrameT&&) FLATBUFFERS_NOEXCEPT = default;
+  SavedCallFrameT &operator=(SavedCallFrameT o) FLATBUFFERS_NOEXCEPT;
 };
 
 struct SavedCallFrame FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -2121,7 +2931,10 @@ struct SavedCallFrame FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   struct Traits;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_NODE_NAME = 4,
-    VT_PC = 6
+    VT_PC = 6,
+    VT_RETURN_VAR_NAME = 8,
+    VT_SHADOWED_VARS = 10,
+    VT_PARAM_NAMES = 12
   };
   const ::flatbuffers::String *node_name() const {
     return GetPointer<const ::flatbuffers::String *>(VT_NODE_NAME);
@@ -2129,11 +2942,28 @@ struct SavedCallFrame FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint32_t pc() const {
     return GetField<uint32_t>(VT_PC, 0);
   }
+  const ::flatbuffers::String *return_var_name() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_RETURN_VAR_NAME);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedShadowedVar>> *shadowed_vars() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedShadowedVar>> *>(VT_SHADOWED_VARS);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *param_names() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_PARAM_NAMES);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffset(verifier, VT_NODE_NAME) &&
            verifier.VerifyString(node_name()) &&
            VerifyField<uint32_t>(verifier, VT_PC, 4) &&
+           VerifyOffset(verifier, VT_RETURN_VAR_NAME) &&
+           verifier.VerifyString(return_var_name()) &&
+           VerifyOffset(verifier, VT_SHADOWED_VARS) &&
+           verifier.VerifyVector(shadowed_vars()) &&
+           verifier.VerifyVectorOfTables(shadowed_vars()) &&
+           VerifyOffset(verifier, VT_PARAM_NAMES) &&
+           verifier.VerifyVector(param_names()) &&
+           verifier.VerifyVectorOfStrings(param_names()) &&
            verifier.EndTable();
   }
   SavedCallFrameT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2151,6 +2981,15 @@ struct SavedCallFrameBuilder {
   void add_pc(uint32_t pc) {
     fbb_.AddElement<uint32_t>(SavedCallFrame::VT_PC, pc, 0);
   }
+  void add_return_var_name(::flatbuffers::Offset<::flatbuffers::String> return_var_name) {
+    fbb_.AddOffset(SavedCallFrame::VT_RETURN_VAR_NAME, return_var_name);
+  }
+  void add_shadowed_vars(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedShadowedVar>>> shadowed_vars) {
+    fbb_.AddOffset(SavedCallFrame::VT_SHADOWED_VARS, shadowed_vars);
+  }
+  void add_param_names(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> param_names) {
+    fbb_.AddOffset(SavedCallFrame::VT_PARAM_NAMES, param_names);
+  }
   explicit SavedCallFrameBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2165,8 +3004,14 @@ struct SavedCallFrameBuilder {
 inline ::flatbuffers::Offset<SavedCallFrame> CreateSavedCallFrame(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<::flatbuffers::String> node_name = 0,
-    uint32_t pc = 0) {
+    uint32_t pc = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> return_var_name = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedShadowedVar>>> shadowed_vars = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> param_names = 0) {
   SavedCallFrameBuilder builder_(_fbb);
+  builder_.add_param_names(param_names);
+  builder_.add_shadowed_vars(shadowed_vars);
+  builder_.add_return_var_name(return_var_name);
   builder_.add_pc(pc);
   builder_.add_node_name(node_name);
   return builder_.Finish();
@@ -2180,12 +3025,21 @@ struct SavedCallFrame::Traits {
 inline ::flatbuffers::Offset<SavedCallFrame> CreateSavedCallFrameDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const char *node_name = nullptr,
-    uint32_t pc = 0) {
+    uint32_t pc = 0,
+    const char *return_var_name = nullptr,
+    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedShadowedVar>> *shadowed_vars = nullptr,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *param_names = nullptr) {
   auto node_name__ = node_name ? _fbb.CreateString(node_name) : 0;
+  auto return_var_name__ = return_var_name ? _fbb.CreateString(return_var_name) : 0;
+  auto shadowed_vars__ = shadowed_vars ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedShadowedVar>>(*shadowed_vars) : 0;
+  auto param_names__ = param_names ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*param_names) : 0;
   return ICPDev::Gyeol::Schema::CreateSavedCallFrame(
       _fbb,
       node_name__,
-      pc);
+      pc,
+      return_var_name__,
+      shadowed_vars__,
+      param_names__);
 }
 
 ::flatbuffers::Offset<SavedCallFrame> CreateSavedCallFrame(::flatbuffers::FlatBufferBuilder &_fbb, const SavedCallFrameT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -2273,6 +3127,87 @@ inline ::flatbuffers::Offset<SavedPendingChoice> CreateSavedPendingChoiceDirect(
 
 ::flatbuffers::Offset<SavedPendingChoice> CreateSavedPendingChoice(::flatbuffers::FlatBufferBuilder &_fbb, const SavedPendingChoiceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct SavedVisitCountT : public ::flatbuffers::NativeTable {
+  typedef SavedVisitCount TableType;
+  std::string node_name{};
+  uint32_t count = 0;
+};
+
+struct SavedVisitCount FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SavedVisitCountT NativeTableType;
+  typedef SavedVisitCountBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_NODE_NAME = 4,
+    VT_COUNT = 6
+  };
+  const ::flatbuffers::String *node_name() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_NODE_NAME);
+  }
+  uint32_t count() const {
+    return GetField<uint32_t>(VT_COUNT, 0);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_NODE_NAME) &&
+           verifier.VerifyString(node_name()) &&
+           VerifyField<uint32_t>(verifier, VT_COUNT, 4) &&
+           verifier.EndTable();
+  }
+  SavedVisitCountT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SavedVisitCountT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SavedVisitCount> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SavedVisitCountT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SavedVisitCountBuilder {
+  typedef SavedVisitCount Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_node_name(::flatbuffers::Offset<::flatbuffers::String> node_name) {
+    fbb_.AddOffset(SavedVisitCount::VT_NODE_NAME, node_name);
+  }
+  void add_count(uint32_t count) {
+    fbb_.AddElement<uint32_t>(SavedVisitCount::VT_COUNT, count, 0);
+  }
+  explicit SavedVisitCountBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SavedVisitCount> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SavedVisitCount>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SavedVisitCount> CreateSavedVisitCount(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> node_name = 0,
+    uint32_t count = 0) {
+  SavedVisitCountBuilder builder_(_fbb);
+  builder_.add_count(count);
+  builder_.add_node_name(node_name);
+  return builder_.Finish();
+}
+
+struct SavedVisitCount::Traits {
+  using type = SavedVisitCount;
+  static auto constexpr Create = CreateSavedVisitCount;
+};
+
+inline ::flatbuffers::Offset<SavedVisitCount> CreateSavedVisitCountDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *node_name = nullptr,
+    uint32_t count = 0) {
+  auto node_name__ = node_name ? _fbb.CreateString(node_name) : 0;
+  return ICPDev::Gyeol::Schema::CreateSavedVisitCount(
+      _fbb,
+      node_name__,
+      count);
+}
+
+::flatbuffers::Offset<SavedVisitCount> CreateSavedVisitCount(::flatbuffers::FlatBufferBuilder &_fbb, const SavedVisitCountT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct SaveStateT : public ::flatbuffers::NativeTable {
   typedef SaveState TableType;
   std::string version{};
@@ -2283,6 +3218,7 @@ struct SaveStateT : public ::flatbuffers::NativeTable {
   std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::SavedVarT>> variables{};
   std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::SavedCallFrameT>> call_stack{};
   std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::SavedPendingChoiceT>> pending_choices{};
+  std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::SavedVisitCountT>> visit_counts{};
   SaveStateT() = default;
   SaveStateT(const SaveStateT &o);
   SaveStateT(SaveStateT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2301,7 +3237,8 @@ struct SaveState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_FINISHED = 12,
     VT_VARIABLES = 14,
     VT_CALL_STACK = 16,
-    VT_PENDING_CHOICES = 18
+    VT_PENDING_CHOICES = 18,
+    VT_VISIT_COUNTS = 20
   };
   const ::flatbuffers::String *version() const {
     return GetPointer<const ::flatbuffers::String *>(VT_VERSION);
@@ -2327,6 +3264,9 @@ struct SaveState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>> *pending_choices() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>> *>(VT_PENDING_CHOICES);
   }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVisitCount>> *visit_counts() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVisitCount>> *>(VT_VISIT_COUNTS);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffset(verifier, VT_VERSION) &&
@@ -2346,6 +3286,9 @@ struct SaveState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_PENDING_CHOICES) &&
            verifier.VerifyVector(pending_choices()) &&
            verifier.VerifyVectorOfTables(pending_choices()) &&
+           VerifyOffset(verifier, VT_VISIT_COUNTS) &&
+           verifier.VerifyVector(visit_counts()) &&
+           verifier.VerifyVectorOfTables(visit_counts()) &&
            verifier.EndTable();
   }
   SaveStateT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2381,6 +3324,9 @@ struct SaveStateBuilder {
   void add_pending_choices(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>>> pending_choices) {
     fbb_.AddOffset(SaveState::VT_PENDING_CHOICES, pending_choices);
   }
+  void add_visit_counts(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVisitCount>>> visit_counts) {
+    fbb_.AddOffset(SaveState::VT_VISIT_COUNTS, visit_counts);
+  }
   explicit SaveStateBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2401,8 +3347,10 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveState(
     bool finished = false,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVar>>> variables = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedCallFrame>>> call_stack = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>>> pending_choices = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>>> pending_choices = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVisitCount>>> visit_counts = 0) {
   SaveStateBuilder builder_(_fbb);
+  builder_.add_visit_counts(visit_counts);
   builder_.add_pending_choices(pending_choices);
   builder_.add_call_stack(call_stack);
   builder_.add_variables(variables);
@@ -2428,13 +3376,15 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveStateDirect(
     bool finished = false,
     const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVar>> *variables = nullptr,
     const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedCallFrame>> *call_stack = nullptr,
-    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>> *pending_choices = nullptr) {
+    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>> *pending_choices = nullptr,
+    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVisitCount>> *visit_counts = nullptr) {
   auto version__ = version ? _fbb.CreateString(version) : 0;
   auto story_version__ = story_version ? _fbb.CreateString(story_version) : 0;
   auto current_node_name__ = current_node_name ? _fbb.CreateString(current_node_name) : 0;
   auto variables__ = variables ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVar>>(*variables) : 0;
   auto call_stack__ = call_stack ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedCallFrame>>(*call_stack) : 0;
   auto pending_choices__ = pending_choices ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>>(*pending_choices) : 0;
+  auto visit_counts__ = visit_counts ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVisitCount>>(*visit_counts) : 0;
   return ICPDev::Gyeol::Schema::CreateSaveState(
       _fbb,
       version__,
@@ -2444,7 +3394,8 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveStateDirect(
       finished,
       variables__,
       call_stack__,
-      pending_choices__);
+      pending_choices__,
+      visit_counts__);
 }
 
 ::flatbuffers::Offset<SaveState> CreateSaveState(::flatbuffers::FlatBufferBuilder &_fbb, const SaveStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -2453,6 +3404,7 @@ struct StoryT : public ::flatbuffers::NativeTable {
   typedef Story TableType;
   std::string version{};
   std::vector<std::string> string_pool{};
+  std::vector<std::string> line_ids{};
   std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::SetVarT>> global_vars{};
   std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::NodeT>> nodes{};
   std::string start_node_name{};
@@ -2469,15 +3421,19 @@ struct Story FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_VERSION = 4,
     VT_STRING_POOL = 6,
-    VT_GLOBAL_VARS = 8,
-    VT_NODES = 10,
-    VT_START_NODE_NAME = 12
+    VT_LINE_IDS = 8,
+    VT_GLOBAL_VARS = 10,
+    VT_NODES = 12,
+    VT_START_NODE_NAME = 14
   };
   const ::flatbuffers::String *version() const {
     return GetPointer<const ::flatbuffers::String *>(VT_VERSION);
   }
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *string_pool() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_STRING_POOL);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *line_ids() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_LINE_IDS);
   }
   const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SetVar>> *global_vars() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SetVar>> *>(VT_GLOBAL_VARS);
@@ -2495,6 +3451,9 @@ struct Story FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_STRING_POOL) &&
            verifier.VerifyVector(string_pool()) &&
            verifier.VerifyVectorOfStrings(string_pool()) &&
+           VerifyOffset(verifier, VT_LINE_IDS) &&
+           verifier.VerifyVector(line_ids()) &&
+           verifier.VerifyVectorOfStrings(line_ids()) &&
            VerifyOffset(verifier, VT_GLOBAL_VARS) &&
            verifier.VerifyVector(global_vars()) &&
            verifier.VerifyVectorOfTables(global_vars()) &&
@@ -2520,6 +3479,9 @@ struct StoryBuilder {
   void add_string_pool(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> string_pool) {
     fbb_.AddOffset(Story::VT_STRING_POOL, string_pool);
   }
+  void add_line_ids(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> line_ids) {
+    fbb_.AddOffset(Story::VT_LINE_IDS, line_ids);
+  }
   void add_global_vars(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SetVar>>> global_vars) {
     fbb_.AddOffset(Story::VT_GLOBAL_VARS, global_vars);
   }
@@ -2544,6 +3506,7 @@ inline ::flatbuffers::Offset<Story> CreateStory(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<::flatbuffers::String> version = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> string_pool = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> line_ids = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SetVar>>> global_vars = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Node>>> nodes = 0,
     ::flatbuffers::Offset<::flatbuffers::String> start_node_name = 0) {
@@ -2551,6 +3514,7 @@ inline ::flatbuffers::Offset<Story> CreateStory(
   builder_.add_start_node_name(start_node_name);
   builder_.add_nodes(nodes);
   builder_.add_global_vars(global_vars);
+  builder_.add_line_ids(line_ids);
   builder_.add_string_pool(string_pool);
   builder_.add_version(version);
   return builder_.Finish();
@@ -2565,11 +3529,13 @@ inline ::flatbuffers::Offset<Story> CreateStoryDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const char *version = nullptr,
     const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *string_pool = nullptr,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *line_ids = nullptr,
     const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SetVar>> *global_vars = nullptr,
     std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Node>> *nodes = nullptr,
     const char *start_node_name = nullptr) {
   auto version__ = version ? _fbb.CreateString(version) : 0;
   auto string_pool__ = string_pool ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*string_pool) : 0;
+  auto line_ids__ = line_ids ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*line_ids) : 0;
   auto global_vars__ = global_vars ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SetVar>>(*global_vars) : 0;
   auto nodes__ = nodes ? _fbb.CreateVectorOfSortedTables<ICPDev::Gyeol::Schema::Node>(nodes) : 0;
   auto start_node_name__ = start_node_name ? _fbb.CreateString(start_node_name) : 0;
@@ -2577,6 +3543,7 @@ inline ::flatbuffers::Offset<Story> CreateStoryDirect(
       _fbb,
       version__,
       string_pool__,
+      line_ids__,
       global_vars__,
       nodes__,
       start_node_name__);
@@ -2688,6 +3655,77 @@ inline ::flatbuffers::Offset<StringRef> CreateStringRef(::flatbuffers::FlatBuffe
       _index);
 }
 
+inline ListValueT *ListValue::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<ListValueT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void ListValue::UnPackTo(ListValueT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = items(); if (_e) { _o->items.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->items[_i] = _e->Get(_i); } } else { _o->items.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<ListValue> ListValue::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ListValueT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateListValue(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<ListValue> CreateListValue(::flatbuffers::FlatBufferBuilder &_fbb, const ListValueT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const ListValueT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _items = _o->items.size() ? _fbb.CreateVector(_o->items) : 0;
+  return ICPDev::Gyeol::Schema::CreateListValue(
+      _fbb,
+      _items);
+}
+
+inline TagT *Tag::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<TagT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void Tag::UnPackTo(TagT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = key_id(); _o->key_id = _e; }
+  { auto _e = value_id(); _o->value_id = _e; }
+}
+
+inline ::flatbuffers::Offset<Tag> Tag::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const TagT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateTag(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<Tag> CreateTag(::flatbuffers::FlatBufferBuilder &_fbb, const TagT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const TagT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _key_id = _o->key_id;
+  auto _value_id = _o->value_id;
+  return ICPDev::Gyeol::Schema::CreateTag(
+      _fbb,
+      _key_id,
+      _value_id);
+}
+
+inline LineT::LineT(const LineT &o)
+      : character_id(o.character_id),
+        text_id(o.text_id),
+        voice_asset_id(o.voice_asset_id) {
+  tags.reserve(o.tags.size());
+  for (const auto &tags_ : o.tags) { tags.emplace_back((tags_) ? new ICPDev::Gyeol::Schema::TagT(*tags_) : nullptr); }
+}
+
+inline LineT &LineT::operator=(LineT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(character_id, o.character_id);
+  std::swap(text_id, o.text_id);
+  std::swap(voice_asset_id, o.voice_asset_id);
+  std::swap(tags, o.tags);
+  return *this;
+}
+
 inline LineT *Line::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<LineT>();
   UnPackTo(_o.get(), _resolver);
@@ -2700,6 +3738,7 @@ inline void Line::UnPackTo(LineT *_o, const ::flatbuffers::resolver_function_t *
   { auto _e = character_id(); _o->character_id = _e; }
   { auto _e = text_id(); _o->text_id = _e; }
   { auto _e = voice_asset_id(); _o->voice_asset_id = _e; }
+  { auto _e = tags(); if (_e) { _o->tags.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->tags[_i]) { _e->Get(_i)->UnPackTo(_o->tags[_i].get(), _resolver); } else { _o->tags[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::TagT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->tags.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<Line> Line::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const LineT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -2713,11 +3752,13 @@ inline ::flatbuffers::Offset<Line> CreateLine(::flatbuffers::FlatBufferBuilder &
   auto _character_id = _o->character_id;
   auto _text_id = _o->text_id;
   auto _voice_asset_id = _o->voice_asset_id;
+  auto _tags = _o->tags.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>> (_o->tags.size(), [](size_t i, _VectorArgs *__va) { return CreateTag(*__va->__fbb, __va->__o->tags[i].get(), __va->__rehasher); }, &_va ) : 0;
   return ICPDev::Gyeol::Schema::CreateLine(
       _fbb,
       _character_id,
       _text_id,
-      _voice_asset_id);
+      _voice_asset_id,
+      _tags);
 }
 
 inline ChoiceT *Choice::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -2752,6 +3793,20 @@ inline ::flatbuffers::Offset<Choice> CreateChoice(::flatbuffers::FlatBufferBuild
       _condition_var_id);
 }
 
+inline JumpT::JumpT(const JumpT &o)
+      : target_node_name_id(o.target_node_name_id),
+        is_call(o.is_call) {
+  arg_exprs.reserve(o.arg_exprs.size());
+  for (const auto &arg_exprs_ : o.arg_exprs) { arg_exprs.emplace_back((arg_exprs_) ? new ICPDev::Gyeol::Schema::ExpressionT(*arg_exprs_) : nullptr); }
+}
+
+inline JumpT &JumpT::operator=(JumpT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(target_node_name_id, o.target_node_name_id);
+  std::swap(is_call, o.is_call);
+  std::swap(arg_exprs, o.arg_exprs);
+  return *this;
+}
+
 inline JumpT *Jump::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<JumpT>();
   UnPackTo(_o.get(), _resolver);
@@ -2763,6 +3818,7 @@ inline void Jump::UnPackTo(JumpT *_o, const ::flatbuffers::resolver_function_t *
   (void)_resolver;
   { auto _e = target_node_name_id(); _o->target_node_name_id = _e; }
   { auto _e = is_call(); _o->is_call = _e; }
+  { auto _e = arg_exprs(); if (_e) { _o->arg_exprs.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->arg_exprs[_i]) { _e->Get(_i)->UnPackTo(_o->arg_exprs[_i].get(), _resolver); } else { _o->arg_exprs[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->arg_exprs.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<Jump> Jump::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const JumpT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -2775,10 +3831,12 @@ inline ::flatbuffers::Offset<Jump> CreateJump(::flatbuffers::FlatBufferBuilder &
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const JumpT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _target_node_name_id = _o->target_node_name_id;
   auto _is_call = _o->is_call;
+  auto _arg_exprs = _o->arg_exprs.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression>> (_o->arg_exprs.size(), [](size_t i, _VectorArgs *__va) { return CreateExpression(*__va->__fbb, __va->__o->arg_exprs[i].get(), __va->__rehasher); }, &_va ) : 0;
   return ICPDev::Gyeol::Schema::CreateJump(
       _fbb,
       _target_node_name_id,
-      _is_call);
+      _is_call,
+      _arg_exprs);
 }
 
 inline CommandT *Command::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -2884,13 +3942,15 @@ inline ::flatbuffers::Offset<Expression> CreateExpression(::flatbuffers::FlatBuf
 inline SetVarT::SetVarT(const SetVarT &o)
       : var_name_id(o.var_name_id),
         value(o.value),
-        expr((o.expr) ? new ICPDev::Gyeol::Schema::ExpressionT(*o.expr) : nullptr) {
+        expr((o.expr) ? new ICPDev::Gyeol::Schema::ExpressionT(*o.expr) : nullptr),
+        assign_op(o.assign_op) {
 }
 
 inline SetVarT &SetVarT::operator=(SetVarT o) FLATBUFFERS_NOEXCEPT {
   std::swap(var_name_id, o.var_name_id);
   std::swap(value, o.value);
   std::swap(expr, o.expr);
+  std::swap(assign_op, o.assign_op);
   return *this;
 }
 
@@ -2907,6 +3967,7 @@ inline void SetVar::UnPackTo(SetVarT *_o, const ::flatbuffers::resolver_function
   { auto _e = value_type(); _o->value.type = _e; }
   { auto _e = value(); if (_e) _o->value.value = ICPDev::Gyeol::Schema::ValueDataUnion::UnPack(_e, value_type(), _resolver); }
   { auto _e = expr(); if (_e) { if(_o->expr) { _e->UnPackTo(_o->expr.get(), _resolver); } else { _o->expr = std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT>(_e->UnPack(_resolver)); } } else if (_o->expr) { _o->expr.reset(); } }
+  { auto _e = assign_op(); _o->assign_op = _e; }
 }
 
 inline ::flatbuffers::Offset<SetVar> SetVar::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SetVarT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -2921,12 +3982,14 @@ inline ::flatbuffers::Offset<SetVar> CreateSetVar(::flatbuffers::FlatBufferBuild
   auto _value_type = _o->value.type;
   auto _value = _o->value.Pack(_fbb);
   auto _expr = _o->expr ? CreateExpression(_fbb, _o->expr.get(), _rehasher) : 0;
+  auto _assign_op = _o->assign_op;
   return ICPDev::Gyeol::Schema::CreateSetVar(
       _fbb,
       _var_name_id,
       _value_type,
       _value,
-      _expr);
+      _expr,
+      _assign_op);
 }
 
 inline ConditionT::ConditionT(const ConditionT &o)
@@ -3067,6 +4130,95 @@ inline ::flatbuffers::Offset<Random> CreateRandom(::flatbuffers::FlatBufferBuild
       _branches);
 }
 
+inline ReturnT::ReturnT(const ReturnT &o)
+      : expr((o.expr) ? new ICPDev::Gyeol::Schema::ExpressionT(*o.expr) : nullptr),
+        value(o.value) {
+}
+
+inline ReturnT &ReturnT::operator=(ReturnT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(expr, o.expr);
+  std::swap(value, o.value);
+  return *this;
+}
+
+inline ReturnT *Return::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<ReturnT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void Return::UnPackTo(ReturnT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = expr(); if (_e) { if(_o->expr) { _e->UnPackTo(_o->expr.get(), _resolver); } else { _o->expr = std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT>(_e->UnPack(_resolver)); } } else if (_o->expr) { _o->expr.reset(); } }
+  { auto _e = value_type(); _o->value.type = _e; }
+  { auto _e = value(); if (_e) _o->value.value = ICPDev::Gyeol::Schema::ValueDataUnion::UnPack(_e, value_type(), _resolver); }
+}
+
+inline ::flatbuffers::Offset<Return> Return::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ReturnT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateReturn(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<Return> CreateReturn(::flatbuffers::FlatBufferBuilder &_fbb, const ReturnT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const ReturnT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _expr = _o->expr ? CreateExpression(_fbb, _o->expr.get(), _rehasher) : 0;
+  auto _value_type = _o->value.type;
+  auto _value = _o->value.Pack(_fbb);
+  return ICPDev::Gyeol::Schema::CreateReturn(
+      _fbb,
+      _expr,
+      _value_type,
+      _value);
+}
+
+inline CallWithReturnT::CallWithReturnT(const CallWithReturnT &o)
+      : target_node_name_id(o.target_node_name_id),
+        return_var_name_id(o.return_var_name_id) {
+  arg_exprs.reserve(o.arg_exprs.size());
+  for (const auto &arg_exprs_ : o.arg_exprs) { arg_exprs.emplace_back((arg_exprs_) ? new ICPDev::Gyeol::Schema::ExpressionT(*arg_exprs_) : nullptr); }
+}
+
+inline CallWithReturnT &CallWithReturnT::operator=(CallWithReturnT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(target_node_name_id, o.target_node_name_id);
+  std::swap(return_var_name_id, o.return_var_name_id);
+  std::swap(arg_exprs, o.arg_exprs);
+  return *this;
+}
+
+inline CallWithReturnT *CallWithReturn::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<CallWithReturnT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void CallWithReturn::UnPackTo(CallWithReturnT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = target_node_name_id(); _o->target_node_name_id = _e; }
+  { auto _e = return_var_name_id(); _o->return_var_name_id = _e; }
+  { auto _e = arg_exprs(); if (_e) { _o->arg_exprs.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->arg_exprs[_i]) { _e->Get(_i)->UnPackTo(_o->arg_exprs[_i].get(), _resolver); } else { _o->arg_exprs[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->arg_exprs.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<CallWithReturn> CallWithReturn::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CallWithReturnT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateCallWithReturn(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<CallWithReturn> CreateCallWithReturn(::flatbuffers::FlatBufferBuilder &_fbb, const CallWithReturnT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const CallWithReturnT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _target_node_name_id = _o->target_node_name_id;
+  auto _return_var_name_id = _o->return_var_name_id;
+  auto _arg_exprs = _o->arg_exprs.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression>> (_o->arg_exprs.size(), [](size_t i, _VectorArgs *__va) { return CreateExpression(*__va->__fbb, __va->__o->arg_exprs[i].get(), __va->__rehasher); }, &_va ) : 0;
+  return ICPDev::Gyeol::Schema::CreateCallWithReturn(
+      _fbb,
+      _target_node_name_id,
+      _return_var_name_id,
+      _arg_exprs);
+}
+
 inline InstructionT *Instruction::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<InstructionT>();
   UnPackTo(_o.get(), _resolver);
@@ -3097,7 +4249,8 @@ inline ::flatbuffers::Offset<Instruction> CreateInstruction(::flatbuffers::FlatB
 }
 
 inline NodeT::NodeT(const NodeT &o)
-      : name(o.name) {
+      : name(o.name),
+        param_ids(o.param_ids) {
   lines.reserve(o.lines.size());
   for (const auto &lines_ : o.lines) { lines.emplace_back((lines_) ? new ICPDev::Gyeol::Schema::InstructionT(*lines_) : nullptr); }
 }
@@ -3105,6 +4258,7 @@ inline NodeT::NodeT(const NodeT &o)
 inline NodeT &NodeT::operator=(NodeT o) FLATBUFFERS_NOEXCEPT {
   std::swap(name, o.name);
   std::swap(lines, o.lines);
+  std::swap(param_ids, o.param_ids);
   return *this;
 }
 
@@ -3119,6 +4273,7 @@ inline void Node::UnPackTo(NodeT *_o, const ::flatbuffers::resolver_function_t *
   (void)_resolver;
   { auto _e = name(); if (_e) _o->name = _e->str(); }
   { auto _e = lines(); if (_e) { _o->lines.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->lines[_i]) { _e->Get(_i)->UnPackTo(_o->lines[_i].get(), _resolver); } else { _o->lines[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::InstructionT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->lines.resize(0); } }
+  { auto _e = param_ids(); if (_e) { _o->param_ids.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->param_ids[_i] = _e->Get(_i); } } else { _o->param_ids.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<Node> Node::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const NodeT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3131,10 +4286,12 @@ inline ::flatbuffers::Offset<Node> CreateNode(::flatbuffers::FlatBufferBuilder &
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const NodeT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _name = _fbb.CreateString(_o->name);
   auto _lines = _o->lines.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Instruction>> (_o->lines.size(), [](size_t i, _VectorArgs *__va) { return CreateInstruction(*__va->__fbb, __va->__o->lines[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _param_ids = _o->param_ids.size() ? _fbb.CreateVector(_o->param_ids) : 0;
   return ICPDev::Gyeol::Schema::CreateNode(
       _fbb,
       _name,
-      _lines);
+      _lines,
+      _param_ids);
 }
 
 inline SavedVarT *SavedVar::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -3150,6 +4307,7 @@ inline void SavedVar::UnPackTo(SavedVarT *_o, const ::flatbuffers::resolver_func
   { auto _e = value_type(); _o->value.type = _e; }
   { auto _e = value(); if (_e) _o->value.value = ICPDev::Gyeol::Schema::ValueDataUnion::UnPack(_e, value_type(), _resolver); }
   { auto _e = string_value(); if (_e) _o->string_value = _e->str(); }
+  { auto _e = list_items(); if (_e) { _o->list_items.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->list_items[_i] = _e->Get(_i)->str(); } } else { _o->list_items.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<SavedVar> SavedVar::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SavedVarT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3164,12 +4322,73 @@ inline ::flatbuffers::Offset<SavedVar> CreateSavedVar(::flatbuffers::FlatBufferB
   auto _value_type = _o->value.type;
   auto _value = _o->value.Pack(_fbb);
   auto _string_value = _o->string_value.empty() ? 0 : _fbb.CreateString(_o->string_value);
+  auto _list_items = _o->list_items.size() ? _fbb.CreateVectorOfStrings(_o->list_items) : 0;
   return ICPDev::Gyeol::Schema::CreateSavedVar(
       _fbb,
       _name,
       _value_type,
       _value,
-      _string_value);
+      _string_value,
+      _list_items);
+}
+
+inline SavedShadowedVarT *SavedShadowedVar::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SavedShadowedVarT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SavedShadowedVar::UnPackTo(SavedShadowedVarT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = name(); if (_e) _o->name = _e->str(); }
+  { auto _e = value_type(); _o->value.type = _e; }
+  { auto _e = value(); if (_e) _o->value.value = ICPDev::Gyeol::Schema::ValueDataUnion::UnPack(_e, value_type(), _resolver); }
+  { auto _e = string_value(); if (_e) _o->string_value = _e->str(); }
+  { auto _e = existed(); _o->existed = _e; }
+  { auto _e = list_items(); if (_e) { _o->list_items.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->list_items[_i] = _e->Get(_i)->str(); } } else { _o->list_items.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<SavedShadowedVar> SavedShadowedVar::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SavedShadowedVarT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateSavedShadowedVar(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SavedShadowedVar> CreateSavedShadowedVar(::flatbuffers::FlatBufferBuilder &_fbb, const SavedShadowedVarT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SavedShadowedVarT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _name = _o->name.empty() ? 0 : _fbb.CreateString(_o->name);
+  auto _value_type = _o->value.type;
+  auto _value = _o->value.Pack(_fbb);
+  auto _string_value = _o->string_value.empty() ? 0 : _fbb.CreateString(_o->string_value);
+  auto _existed = _o->existed;
+  auto _list_items = _o->list_items.size() ? _fbb.CreateVectorOfStrings(_o->list_items) : 0;
+  return ICPDev::Gyeol::Schema::CreateSavedShadowedVar(
+      _fbb,
+      _name,
+      _value_type,
+      _value,
+      _string_value,
+      _existed,
+      _list_items);
+}
+
+inline SavedCallFrameT::SavedCallFrameT(const SavedCallFrameT &o)
+      : node_name(o.node_name),
+        pc(o.pc),
+        return_var_name(o.return_var_name),
+        param_names(o.param_names) {
+  shadowed_vars.reserve(o.shadowed_vars.size());
+  for (const auto &shadowed_vars_ : o.shadowed_vars) { shadowed_vars.emplace_back((shadowed_vars_) ? new ICPDev::Gyeol::Schema::SavedShadowedVarT(*shadowed_vars_) : nullptr); }
+}
+
+inline SavedCallFrameT &SavedCallFrameT::operator=(SavedCallFrameT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(node_name, o.node_name);
+  std::swap(pc, o.pc);
+  std::swap(return_var_name, o.return_var_name);
+  std::swap(shadowed_vars, o.shadowed_vars);
+  std::swap(param_names, o.param_names);
+  return *this;
 }
 
 inline SavedCallFrameT *SavedCallFrame::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -3183,6 +4402,9 @@ inline void SavedCallFrame::UnPackTo(SavedCallFrameT *_o, const ::flatbuffers::r
   (void)_resolver;
   { auto _e = node_name(); if (_e) _o->node_name = _e->str(); }
   { auto _e = pc(); _o->pc = _e; }
+  { auto _e = return_var_name(); if (_e) _o->return_var_name = _e->str(); }
+  { auto _e = shadowed_vars(); if (_e) { _o->shadowed_vars.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->shadowed_vars[_i]) { _e->Get(_i)->UnPackTo(_o->shadowed_vars[_i].get(), _resolver); } else { _o->shadowed_vars[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::SavedShadowedVarT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->shadowed_vars.resize(0); } }
+  { auto _e = param_names(); if (_e) { _o->param_names.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->param_names[_i] = _e->Get(_i)->str(); } } else { _o->param_names.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<SavedCallFrame> SavedCallFrame::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SavedCallFrameT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3195,10 +4417,16 @@ inline ::flatbuffers::Offset<SavedCallFrame> CreateSavedCallFrame(::flatbuffers:
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SavedCallFrameT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _node_name = _o->node_name.empty() ? 0 : _fbb.CreateString(_o->node_name);
   auto _pc = _o->pc;
+  auto _return_var_name = _o->return_var_name.empty() ? 0 : _fbb.CreateString(_o->return_var_name);
+  auto _shadowed_vars = _o->shadowed_vars.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedShadowedVar>> (_o->shadowed_vars.size(), [](size_t i, _VectorArgs *__va) { return CreateSavedShadowedVar(*__va->__fbb, __va->__o->shadowed_vars[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _param_names = _o->param_names.size() ? _fbb.CreateVectorOfStrings(_o->param_names) : 0;
   return ICPDev::Gyeol::Schema::CreateSavedCallFrame(
       _fbb,
       _node_name,
-      _pc);
+      _pc,
+      _return_var_name,
+      _shadowed_vars,
+      _param_names);
 }
 
 inline SavedPendingChoiceT *SavedPendingChoice::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -3230,6 +4458,35 @@ inline ::flatbuffers::Offset<SavedPendingChoice> CreateSavedPendingChoice(::flat
       _target_node_name);
 }
 
+inline SavedVisitCountT *SavedVisitCount::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SavedVisitCountT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SavedVisitCount::UnPackTo(SavedVisitCountT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = node_name(); if (_e) _o->node_name = _e->str(); }
+  { auto _e = count(); _o->count = _e; }
+}
+
+inline ::flatbuffers::Offset<SavedVisitCount> SavedVisitCount::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SavedVisitCountT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateSavedVisitCount(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SavedVisitCount> CreateSavedVisitCount(::flatbuffers::FlatBufferBuilder &_fbb, const SavedVisitCountT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SavedVisitCountT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _node_name = _o->node_name.empty() ? 0 : _fbb.CreateString(_o->node_name);
+  auto _count = _o->count;
+  return ICPDev::Gyeol::Schema::CreateSavedVisitCount(
+      _fbb,
+      _node_name,
+      _count);
+}
+
 inline SaveStateT::SaveStateT(const SaveStateT &o)
       : version(o.version),
         story_version(o.story_version),
@@ -3242,6 +4499,8 @@ inline SaveStateT::SaveStateT(const SaveStateT &o)
   for (const auto &call_stack_ : o.call_stack) { call_stack.emplace_back((call_stack_) ? new ICPDev::Gyeol::Schema::SavedCallFrameT(*call_stack_) : nullptr); }
   pending_choices.reserve(o.pending_choices.size());
   for (const auto &pending_choices_ : o.pending_choices) { pending_choices.emplace_back((pending_choices_) ? new ICPDev::Gyeol::Schema::SavedPendingChoiceT(*pending_choices_) : nullptr); }
+  visit_counts.reserve(o.visit_counts.size());
+  for (const auto &visit_counts_ : o.visit_counts) { visit_counts.emplace_back((visit_counts_) ? new ICPDev::Gyeol::Schema::SavedVisitCountT(*visit_counts_) : nullptr); }
 }
 
 inline SaveStateT &SaveStateT::operator=(SaveStateT o) FLATBUFFERS_NOEXCEPT {
@@ -3253,6 +4512,7 @@ inline SaveStateT &SaveStateT::operator=(SaveStateT o) FLATBUFFERS_NOEXCEPT {
   std::swap(variables, o.variables);
   std::swap(call_stack, o.call_stack);
   std::swap(pending_choices, o.pending_choices);
+  std::swap(visit_counts, o.visit_counts);
   return *this;
 }
 
@@ -3273,6 +4533,7 @@ inline void SaveState::UnPackTo(SaveStateT *_o, const ::flatbuffers::resolver_fu
   { auto _e = variables(); if (_e) { _o->variables.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->variables[_i]) { _e->Get(_i)->UnPackTo(_o->variables[_i].get(), _resolver); } else { _o->variables[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::SavedVarT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->variables.resize(0); } }
   { auto _e = call_stack(); if (_e) { _o->call_stack.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->call_stack[_i]) { _e->Get(_i)->UnPackTo(_o->call_stack[_i].get(), _resolver); } else { _o->call_stack[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::SavedCallFrameT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->call_stack.resize(0); } }
   { auto _e = pending_choices(); if (_e) { _o->pending_choices.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->pending_choices[_i]) { _e->Get(_i)->UnPackTo(_o->pending_choices[_i].get(), _resolver); } else { _o->pending_choices[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::SavedPendingChoiceT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->pending_choices.resize(0); } }
+  { auto _e = visit_counts(); if (_e) { _o->visit_counts.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->visit_counts[_i]) { _e->Get(_i)->UnPackTo(_o->visit_counts[_i].get(), _resolver); } else { _o->visit_counts[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::SavedVisitCountT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->visit_counts.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<SaveState> SaveState::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SaveStateT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3291,6 +4552,7 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveState(::flatbuffers::FlatBuffe
   auto _variables = _o->variables.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVar>> (_o->variables.size(), [](size_t i, _VectorArgs *__va) { return CreateSavedVar(*__va->__fbb, __va->__o->variables[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _call_stack = _o->call_stack.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedCallFrame>> (_o->call_stack.size(), [](size_t i, _VectorArgs *__va) { return CreateSavedCallFrame(*__va->__fbb, __va->__o->call_stack[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _pending_choices = _o->pending_choices.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>> (_o->pending_choices.size(), [](size_t i, _VectorArgs *__va) { return CreateSavedPendingChoice(*__va->__fbb, __va->__o->pending_choices[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _visit_counts = _o->visit_counts.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVisitCount>> (_o->visit_counts.size(), [](size_t i, _VectorArgs *__va) { return CreateSavedVisitCount(*__va->__fbb, __va->__o->visit_counts[i].get(), __va->__rehasher); }, &_va ) : 0;
   return ICPDev::Gyeol::Schema::CreateSaveState(
       _fbb,
       _version,
@@ -3300,12 +4562,14 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveState(::flatbuffers::FlatBuffe
       _finished,
       _variables,
       _call_stack,
-      _pending_choices);
+      _pending_choices,
+      _visit_counts);
 }
 
 inline StoryT::StoryT(const StoryT &o)
       : version(o.version),
         string_pool(o.string_pool),
+        line_ids(o.line_ids),
         start_node_name(o.start_node_name) {
   global_vars.reserve(o.global_vars.size());
   for (const auto &global_vars_ : o.global_vars) { global_vars.emplace_back((global_vars_) ? new ICPDev::Gyeol::Schema::SetVarT(*global_vars_) : nullptr); }
@@ -3316,6 +4580,7 @@ inline StoryT::StoryT(const StoryT &o)
 inline StoryT &StoryT::operator=(StoryT o) FLATBUFFERS_NOEXCEPT {
   std::swap(version, o.version);
   std::swap(string_pool, o.string_pool);
+  std::swap(line_ids, o.line_ids);
   std::swap(global_vars, o.global_vars);
   std::swap(nodes, o.nodes);
   std::swap(start_node_name, o.start_node_name);
@@ -3333,6 +4598,7 @@ inline void Story::UnPackTo(StoryT *_o, const ::flatbuffers::resolver_function_t
   (void)_resolver;
   { auto _e = version(); if (_e) _o->version = _e->str(); }
   { auto _e = string_pool(); if (_e) { _o->string_pool.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->string_pool[_i] = _e->Get(_i)->str(); } } else { _o->string_pool.resize(0); } }
+  { auto _e = line_ids(); if (_e) { _o->line_ids.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->line_ids[_i] = _e->Get(_i)->str(); } } else { _o->line_ids.resize(0); } }
   { auto _e = global_vars(); if (_e) { _o->global_vars.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->global_vars[_i]) { _e->Get(_i)->UnPackTo(_o->global_vars[_i].get(), _resolver); } else { _o->global_vars[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::SetVarT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->global_vars.resize(0); } }
   { auto _e = nodes(); if (_e) { _o->nodes.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->nodes[_i]) { _e->Get(_i)->UnPackTo(_o->nodes[_i].get(), _resolver); } else { _o->nodes[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::NodeT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->nodes.resize(0); } }
   { auto _e = start_node_name(); if (_e) _o->start_node_name = _e->str(); }
@@ -3348,6 +4614,7 @@ inline ::flatbuffers::Offset<Story> CreateStory(::flatbuffers::FlatBufferBuilder
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const StoryT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _version = _o->version.empty() ? 0 : _fbb.CreateString(_o->version);
   auto _string_pool = _o->string_pool.size() ? _fbb.CreateVectorOfStrings(_o->string_pool) : 0;
+  auto _line_ids = _o->line_ids.size() ? _fbb.CreateVectorOfStrings(_o->line_ids) : 0;
   auto _global_vars = _o->global_vars.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SetVar>> (_o->global_vars.size(), [](size_t i, _VectorArgs *__va) { return CreateSetVar(*__va->__fbb, __va->__o->global_vars[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _nodes = _o->nodes.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Node>> (_o->nodes.size(), [](size_t i, _VectorArgs *__va) { return CreateNode(*__va->__fbb, __va->__o->nodes[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _start_node_name = _o->start_node_name.empty() ? 0 : _fbb.CreateString(_o->start_node_name);
@@ -3355,6 +4622,7 @@ inline ::flatbuffers::Offset<Story> CreateStory(::flatbuffers::FlatBufferBuilder
       _fbb,
       _version,
       _string_pool,
+      _line_ids,
       _global_vars,
       _nodes,
       _start_node_name);
@@ -3379,6 +4647,10 @@ inline bool VerifyValueData(::flatbuffers::Verifier &verifier, const void *obj, 
     }
     case ValueData::StringRef: {
       auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::StringRef *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case ValueData::ListValue: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::ListValue *>(obj);
       return verifier.VerifyTable(ptr);
     }
     default: return true;
@@ -3416,6 +4688,10 @@ inline void *ValueDataUnion::UnPack(const void *obj, ValueData type, const ::fla
       auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::StringRef *>(obj);
       return ptr->UnPack(resolver);
     }
+    case ValueData::ListValue: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::ListValue *>(obj);
+      return ptr->UnPack(resolver);
+    }
     default: return nullptr;
   }
 }
@@ -3439,6 +4715,10 @@ inline ::flatbuffers::Offset<void> ValueDataUnion::Pack(::flatbuffers::FlatBuffe
       auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::StringRefT *>(value);
       return CreateStringRef(_fbb, ptr, _rehasher).Union();
     }
+    case ValueData::ListValue: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::ListValueT *>(value);
+      return CreateListValue(_fbb, ptr, _rehasher).Union();
+    }
     default: return 0;
   }
 }
@@ -3459,6 +4739,10 @@ inline ValueDataUnion::ValueDataUnion(const ValueDataUnion &u) : type(u.type), v
     }
     case ValueData::StringRef: {
       value = new ICPDev::Gyeol::Schema::StringRefT(*reinterpret_cast<ICPDev::Gyeol::Schema::StringRefT *>(u.value));
+      break;
+    }
+    case ValueData::ListValue: {
+      value = new ICPDev::Gyeol::Schema::ListValueT(*reinterpret_cast<ICPDev::Gyeol::Schema::ListValueT *>(u.value));
       break;
     }
     default:
@@ -3485,6 +4769,11 @@ inline void ValueDataUnion::Reset() {
     }
     case ValueData::StringRef: {
       auto ptr = reinterpret_cast<ICPDev::Gyeol::Schema::StringRefT *>(value);
+      delete ptr;
+      break;
+    }
+    case ValueData::ListValue: {
+      auto ptr = reinterpret_cast<ICPDev::Gyeol::Schema::ListValueT *>(value);
       delete ptr;
       break;
     }
@@ -3525,6 +4814,14 @@ inline bool VerifyOpData(::flatbuffers::Verifier &verifier, const void *obj, OpD
     }
     case OpData::Random: {
       auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::Random *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case OpData::Return: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::Return *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case OpData::CallWithReturn: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::CallWithReturn *>(obj);
       return verifier.VerifyTable(ptr);
     }
     default: return true;
@@ -3574,6 +4871,14 @@ inline void *OpDataUnion::UnPack(const void *obj, OpData type, const ::flatbuffe
       auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::Random *>(obj);
       return ptr->UnPack(resolver);
     }
+    case OpData::Return: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::Return *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case OpData::CallWithReturn: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::CallWithReturn *>(obj);
+      return ptr->UnPack(resolver);
+    }
     default: return nullptr;
   }
 }
@@ -3609,6 +4914,14 @@ inline ::flatbuffers::Offset<void> OpDataUnion::Pack(::flatbuffers::FlatBufferBu
       auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::RandomT *>(value);
       return CreateRandom(_fbb, ptr, _rehasher).Union();
     }
+    case OpData::Return: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::ReturnT *>(value);
+      return CreateReturn(_fbb, ptr, _rehasher).Union();
+    }
+    case OpData::CallWithReturn: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::CallWithReturnT *>(value);
+      return CreateCallWithReturn(_fbb, ptr, _rehasher).Union();
+    }
     default: return 0;
   }
 }
@@ -3641,6 +4954,14 @@ inline OpDataUnion::OpDataUnion(const OpDataUnion &u) : type(u.type), value(null
     }
     case OpData::Random: {
       value = new ICPDev::Gyeol::Schema::RandomT(*reinterpret_cast<ICPDev::Gyeol::Schema::RandomT *>(u.value));
+      break;
+    }
+    case OpData::Return: {
+      value = new ICPDev::Gyeol::Schema::ReturnT(*reinterpret_cast<ICPDev::Gyeol::Schema::ReturnT *>(u.value));
+      break;
+    }
+    case OpData::CallWithReturn: {
+      value = new ICPDev::Gyeol::Schema::CallWithReturnT(*reinterpret_cast<ICPDev::Gyeol::Schema::CallWithReturnT *>(u.value));
       break;
     }
     default:
@@ -3682,6 +5003,16 @@ inline void OpDataUnion::Reset() {
     }
     case OpData::Random: {
       auto ptr = reinterpret_cast<ICPDev::Gyeol::Schema::RandomT *>(value);
+      delete ptr;
+      break;
+    }
+    case OpData::Return: {
+      auto ptr = reinterpret_cast<ICPDev::Gyeol::Schema::ReturnT *>(value);
+      delete ptr;
+      break;
+    }
+    case OpData::CallWithReturn: {
+      auto ptr = reinterpret_cast<ICPDev::Gyeol::Schema::CallWithReturnT *>(value);
       delete ptr;
       break;
     }

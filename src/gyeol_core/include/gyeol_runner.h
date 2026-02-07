@@ -9,7 +9,7 @@ namespace Gyeol {
 
 // --- 변수 값 타입 ---
 struct Variant {
-    enum Type { BOOL, INT, FLOAT, STRING };
+    enum Type { BOOL, INT, FLOAT, STRING, LIST };
     Type type = INT;
     union {
         bool b;
@@ -17,11 +17,14 @@ struct Variant {
         float f;
     };
     std::string s;
+    std::vector<std::string> list; // LIST 타입 항목들
 
     static Variant Bool(bool v) { Variant r; r.type = BOOL; r.b = v; return r; }
     static Variant Int(int32_t v) { Variant r; r.type = INT; r.i = v; return r; }
     static Variant Float(float v) { Variant r; r.type = FLOAT; r.f = v; return r; }
     static Variant String(const std::string& v) { Variant r; r.type = STRING; r.s = v; return r; }
+    static Variant List(const std::vector<std::string>& v) { Variant r; r.type = LIST; r.list = v; return r; }
+    static Variant List(std::vector<std::string>&& v) { Variant r; r.type = LIST; r.list = std::move(v); return r; }
 };
 
 // --- step() 결과 ---
@@ -30,6 +33,7 @@ enum class StepType { LINE, CHOICES, COMMAND, END };
 struct LineData {
     const char* character = nullptr; // nullptr이면 narration
     const char* text = nullptr;
+    std::vector<std::pair<const char*, const char*>> tags; // key-value 메타데이터
 };
 
 struct ChoiceData {
@@ -73,6 +77,15 @@ public:
     // RNG seed (deterministic testing)
     void setSeed(uint32_t seed);
 
+    // Locale (다국어) API
+    bool loadLocale(const std::string& csvPath);
+    void clearLocale();
+    std::string getLocale() const;
+
+    // Visit tracking API
+    int32_t getVisitCount(const std::string& nodeName) const;
+    bool hasVisited(const std::string& nodeName) const;
+
 private:
     // forward declarations — 실제 FlatBuffers 타입은 cpp에서 사용
     const void* story_ = nullptr;
@@ -85,9 +98,18 @@ private:
     std::unordered_map<std::string, Variant> variables_;
 
     // Call stack
+    struct ShadowedVar {
+        std::string name;
+        Variant value;
+        bool existed; // true = 변수가 기존에 존재했음
+    };
+
     struct CallFrame {
         const void* node;
         uint32_t pc;
+        std::string returnVarName; // empty = 반환값 무시
+        std::vector<ShadowedVar> shadowedVars; // 함수 매개변수로 섀도된 변수들
+        std::vector<std::string> paramNames;   // 매개변수 이름들
     };
     std::vector<CallFrame> callStack_;
 
@@ -98,8 +120,19 @@ private:
     };
     std::vector<PendingChoice> pendingChoices_;
 
+    // Pending return value (set by explicit 'return expr', consumed after call stack pop)
+    bool hasPendingReturn_ = false;
+    Variant pendingReturnValue_;
+
     // RNG for random branches
     std::mt19937 rng_;
+
+    // Locale 오버레이 (다국어)
+    std::string currentLocale_;
+    std::vector<std::string> localePool_; // string_pool과 병렬, 비어있으면 원본 사용
+
+    // 노드 방문 횟수
+    std::unordered_map<std::string, uint32_t> visitCounts_;
 
     // 헬퍼
     const char* poolStr(int32_t index) const;
@@ -109,9 +142,16 @@ private:
     // 표현식 평가 (RPN 스택 머신)
     Variant evaluateExpression(const void* exprPtr) const;
 
-    // 문자열 보간 ({변수명} → 값 치환)
+    // 문자열 보간 ({변수명} → 값 치환, {if cond}...{else}...{endif} 지원)
     std::string interpolateText(const char* text) const;
     static std::string variantToString(const Variant& v);
+
+    // 인라인 조건 평가 ({if cond}...{else}...{endif})
+    bool evaluateInlineCondition(const std::string& condStr) const;
+
+    // 함수 매개변수 바인딩/복원 헬퍼
+    void bindParameters(const void* targetNode, const std::vector<Variant>& argValues, CallFrame& frame);
+    void restoreShadowedVars(const CallFrame& frame);
 
     // Save/Load 헬퍼
     std::string currentNodeName() const;

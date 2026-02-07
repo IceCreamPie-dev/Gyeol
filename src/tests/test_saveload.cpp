@@ -335,3 +335,248 @@ label leave_shop:
     res = r2.step();
     EXPECT_EQ(res.type, StepType::END);
 }
+
+// CallWithReturn 프레임의 return_var_name 저장/복원
+TEST_F(SaveLoadTest, SaveWithCallReturnFrame) {
+    auto buf = compileScript(R"(
+label start:
+    $ result = call helper
+    narrator "{result}"
+
+label helper:
+    narrator "In helper"
+    return 42
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(startRunner(r1, buf));
+
+    // step → helper의 "In helper" (call stack에 returnVarName="result")
+    auto res = r1.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "In helper");
+
+    // 이 상태에서 저장 (call stack에 return_var_name 포함)
+    ASSERT_TRUE(r1.saveState(SAVE_PATH));
+
+    // 새 Runner에 로드
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(SAVE_PATH));
+
+    // step → return 42 실행 → call stack pop → result = 42 → narrator "{result}"
+    res = r2.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "42");
+
+    EXPECT_EQ(r2.getVariable("result").type, Variant::INT);
+    EXPECT_EQ(r2.getVariable("result").i, 42);
+
+    res = r2.step();
+    EXPECT_EQ(res.type, StepType::END);
+}
+
+// 이전 포맷 호환 (return_var_name 없는 SavedCallFrame)
+TEST_F(SaveLoadTest, SaveLoadReturnBackwardCompat) {
+    // 기존 call (return capture 없음)으로 저장 → 로드해도 정상 동작
+    auto buf = compileScript(R"(
+label start:
+    call helper
+    narrator "back"
+
+label helper:
+    narrator "in helper"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(startRunner(r1, buf));
+
+    // "in helper"
+    auto res = r1.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "in helper");
+
+    // 저장 (return_var_name은 빈 문자열)
+    ASSERT_TRUE(r1.saveState(SAVE_PATH));
+
+    // 로드 후 계속
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(SAVE_PATH));
+
+    // helper 끝 → call stack pop → "back"
+    res = r2.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "back");
+
+    res = r2.step();
+    EXPECT_EQ(res.type, StepType::END);
+}
+
+// ===================================================================
+// Function Parameters Save/Load 테스트
+// ===================================================================
+
+TEST_F(SaveLoadTest, SaveWithParamFrame) {
+    auto buf = compileScript(R"(
+label start:
+    $ x = 100
+    $ result = call calc(42)
+    narrator "{result} {x}"
+
+label calc(x):
+    narrator "computing {x}"
+    return x * 2
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(startRunner(r1, buf));
+
+    // step → "computing 42" (calc 안에서, x=42, 섀도된 x=100)
+    auto res = r1.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "computing 42");
+
+    // 이 상태에서 저장 (call stack에 shadowedVars 포함)
+    ASSERT_TRUE(r1.saveState(SAVE_PATH));
+
+    // 새 Runner에 로드
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(SAVE_PATH));
+
+    // step → return x*2=84 → call stack pop → x 복원(100) → result=84
+    // → narrator "{result} {x}" → "84 100"
+    res = r2.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "84 100");
+
+    EXPECT_EQ(r2.getVariable("result").i, 84);
+    EXPECT_EQ(r2.getVariable("x").i, 100);
+
+    res = r2.step();
+    EXPECT_EQ(res.type, StepType::END);
+}
+
+TEST_F(SaveLoadTest, SaveLoadParamBackwardCompat) {
+    // 매개변수 없는 기존 call로 저장 → 로드 정상 동작
+    auto buf = compileScript(R"(
+label start:
+    call sub
+    narrator "back"
+
+label sub:
+    narrator "in sub"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(startRunner(r1, buf));
+
+    auto res = r1.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "in sub");
+
+    ASSERT_TRUE(r1.saveState(SAVE_PATH));
+
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(SAVE_PATH));
+
+    res = r2.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "back");
+
+    res = r2.step();
+    EXPECT_EQ(res.type, StepType::END);
+}
+
+// visit_count 저장/복원 라운드트립
+TEST_F(SaveLoadTest, SaveLoadVisitCounts) {
+    auto buf = compileScript(R"(
+label start:
+    jump shop
+
+label shop:
+    jump shop2
+
+label shop2:
+    jump shop3
+
+label shop3:
+    narrator "{visit_count(shop)}"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(startRunner(r1, buf));
+
+    // start→shop→shop2→shop3 순서로 진행
+    // visit_count: start=1, shop=1, shop2=1, shop3=1
+    // shop3에서 "{visit_count(shop)}" 출력 → "1"
+    auto res = r1.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "1");
+
+    // 저장
+    EXPECT_EQ(r1.getVisitCount("shop"), 1);
+    EXPECT_EQ(r1.getVisitCount("start"), 1);
+    ASSERT_TRUE(r1.saveState(SAVE_PATH));
+
+    // 새 Runner에 로드
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(SAVE_PATH));
+
+    // 방문 횟수 복원 확인
+    EXPECT_EQ(r2.getVisitCount("shop"), 1);
+    EXPECT_EQ(r2.getVisitCount("start"), 1);
+    EXPECT_EQ(r2.getVisitCount("shop2"), 1);
+    EXPECT_EQ(r2.getVisitCount("shop3"), 1);
+    EXPECT_TRUE(r2.hasVisited("shop"));
+
+    // 미방문 노드
+    EXPECT_EQ(r2.getVisitCount("nonexistent"), 0);
+    EXPECT_FALSE(r2.hasVisited("nonexistent"));
+
+    res = r2.step();
+    EXPECT_EQ(res.type, StepType::END);
+}
+
+// visit_counts 필드 없는 기존 .gys 하위 호환
+TEST_F(SaveLoadTest, SaveLoadVisitCountBackwardCompat) {
+    // visit_count 기능 없는 단순 스크립트로 저장 → 로드 시 visitCounts_ 비어있지만 정상 동작
+    auto buf = compileScript(R"(
+label start:
+    narrator "hello"
+    narrator "world"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(startRunner(r1, buf));
+
+    auto res = r1.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "hello");
+
+    ASSERT_TRUE(r1.saveState(SAVE_PATH));
+
+    // 로드 후 정상 진행
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(SAVE_PATH));
+
+    // start 노드는 방문 카운트 복원됨 (저장 시점에 start=1)
+    EXPECT_EQ(r2.getVisitCount("start"), 1);
+
+    res = r2.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "world");
+
+    res = r2.step();
+    EXPECT_EQ(res.type, StepType::END);
+}

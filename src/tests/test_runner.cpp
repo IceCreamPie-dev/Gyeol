@@ -1,7 +1,10 @@
 #include <gtest/gtest.h>
 #include "test_helpers.h"
 #include "gyeol_runner.h"
+#include "gyeol_generated.h"
 #include <set>
+#include <fstream>
+#include <unordered_map>
 
 using namespace Gyeol;
 
@@ -1153,4 +1156,1106 @@ TEST(RunnerTest, RandomEqualWeight) {
     auto r = runner.step();
     std::string text = r.line.text;
     EXPECT_TRUE(text == "a" || text == "b");
+}
+
+// --- Locale (다국어) 테스트 ---
+
+// 헬퍼: 스크립트로부터 locale CSV를 생성 (line_id → 번역 텍스트 매핑)
+static void writeLocaleCSV(const std::string& csvPath,
+                           const std::vector<uint8_t>& buf,
+                           const std::unordered_map<std::string, std::string>& translations) {
+    using namespace ICPDev::Gyeol::Schema;
+    auto* story = GetStory(buf.data());
+    std::ofstream ofs(csvPath);
+    ofs << "line_id,type,node,character,text\n";
+    for (flatbuffers::uoffset_t i = 0; i < story->line_ids()->size(); ++i) {
+        auto* lid = story->line_ids()->Get(i);
+        if (lid->size() == 0) continue;
+        std::string lineId = lid->c_str();
+        auto it = translations.find(lineId);
+        if (it != translations.end()) {
+            ofs << lineId << ",LINE,node,," << it->second << "\n";
+        }
+    }
+}
+
+// line_id를 특정 pool text로 찾는 헬퍼
+static std::string findLineIdForText(const std::vector<uint8_t>& buf, const std::string& text) {
+    using namespace ICPDev::Gyeol::Schema;
+    auto* story = GetStory(buf.data());
+    for (flatbuffers::uoffset_t i = 0; i < story->string_pool()->size(); ++i) {
+        if (std::string(story->string_pool()->Get(i)->c_str()) == text) {
+            if (i < story->line_ids()->size()) {
+                return story->line_ids()->Get(i)->c_str();
+            }
+        }
+    }
+    return "";
+}
+
+TEST(RunnerTest, LocaleOverlayBasic) {
+    // loadLocale → 번역된 대사 출력
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"Hello world!\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    // line_id 찾기
+    std::string lid = findLineIdForText(buf, "Hello world!");
+    ASSERT_FALSE(lid.empty());
+
+    // CSV 작성
+    std::string csvPath = "test_locale_basic.csv";
+    writeLocaleCSV(csvPath, buf, {{lid, "안녕하세요!"}});
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    ASSERT_TRUE(runner.loadLocale(csvPath));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "안녕하세요!");
+
+    std::remove(csvPath.c_str());
+}
+
+TEST(RunnerTest, LocaleFallback) {
+    // 번역 없는 문자열 → 원문 폴백
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"Translated line\"\n"
+        "    \"Untranslated line\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    std::string lid = findLineIdForText(buf, "Translated line");
+    ASSERT_FALSE(lid.empty());
+
+    // "Translated line"만 번역, "Untranslated line"은 번역 안 함
+    std::string csvPath = "test_locale_fallback.csv";
+    writeLocaleCSV(csvPath, buf, {{lid, "번역됨"}});
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    ASSERT_TRUE(runner.loadLocale(csvPath));
+
+    auto r1 = runner.step();
+    EXPECT_STREQ(r1.line.text, "번역됨");
+
+    auto r2 = runner.step();
+    EXPECT_STREQ(r2.line.text, "Untranslated line");
+
+    std::remove(csvPath.c_str());
+}
+
+TEST(RunnerTest, LocaleWithInterpolation) {
+    // 번역 텍스트에서 {변수} 보간 동작
+    auto buf = GyeolTest::compileScript(
+        "$ name = \"Player\"\n"
+        "label start:\n"
+        "    \"Hello {name}!\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    std::string lid = findLineIdForText(buf, "Hello {name}!");
+    ASSERT_FALSE(lid.empty());
+
+    // 번역에도 {name} 플레이스홀더 유지
+    std::string csvPath = "test_locale_interp.csv";
+    writeLocaleCSV(csvPath, buf, {{lid, "안녕 {name}님!"}});
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    ASSERT_TRUE(runner.loadLocale(csvPath));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "안녕 Player님!");
+
+    std::remove(csvPath.c_str());
+}
+
+TEST(RunnerTest, LocaleClearRevert) {
+    // clearLocale → 원문 복귀
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"Hello!\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    std::string lid = findLineIdForText(buf, "Hello!");
+    ASSERT_FALSE(lid.empty());
+
+    std::string csvPath = "test_locale_clear.csv";
+    writeLocaleCSV(csvPath, buf, {{lid, "안녕!"}});
+
+    // 1차: locale 적용
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    ASSERT_TRUE(runner.loadLocale(csvPath));
+    EXPECT_EQ(runner.getLocale(), "test_locale_clear");
+
+    auto r1 = runner.step();
+    EXPECT_STREQ(r1.line.text, "안녕!");
+
+    // clearLocale 후 재시작 → 원문
+    runner.clearLocale();
+    EXPECT_EQ(runner.getLocale(), "");
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r2 = runner.step();
+    EXPECT_STREQ(r2.line.text, "Hello!");
+
+    std::remove(csvPath.c_str());
+}
+
+// ========== 인라인 조건 텍스트 테스트 ==========
+
+TEST(RunnerTest, InlineCondTrue) {
+    // {if hp > 50} → true 분기
+    auto buf = GyeolTest::compileScript(
+        "$ hp = 80\n"
+        "label start:\n"
+        "    hero \"You have {if hp > 50}plenty of{else}low{endif} health\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "You have plenty of health");
+}
+
+TEST(RunnerTest, InlineCondFalse) {
+    // {if hp > 50} → false 분기
+    auto buf = GyeolTest::compileScript(
+        "$ hp = 30\n"
+        "label start:\n"
+        "    hero \"You have {if hp > 50}plenty of{else}low{endif} health\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "You have low health");
+}
+
+TEST(RunnerTest, InlineCondTruthyTrue) {
+    // {if has_key} → 변수 있고 true
+    auto buf = GyeolTest::compileScript(
+        "$ has_key = true\n"
+        "label start:\n"
+        "    \"The door is {if has_key}unlocked{else}locked{endif}.\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "The door is unlocked.");
+}
+
+TEST(RunnerTest, InlineCondTruthyFalse) {
+    // {if has_key} → 변수 없음 → false
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"The door is {if has_key}unlocked{else}locked{endif}.\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "The door is locked.");
+}
+
+TEST(RunnerTest, InlineCondNoElse) {
+    // {if has_key}...{endif} — else 없음, false면 빈 텍스트
+    auto buf = GyeolTest::compileScript(
+        "$ has_key = false\n"
+        "label start:\n"
+        "    \"Door{if has_key} (unlocked){endif}.\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "Door.");
+}
+
+TEST(RunnerTest, InlineCondWithVar) {
+    // 조건 분기 안에 {변수} 보간 중첩
+    auto buf = GyeolTest::compileScript(
+        "$ hp = 80\n"
+        "$ name = \"Hero\"\n"
+        "label start:\n"
+        "    \"{if hp > 0}{name} lives{else}Game over{endif}\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "Hero lives");
+}
+
+TEST(RunnerTest, InlineCondString) {
+    // 문자열 비교 (\\\" → 파서가 \" 로 인식 → 보간시 "mage" 리터럴)
+    auto buf = GyeolTest::compileScript(
+        "$ class = \"mage\"\n"
+        "label start:\n"
+        "    \"Weapon: {if class == \\\"mage\\\"}Staff{else}Sword{endif}\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "Weapon: Staff");
+}
+
+TEST(RunnerTest, InlineCondInChoice) {
+    // 선택지 텍스트에서 인라인 조건
+    auto buf = GyeolTest::compileScript(
+        "$ gold = 100\n"
+        "label start:\n"
+        "    menu:\n"
+        "        \"Buy potion{if gold >= 50} (affordable){endif}\" -> start\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::CHOICES);
+    ASSERT_EQ(r.choices.size(), 1u);
+    EXPECT_STREQ(r.choices[0].text, "Buy potion (affordable)");
+}
+
+// ========== 태그 시스템 테스트 ==========
+
+TEST(RunnerTest, TagsExposedInLineData) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    hero \"Hello!\" #mood:angry\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.character, "hero");
+    EXPECT_STREQ(r.line.text, "Hello!");
+    ASSERT_EQ(r.line.tags.size(), 1u);
+    EXPECT_STREQ(r.line.tags[0].first, "mood");
+    EXPECT_STREQ(r.line.tags[0].second, "angry");
+}
+
+TEST(RunnerTest, MultipleTagsExposed) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    hero \"Hello!\" #mood:angry #pose:arms_crossed #voice:hero.wav\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    ASSERT_EQ(r.line.tags.size(), 3u);
+    EXPECT_STREQ(r.line.tags[0].first, "mood");
+    EXPECT_STREQ(r.line.tags[0].second, "angry");
+    EXPECT_STREQ(r.line.tags[1].first, "pose");
+    EXPECT_STREQ(r.line.tags[1].second, "arms_crossed");
+    EXPECT_STREQ(r.line.tags[2].first, "voice");
+    EXPECT_STREQ(r.line.tags[2].second, "hero.wav");
+}
+
+TEST(RunnerTest, NoTagsEmptyVector) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    hero \"Hello!\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_TRUE(r.line.tags.empty());
+}
+
+// =================================================================
+// --- Import 통합 테스트 ---
+// =================================================================
+
+TEST(RunnerTest, ImportedNodeJump) {
+    // main에서 import된 파일의 노드로 jump
+    std::vector<std::pair<std::string, std::string>> files = {
+        {"test_run_import_common.gyeol",
+         "label greeting:\n"
+         "    narrator \"Hello from imported!\"\n"},
+        {"test_run_import_main.gyeol",
+         "import \"test_run_import_common.gyeol\"\n"
+         "\n"
+         "label start:\n"
+         "    narrator \"Starting...\"\n"
+         "    jump greeting\n"}
+    };
+
+    auto buf = GyeolTest::compileMultiFileScript(files, "test_run_import_main.gyeol");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    // step 1: "Starting..."
+    auto r1 = runner.step();
+    EXPECT_EQ(r1.type, StepType::LINE);
+    EXPECT_STREQ(r1.line.text, "Starting...");
+
+    // step 2: jump → greeting 노드의 "Hello from imported!"
+    auto r2 = runner.step();
+    EXPECT_EQ(r2.type, StepType::LINE);
+    EXPECT_STREQ(r2.line.text, "Hello from imported!");
+
+    // step 3: END
+    auto r3 = runner.step();
+    EXPECT_EQ(r3.type, StepType::END);
+}
+
+TEST(RunnerTest, ImportedGlobalVarsInitialized) {
+    // import된 파일의 global vars가 런타임에서 접근 가능
+    std::vector<std::pair<std::string, std::string>> files = {
+        {"test_run_import_gv_common.gyeol",
+         "$ imported_var = 99\n"
+         "\n"
+         "label common:\n"
+         "    narrator \"common\"\n"},
+        {"test_run_import_gv_main.gyeol",
+         "import \"test_run_import_gv_common.gyeol\"\n"
+         "\n"
+         "label start:\n"
+         "    narrator \"Value is {imported_var}\"\n"}
+    };
+
+    auto buf = GyeolTest::compileMultiFileScript(files, "test_run_import_gv_main.gyeol");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "Value is 99");
+}
+
+// =================================================================
+// --- Return / CallWithReturn 런타임 테스트 ---
+// =================================================================
+
+TEST(RunnerTest, CallWithReturnLiteral) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = call calc\n"
+        "    narrator \"{x}\"\n"
+        "\n"
+        "label calc:\n"
+        "    return 42\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "42");
+
+    EXPECT_EQ(runner.getVariable("x").type, Variant::INT);
+    EXPECT_EQ(runner.getVariable("x").i, 42);
+}
+
+TEST(RunnerTest, CallWithReturnVariable) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ result = call compute\n"
+        "    narrator \"{result}\"\n"
+        "\n"
+        "label compute:\n"
+        "    $ val = 100\n"
+        "    return val\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "100");
+
+    EXPECT_EQ(runner.getVariable("result").i, 100);
+}
+
+TEST(RunnerTest, CallWithReturnExpression) {
+    auto buf = GyeolTest::compileScript(
+        "$ a = 10\n"
+        "$ b = 20\n"
+        "\n"
+        "label start:\n"
+        "    $ sum = call add_them\n"
+        "    narrator \"{sum}\"\n"
+        "\n"
+        "label add_them:\n"
+        "    return a + b\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "30");
+
+    EXPECT_EQ(runner.getVariable("sum").i, 30);
+}
+
+TEST(RunnerTest, CallWithReturnString) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ msg = call get_msg\n"
+        "    narrator \"{msg}\"\n"
+        "\n"
+        "label get_msg:\n"
+        "    return \"hello\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "hello");
+
+    EXPECT_EQ(runner.getVariable("msg").type, Variant::STRING);
+    EXPECT_EQ(runner.getVariable("msg").s, "hello");
+}
+
+TEST(RunnerTest, BareReturnNoValueCapture) {
+    // bare return → 변수 미변경
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = 999\n"
+        "    $ x = call sub\n"
+        "    narrator \"{x}\"\n"
+        "\n"
+        "label sub:\n"
+        "    return\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    // bare return → hasPendingReturn_ = false → 변수 미변경 → 999
+    EXPECT_STREQ(r.line.text, "999");
+    EXPECT_EQ(runner.getVariable("x").i, 999);
+}
+
+TEST(RunnerTest, ImplicitReturnNoValue) {
+    // 노드 끝(return 없음) → 변수 미변경
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = 777\n"
+        "    $ x = call sub\n"
+        "    narrator \"{x}\"\n"
+        "\n"
+        "label sub:\n"
+        "    $ temp = 1\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    // 명시적 return 없음 → 변수 미변경 → 777
+    EXPECT_STREQ(r.line.text, "777");
+    EXPECT_EQ(runner.getVariable("x").i, 777);
+}
+
+TEST(RunnerTest, ReturnWithoutCallFrame) {
+    // call stack 없이 return → 스토리 종료
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    narrator \"before\"\n"
+        "    return 42\n"
+        "    narrator \"after\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r1 = runner.step();
+    EXPECT_EQ(r1.type, StepType::LINE);
+    EXPECT_STREQ(r1.line.text, "before");
+
+    // return without call frame → END
+    auto r2 = runner.step();
+    EXPECT_EQ(r2.type, StepType::END);
+    EXPECT_TRUE(runner.isFinished());
+}
+
+TEST(RunnerTest, ExistingCallStillWorks) {
+    // 기존 call sub + return 42 → 값 무시 (returnVarName 비어있음)
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    call sub\n"
+        "    narrator \"back\"\n"
+        "\n"
+        "label sub:\n"
+        "    narrator \"in sub\"\n"
+        "    return 42\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r1 = runner.step();
+    EXPECT_EQ(r1.type, StepType::LINE);
+    EXPECT_STREQ(r1.line.text, "in sub");
+
+    // return 42 → call stack pop → 호출자로 복귀
+    auto r2 = runner.step();
+    EXPECT_EQ(r2.type, StepType::LINE);
+    EXPECT_STREQ(r2.line.text, "back");
+
+    auto r3 = runner.step();
+    EXPECT_EQ(r3.type, StepType::END);
+}
+
+TEST(RunnerTest, NestedCallsWithReturn) {
+    // A → B(return capture) → C(return capture) → 중첩 반환
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ outer = call mid\n"
+        "    narrator \"{outer}\"\n"
+        "\n"
+        "label mid:\n"
+        "    $ inner = call deep\n"
+        "    return inner + 100\n"
+        "\n"
+        "label deep:\n"
+        "    return 5\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "105"); // deep returns 5, mid returns 5+100=105
+    EXPECT_EQ(runner.getVariable("outer").i, 105);
+}
+
+TEST(RunnerTest, CallWithReturnThenContinue) {
+    // return 후 다음 명령 실행
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ val = call helper\n"
+        "    narrator \"Got {val}\"\n"
+        "    narrator \"Done\"\n"
+        "\n"
+        "label helper:\n"
+        "    return 7\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r1 = runner.step();
+    EXPECT_EQ(r1.type, StepType::LINE);
+    EXPECT_STREQ(r1.line.text, "Got 7");
+
+    auto r2 = runner.step();
+    EXPECT_EQ(r2.type, StepType::LINE);
+    EXPECT_STREQ(r2.line.text, "Done");
+
+    auto r3 = runner.step();
+    EXPECT_EQ(r3.type, StepType::END);
+}
+
+TEST(RunnerTest, ReturnFloat) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ f = call get_pi\n"
+        "\n"
+        "label get_pi:\n"
+        "    return 3.14\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.step(); // END (no dialogue)
+
+    EXPECT_EQ(runner.getVariable("f").type, Variant::FLOAT);
+    EXPECT_NEAR(runner.getVariable("f").f, 3.14f, 0.001f);
+}
+
+TEST(RunnerTest, ReturnBool) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ flag = call check\n"
+        "\n"
+        "label check:\n"
+        "    return true\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.step(); // END
+
+    EXPECT_EQ(runner.getVariable("flag").type, Variant::BOOL);
+    EXPECT_TRUE(runner.getVariable("flag").b);
+}
+
+// ===================================================================
+// Function Parameters (함수 매개변수) 런타임 테스트
+// ===================================================================
+
+TEST(RunnerTest, CallWithSingleParam) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    call greet(\"Hero\")\n"
+        "\n"
+        "label greet(name):\n"
+        "    narrator \"Hello {name}!\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "Hello Hero!");
+}
+
+TEST(RunnerTest, CallWithMultipleParams) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    call greet(\"Hero\", \"Mr\")\n"
+        "\n"
+        "label greet(name, title):\n"
+        "    narrator \"Hello {title} {name}!\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "Hello Mr Hero!");
+}
+
+TEST(RunnerTest, ParamLocalScope) {
+    // 매개변수 x는 call 후 호출자에서 사라져야 함 (기존에 없었으므로 erase)
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    call func(42)\n"
+        "    narrator \"{x}\"\n"
+        "\n"
+        "label func(x):\n"
+        "    narrator \"{x}\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "42");
+
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    // x가 원래 없었으므로 복원 시 삭제됨 → hasVariable 검증
+    EXPECT_FALSE(runner.hasVariable("x"));
+}
+
+TEST(RunnerTest, ParamShadowsGlobal) {
+    // 전역 변수 x=100이 매개변수로 섀도되고, 복원됨
+    auto buf = GyeolTest::compileScript(
+        "$ x = 100\n"
+        "\n"
+        "label start:\n"
+        "    call func(42)\n"
+        "    narrator \"{x}\"\n"
+        "\n"
+        "label func(x):\n"
+        "    narrator \"{x}\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "42");
+
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "100");  // 전역 값 복원됨
+}
+
+TEST(RunnerTest, ParamExpressionArgs) {
+    auto buf = GyeolTest::compileScript(
+        "$ a = 10\n"
+        "\n"
+        "label start:\n"
+        "    call func(a + 5, a * 2)\n"
+        "\n"
+        "label func(x, y):\n"
+        "    narrator \"{x} {y}\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "15 20");
+}
+
+TEST(RunnerTest, CallWithReturnAndParams) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ result = call add(10, 20)\n"
+        "    narrator \"{result}\"\n"
+        "\n"
+        "label add(a, b):\n"
+        "    return a + b\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "30");
+    EXPECT_EQ(runner.getVariable("result").i, 30);
+}
+
+TEST(RunnerTest, NestedCallsWithParams) {
+    // A→B(x=1)→C(x=2), 각 레벨에서 x 섀도, 복원 확인
+    auto buf = GyeolTest::compileScript(
+        "$ x = 0\n"
+        "\n"
+        "label start:\n"
+        "    call outer(1)\n"
+        "    narrator \"{x}\"\n"
+        "\n"
+        "label outer(x):\n"
+        "    call inner(2)\n"
+        "    narrator \"{x}\"\n"
+        "\n"
+        "label inner(x):\n"
+        "    narrator \"{x}\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "2");  // inner: x=2
+
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "1");  // outer: x=1 (inner 복원 후)
+
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "0");  // start: x=0 (outer 복원 후)
+}
+
+TEST(RunnerTest, ParamDefaultZero) {
+    // 인자 부족 시 Int(0) 기본값
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    call func(42)\n"
+        "\n"
+        "label func(a, b):\n"
+        "    narrator \"{a} {b}\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "42 0");
+}
+
+TEST(RunnerTest, ExistingCallNoParamsStillWorks) {
+    // 기존 call (매개변수 없음) 하위 호환
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    call sub\n"
+        "    narrator \"back\"\n"
+        "\n"
+        "label sub:\n"
+        "    narrator \"in sub\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "in sub");
+
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "back");
+}
+
+// ===================================================================
+// Visit Count 런타임 테스트
+// ===================================================================
+
+TEST(RunnerTest, BasicVisitCount) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    "first"
+    jump start
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    // start 진입 시 1회
+    EXPECT_EQ(runner.getVisitCount("start"), 1);
+
+    auto r = runner.step(); // "first" (visit 1)
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "first");
+
+    // step() processes jump start (visit 2) → continues → "first" again
+    r = runner.step();
+    EXPECT_STREQ(r.line.text, "first");
+    EXPECT_EQ(runner.getVisitCount("start"), 2);
+
+    // step() processes jump start (visit 3) → continues → "first" again
+    r = runner.step();
+    EXPECT_STREQ(r.line.text, "first");
+    EXPECT_EQ(runner.getVisitCount("start"), 3);
+}
+
+TEST(RunnerTest, VisitCountZeroUnvisited) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    "hello"
+label other:
+    "other"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    // start는 방문, other는 미방문
+    EXPECT_EQ(runner.getVisitCount("start"), 1);
+    EXPECT_EQ(runner.getVisitCount("other"), 0);
+    EXPECT_EQ(runner.getVisitCount("nonexistent"), 0);
+}
+
+TEST(RunnerTest, VisitedBoolCheck) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    "in start"
+    jump shop
+label shop:
+    "in shop"
+label inn:
+    "in inn"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    EXPECT_TRUE(runner.hasVisited("start"));
+    EXPECT_FALSE(runner.hasVisited("shop"));
+    EXPECT_FALSE(runner.hasVisited("inn"));
+
+    runner.step(); // "in start"
+    runner.step(); // jump shop → shop 진입
+
+    EXPECT_TRUE(runner.hasVisited("shop"));
+    EXPECT_FALSE(runner.hasVisited("inn"));
+}
+
+TEST(RunnerTest, VisitCountInExpression) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    jump target
+label target:
+    $ count = visit_count("target")
+    narrator "{count}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    // start(1) → jump target → target(1)
+    auto r = runner.step(); // $ count = visit_count("target") → 1, then narrator "1"
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "1");
+}
+
+TEST(RunnerTest, VisitedInCondition) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    if visited("shop") -> been_there
+    "First time"
+    jump shop
+label shop:
+    "In shop"
+    jump start
+label been_there:
+    "Welcome back"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    // 첫 방문: shop 미방문 → "First time"
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "First time");
+
+    // jump shop
+    r = runner.step(); // "In shop"
+    EXPECT_STREQ(r.line.text, "In shop");
+
+    // jump start → visited("shop") == true → been_there
+    r = runner.step(); // "Welcome back"
+    EXPECT_STREQ(r.line.text, "Welcome back");
+}
+
+TEST(RunnerTest, VisitCountComparison) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    if visit_count("start") > 2 -> done
+    "Again"
+    jump start
+label done:
+    "Enough"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    // visit 1: count=1, not >2 → "Again"
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "Again");
+
+    // jump start → visit 2: count=2, not >2 → "Again"
+    r = runner.step();
+    EXPECT_STREQ(r.line.text, "Again");
+
+    // jump start → visit 3: count=3, >2 → done → "Enough"
+    r = runner.step();
+    EXPECT_STREQ(r.line.text, "Enough");
+}
+
+TEST(RunnerTest, VisitCountInterpolation) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    "Visit {visit_count(start)}"
+    jump start
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step(); // visit 1
+    EXPECT_STREQ(r.line.text, "Visit 1");
+
+    r = runner.step(); // jump start → visit 2
+    EXPECT_STREQ(r.line.text, "Visit 2");
+}
+
+TEST(RunnerTest, VisitedInlineCondition) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    jump shop
+label shop:
+    "In shop"
+    jump check
+label check:
+    "{if visited(shop)}been{else}new{endif}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step(); // "In shop"
+    EXPECT_STREQ(r.line.text, "In shop");
+
+    r = runner.step(); // "{if visited(shop)}been{else}new{endif}"
+    EXPECT_STREQ(r.line.text, "been");
+}
+
+TEST(RunnerTest, GetVisitCountAPI) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    "s"
+    call sub
+    "back"
+label sub:
+    "in sub"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    EXPECT_EQ(runner.getVisitCount("start"), 1);
+    EXPECT_EQ(runner.getVisitCount("sub"), 0);
+
+    runner.step(); // "s"
+    runner.step(); // call sub → "in sub"
+
+    EXPECT_EQ(runner.getVisitCount("sub"), 1);
+    EXPECT_EQ(runner.getVisitCount("start"), 1);
+}
+
+TEST(RunnerTest, HasVisitedAPI) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    "s"
+    jump other
+label other:
+    "o"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    EXPECT_TRUE(runner.hasVisited("start"));
+    EXPECT_FALSE(runner.hasVisited("other"));
+
+    runner.step(); // "s"
+    runner.step(); // jump other → "o"
+
+    EXPECT_TRUE(runner.hasVisited("other"));
+    EXPECT_FALSE(runner.hasVisited("nonexistent"));
 }

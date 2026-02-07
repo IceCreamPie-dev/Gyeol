@@ -340,6 +340,104 @@ TEST(ParserTest, NoVoiceAsset) {
     EXPECT_EQ(line->voice_asset_id(), -1);
 }
 
+// --- 태그 시스템 ---
+
+TEST(ParserTest, SingleTag) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    hero \"hello\" #mood:angry\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* line = story->nodes()->Get(0)->lines()->Get(0)->data_as_Line();
+    ASSERT_NE(line->tags(), nullptr);
+    ASSERT_EQ(line->tags()->size(), 1u);
+    auto* tag = line->tags()->Get(0);
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(tag->key_id()))->c_str(), "mood");
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(tag->value_id()))->c_str(), "angry");
+}
+
+TEST(ParserTest, MultipleTags) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    hero \"hello\" #mood:angry #pose:arms_crossed\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* line = story->nodes()->Get(0)->lines()->Get(0)->data_as_Line();
+    ASSERT_NE(line->tags(), nullptr);
+    ASSERT_EQ(line->tags()->size(), 2u);
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->tags()->Get(0)->key_id()))->c_str(), "mood");
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->tags()->Get(0)->value_id()))->c_str(), "angry");
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->tags()->Get(1)->key_id()))->c_str(), "pose");
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->tags()->Get(1)->value_id()))->c_str(), "arms_crossed");
+}
+
+TEST(ParserTest, VoiceTagBackwardCompat) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    hero \"hello\" #voice:hero.wav #mood:happy\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* line = story->nodes()->Get(0)->lines()->Get(0)->data_as_Line();
+    // voice_asset_id 하위 호환
+    EXPECT_GE(line->voice_asset_id(), 0);
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->voice_asset_id()))->c_str(), "hero.wav");
+    // tags에도 voice 포함
+    ASSERT_NE(line->tags(), nullptr);
+    ASSERT_EQ(line->tags()->size(), 2u);
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->tags()->Get(0)->key_id()))->c_str(), "voice");
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->tags()->Get(1)->key_id()))->c_str(), "mood");
+}
+
+TEST(ParserTest, TagWithoutValue) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    hero \"hello\" #important\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* line = story->nodes()->Get(0)->lines()->Get(0)->data_as_Line();
+    ASSERT_NE(line->tags(), nullptr);
+    ASSERT_EQ(line->tags()->size(), 1u);
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->tags()->Get(0)->key_id()))->c_str(), "important");
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->tags()->Get(0)->value_id()))->c_str(), "");
+}
+
+TEST(ParserTest, NarrationWithTags) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"narration text\" #effect:fade_in\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* line = story->nodes()->Get(0)->lines()->Get(0)->data_as_Line();
+    EXPECT_EQ(line->character_id(), -1);
+    ASSERT_NE(line->tags(), nullptr);
+    ASSERT_EQ(line->tags()->size(), 1u);
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->tags()->Get(0)->key_id()))->c_str(), "effect");
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->tags()->Get(0)->value_id()))->c_str(), "fade_in");
+}
+
 // --- 새 기능: global_vars ---
 
 TEST(ParserTest, GlobalVarInt) {
@@ -1077,4 +1175,963 @@ TEST(ParserErrorTest, RandomInvalidTargetError) {
     }
     EXPECT_GE(errorCount, 2);
     std::remove(path.c_str());
+}
+
+// --- Line ID 테스트 ---
+
+TEST(ParserTest, LineIdGenerated) {
+    // 대사와 선택지에 line_id 생성, 구조적 문자열(노드명 등)은 빈 line_id
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    hero \"Hello world!\"\n"
+        "    menu:\n"
+        "        \"Go left\" -> start\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    ASSERT_NE(story->line_ids(), nullptr);
+    EXPECT_EQ(story->line_ids()->size(), story->string_pool()->size());
+
+    // line_id 형식 확인: 번역 대상(text)은 비어있지 않아야 함
+    // "Hello world!"의 pool index 찾기
+    int helloIdx = -1;
+    int choiceIdx = -1;
+    for (flatbuffers::uoffset_t i = 0; i < story->string_pool()->size(); ++i) {
+        std::string s = story->string_pool()->Get(i)->c_str();
+        if (s == "Hello world!") helloIdx = static_cast<int>(i);
+        if (s == "Go left") choiceIdx = static_cast<int>(i);
+    }
+    ASSERT_GE(helloIdx, 0);
+    ASSERT_GE(choiceIdx, 0);
+
+    // 대사 line_id: "start:N:hash" 형식
+    std::string helloLid = story->line_ids()->Get(static_cast<flatbuffers::uoffset_t>(helloIdx))->c_str();
+    EXPECT_FALSE(helloLid.empty());
+    EXPECT_EQ(helloLid.substr(0, 6), "start:");
+
+    // 선택지 line_id
+    std::string choiceLid = story->line_ids()->Get(static_cast<flatbuffers::uoffset_t>(choiceIdx))->c_str();
+    EXPECT_FALSE(choiceLid.empty());
+    EXPECT_EQ(choiceLid.substr(0, 6), "start:");
+
+    // 구조적 문자열(노드명 "start", 캐릭터명 "hero")은 빈 line_id
+    int startIdx = -1, heroIdx = -1;
+    for (flatbuffers::uoffset_t i = 0; i < story->string_pool()->size(); ++i) {
+        std::string s = story->string_pool()->Get(i)->c_str();
+        if (s == "start") startIdx = static_cast<int>(i);
+        if (s == "hero") heroIdx = static_cast<int>(i);
+    }
+    if (startIdx >= 0) {
+        EXPECT_EQ(std::string(story->line_ids()->Get(static_cast<flatbuffers::uoffset_t>(startIdx))->c_str()), "");
+    }
+    if (heroIdx >= 0) {
+        EXPECT_EQ(std::string(story->line_ids()->Get(static_cast<flatbuffers::uoffset_t>(heroIdx))->c_str()), "");
+    }
+}
+
+TEST(ParserTest, LineIdStability) {
+    // 같은 텍스트 → 같은 hash, 다른 텍스트 → 다른 hash
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"Hello\"\n"
+        "    \"World\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+
+    // "Hello"와 "World"의 line_id hash 부분이 다른지 확인
+    int helloIdx = -1, worldIdx = -1;
+    for (flatbuffers::uoffset_t i = 0; i < story->string_pool()->size(); ++i) {
+        std::string s = story->string_pool()->Get(i)->c_str();
+        if (s == "Hello") helloIdx = static_cast<int>(i);
+        if (s == "World") worldIdx = static_cast<int>(i);
+    }
+    ASSERT_GE(helloIdx, 0);
+    ASSERT_GE(worldIdx, 0);
+
+    std::string helloLid = story->line_ids()->Get(static_cast<flatbuffers::uoffset_t>(helloIdx))->c_str();
+    std::string worldLid = story->line_ids()->Get(static_cast<flatbuffers::uoffset_t>(worldIdx))->c_str();
+    EXPECT_NE(helloLid, worldLid);
+
+    // hash 부분 (마지막 4자리) 추출
+    std::string helloHash = helloLid.substr(helloLid.rfind(':') + 1);
+    std::string worldHash = worldLid.substr(worldLid.rfind(':') + 1);
+    EXPECT_EQ(helloHash.size(), 4u);
+    EXPECT_EQ(worldHash.size(), 4u);
+    EXPECT_NE(helloHash, worldHash);
+}
+
+TEST(ParserTest, LineIdInExportedGyb) {
+    // .gyb에 line_ids 배열이 포함되어 있는지 확인
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"Test line\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    ASSERT_NE(story, nullptr);
+    ASSERT_NE(story->line_ids(), nullptr);
+    EXPECT_GT(story->line_ids()->size(), 0u);
+
+    // string_pool과 line_ids 크기 동일
+    EXPECT_EQ(story->string_pool()->size(), story->line_ids()->size());
+}
+
+TEST(ParserTest, ExportStringsCSV) {
+    // exportStrings() → CSV 파일 생성 및 내용 검증
+    std::string inPath = "test_export_strings.gyeol";
+    std::string csvPath = "test_export_strings.csv";
+    {
+        std::ofstream ofs(inPath);
+        ofs << "label start:\n"
+            << "    hero \"Hello world!\"\n"
+            << "    menu:\n"
+            << "        \"Go left\" -> start\n";
+    }
+
+    Parser parser;
+    ASSERT_TRUE(parser.parse(inPath));
+    ASSERT_TRUE(parser.exportStrings(csvPath));
+
+    // CSV 읽기
+    std::ifstream ifs(csvPath);
+    ASSERT_TRUE(ifs.is_open());
+
+    std::string header;
+    std::getline(ifs, header);
+    EXPECT_EQ(header, "line_id,type,node,character,text");
+
+    // 최소 2행 (대사 + 선택지)
+    std::vector<std::string> lines;
+    std::string line;
+    while (std::getline(ifs, line)) {
+        if (!line.empty()) lines.push_back(line);
+    }
+    EXPECT_GE(lines.size(), 2u);
+
+    // LINE 타입 행이 있는지
+    bool foundLine = false;
+    bool foundChoice = false;
+    for (const auto& l : lines) {
+        if (l.find(",LINE,") != std::string::npos && l.find("Hello world!") != std::string::npos) {
+            foundLine = true;
+        }
+        if (l.find(",CHOICE,") != std::string::npos && l.find("Go left") != std::string::npos) {
+            foundChoice = true;
+        }
+    }
+    EXPECT_TRUE(foundLine);
+    EXPECT_TRUE(foundChoice);
+
+    std::remove(inPath.c_str());
+    std::remove(csvPath.c_str());
+}
+
+// =================================================================
+// --- Import 테스트 ---
+// =================================================================
+
+TEST(ParserTest, ImportBasicMerge) {
+    // common.gyeol에 label 하나, main에서 import + 자체 label
+    std::vector<std::pair<std::string, std::string>> files = {
+        {"test_import_common.gyeol",
+         "label common_node:\n"
+         "    narrator \"Common text\"\n"},
+        {"test_import_main.gyeol",
+         "import \"test_import_common.gyeol\"\n"
+         "\n"
+         "label start:\n"
+         "    hero \"Main text\"\n"
+         "    jump common_node\n"}
+    };
+
+    auto buf = GyeolTest::compileMultiFileScript(files, "test_import_main.gyeol");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    ASSERT_NE(story, nullptr);
+    EXPECT_EQ(story->nodes()->size(), 2u);
+
+    // start_node는 메인 파일의 첫 label
+    EXPECT_STREQ(story->start_node_name()->c_str(), "start");
+}
+
+TEST(ParserTest, ImportMultipleFiles) {
+    std::vector<std::pair<std::string, std::string>> files = {
+        {"test_import_a.gyeol",
+         "label node_a:\n"
+         "    narrator \"A\"\n"},
+        {"test_import_b.gyeol",
+         "label node_b:\n"
+         "    narrator \"B\"\n"},
+        {"test_import_multi_main.gyeol",
+         "import \"test_import_a.gyeol\"\n"
+         "import \"test_import_b.gyeol\"\n"
+         "\n"
+         "label start:\n"
+         "    hero \"Main\"\n"}
+    };
+
+    auto buf = GyeolTest::compileMultiFileScript(files, "test_import_multi_main.gyeol");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    ASSERT_NE(story, nullptr);
+    EXPECT_EQ(story->nodes()->size(), 3u);
+}
+
+TEST(ParserTest, ImportGlobalVars) {
+    std::vector<std::pair<std::string, std::string>> files = {
+        {"test_import_gv_common.gyeol",
+         "$ shared_var = 42\n"
+         "\n"
+         "label common:\n"
+         "    narrator \"common\"\n"},
+        {"test_import_gv_main.gyeol",
+         "import \"test_import_gv_common.gyeol\"\n"
+         "\n"
+         "label start:\n"
+         "    narrator \"main\"\n"}
+    };
+
+    auto buf = GyeolTest::compileMultiFileScript(files, "test_import_gv_main.gyeol");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    ASSERT_NE(story, nullptr);
+    ASSERT_GE(story->global_vars()->size(), 1u);
+
+    auto* gv = story->global_vars()->Get(0);
+    auto varNameId = gv->var_name_id();
+    EXPECT_STREQ(story->string_pool()->Get(varNameId)->c_str(), "shared_var");
+    EXPECT_EQ(gv->value_type(), ValueData::IntValue);
+    EXPECT_EQ(gv->value_as_IntValue()->val(), 42);
+}
+
+TEST(ParserTest, ImportStringPoolShared) {
+    // 양쪽 파일에 같은 문자열 → pool에서 중복 제거
+    std::vector<std::pair<std::string, std::string>> files = {
+        {"test_import_sp_common.gyeol",
+         "label common:\n"
+         "    hero \"shared text\"\n"},
+        {"test_import_sp_main.gyeol",
+         "import \"test_import_sp_common.gyeol\"\n"
+         "\n"
+         "label start:\n"
+         "    hero \"shared text\"\n"}
+    };
+
+    auto buf = GyeolTest::compileMultiFileScript(files, "test_import_sp_main.gyeol");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    ASSERT_NE(story, nullptr);
+
+    // "shared text"와 "hero"는 각각 1번만 pool에 존재해야 함
+    int count = 0;
+    for (unsigned i = 0; i < story->string_pool()->size(); i++) {
+        if (std::string(story->string_pool()->Get(i)->c_str()) == "shared text") {
+            count++;
+        }
+    }
+    EXPECT_EQ(count, 1);
+}
+
+TEST(ParserTest, ImportStartNodeFromMainFile) {
+    // import가 먼저 와도 main 파일의 첫 label이 start_node
+    std::vector<std::pair<std::string, std::string>> files = {
+        {"test_import_sn_common.gyeol",
+         "label imported_first:\n"
+         "    narrator \"I was imported\"\n"},
+        {"test_import_sn_main.gyeol",
+         "import \"test_import_sn_common.gyeol\"\n"
+         "\n"
+         "label main_start:\n"
+         "    narrator \"I am main\"\n"}
+    };
+
+    auto buf = GyeolTest::compileMultiFileScript(files, "test_import_sn_main.gyeol");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    ASSERT_NE(story, nullptr);
+    EXPECT_STREQ(story->start_node_name()->c_str(), "main_start");
+}
+
+TEST(ParserTest, ImportPreservesOrder) {
+    // import된 노드가 먼저, 그 다음 main 노드
+    std::vector<std::pair<std::string, std::string>> files = {
+        {"test_import_ord_common.gyeol",
+         "label alpha:\n"
+         "    narrator \"A\"\n"},
+        {"test_import_ord_main.gyeol",
+         "import \"test_import_ord_common.gyeol\"\n"
+         "\n"
+         "label beta:\n"
+         "    narrator \"B\"\n"}
+    };
+
+    auto buf = GyeolTest::compileMultiFileScript(files, "test_import_ord_main.gyeol");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    ASSERT_NE(story, nullptr);
+    ASSERT_EQ(story->nodes()->size(), 2u);
+    EXPECT_STREQ(story->nodes()->Get(0)->name()->c_str(), "alpha");
+    EXPECT_STREQ(story->nodes()->Get(1)->name()->c_str(), "beta");
+}
+
+TEST(ParserTest, ImportNestedFiles) {
+    // A imports B, B imports C → 3단 중첩
+    std::vector<std::pair<std::string, std::string>> files = {
+        {"test_import_nest_c.gyeol",
+         "label node_c:\n"
+         "    narrator \"C\"\n"},
+        {"test_import_nest_b.gyeol",
+         "import \"test_import_nest_c.gyeol\"\n"
+         "\n"
+         "label node_b:\n"
+         "    narrator \"B\"\n"},
+        {"test_import_nest_a.gyeol",
+         "import \"test_import_nest_b.gyeol\"\n"
+         "\n"
+         "label node_a:\n"
+         "    narrator \"A\"\n"}
+    };
+
+    auto buf = GyeolTest::compileMultiFileScript(files, "test_import_nest_a.gyeol");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    ASSERT_NE(story, nullptr);
+    EXPECT_EQ(story->nodes()->size(), 3u);
+    // 순서: C → B → A (깊이 우선)
+    EXPECT_STREQ(story->nodes()->Get(0)->name()->c_str(), "node_c");
+    EXPECT_STREQ(story->nodes()->Get(1)->name()->c_str(), "node_b");
+    EXPECT_STREQ(story->nodes()->Get(2)->name()->c_str(), "node_a");
+}
+
+// --- Import 에러 테스트 ---
+
+TEST(ParserErrorTest, ImportCircularDetection) {
+    // A imports B, B imports A → 순환 에러
+    {
+        std::ofstream ofs("test_import_circ_a.gyeol");
+        ofs << "import \"test_import_circ_b.gyeol\"\n"
+               "\n"
+               "label node_a:\n"
+               "    narrator \"A\"\n";
+    }
+    {
+        std::ofstream ofs("test_import_circ_b.gyeol");
+        ofs << "import \"test_import_circ_a.gyeol\"\n"
+               "\n"
+               "label node_b:\n"
+               "    narrator \"B\"\n";
+    }
+
+    Parser parser;
+    EXPECT_FALSE(parser.parse("test_import_circ_a.gyeol"));
+
+    bool foundCircular = false;
+    for (const auto& err : parser.getErrors()) {
+        if (err.find("circular import") != std::string::npos) {
+            foundCircular = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(foundCircular);
+
+    std::remove("test_import_circ_a.gyeol");
+    std::remove("test_import_circ_b.gyeol");
+}
+
+TEST(ParserErrorTest, ImportSelfCircular) {
+    {
+        std::ofstream ofs("test_import_self.gyeol");
+        ofs << "import \"test_import_self.gyeol\"\n"
+               "\n"
+               "label start:\n"
+               "    narrator \"hello\"\n";
+    }
+
+    Parser parser;
+    EXPECT_FALSE(parser.parse("test_import_self.gyeol"));
+
+    bool foundCircular = false;
+    for (const auto& err : parser.getErrors()) {
+        if (err.find("circular import") != std::string::npos) {
+            foundCircular = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(foundCircular);
+
+    std::remove("test_import_self.gyeol");
+}
+
+TEST(ParserErrorTest, ImportFileNotFound) {
+    {
+        std::ofstream ofs("test_import_notfound.gyeol");
+        ofs << "import \"nonexistent_file.gyeol\"\n"
+               "\n"
+               "label start:\n"
+               "    narrator \"hello\"\n";
+    }
+
+    Parser parser;
+    EXPECT_FALSE(parser.parse("test_import_notfound.gyeol"));
+
+    bool foundNotFound = false;
+    for (const auto& err : parser.getErrors()) {
+        if (err.find("imported file not found") != std::string::npos) {
+            foundNotFound = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(foundNotFound);
+
+    std::remove("test_import_notfound.gyeol");
+}
+
+TEST(ParserErrorTest, ImportDuplicateLabel) {
+    std::vector<std::pair<std::string, std::string>> files = {
+        {"test_import_dup_common.gyeol",
+         "label shared_name:\n"
+         "    narrator \"common\"\n"},
+        {"test_import_dup_main.gyeol",
+         "import \"test_import_dup_common.gyeol\"\n"
+         "\n"
+         "label shared_name:\n"
+         "    narrator \"main\"\n"}
+    };
+
+    // 파일 작성
+    for (const auto& file : files) {
+        std::ofstream ofs(file.first);
+        ofs << file.second;
+    }
+
+    Parser parser;
+    EXPECT_FALSE(parser.parse("test_import_dup_main.gyeol"));
+
+    bool foundDup = false;
+    for (const auto& err : parser.getErrors()) {
+        if (err.find("duplicate label") != std::string::npos) {
+            foundDup = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(foundDup);
+
+    for (const auto& file : files) {
+        std::remove(file.first.c_str());
+    }
+}
+
+TEST(ParserErrorTest, ImportWithoutQuotedPath) {
+    {
+        std::ofstream ofs("test_import_noquote.gyeol");
+        ofs << "import nopath\n"
+               "\n"
+               "label start:\n"
+               "    narrator \"hello\"\n";
+    }
+
+    Parser parser;
+    EXPECT_FALSE(parser.parse("test_import_noquote.gyeol"));
+
+    bool foundErr = false;
+    for (const auto& err : parser.getErrors()) {
+        if (err.find("import requires a quoted file path") != std::string::npos) {
+            foundErr = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(foundErr);
+
+    std::remove("test_import_noquote.gyeol");
+}
+
+TEST(ParserErrorTest, ImportEmptyPath) {
+    {
+        std::ofstream ofs("test_import_empty.gyeol");
+        ofs << "import \"\"\n"
+               "\n"
+               "label start:\n"
+               "    narrator \"hello\"\n";
+    }
+
+    Parser parser;
+    EXPECT_FALSE(parser.parse("test_import_empty.gyeol"));
+
+    bool foundErr = false;
+    for (const auto& err : parser.getErrors()) {
+        if (err.find("import requires a non-empty file path") != std::string::npos) {
+            foundErr = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(foundErr);
+
+    std::remove("test_import_empty.gyeol");
+}
+
+// --- Return / CallWithReturn 파서 테스트 ---
+
+TEST(ParserTest, ReturnLiteral) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    return 42\n");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* node = story->nodes()->Get(0);
+    ASSERT_EQ(node->lines()->size(), 1u);
+
+    auto* instr = node->lines()->Get(0);
+    EXPECT_EQ(instr->data_type(), OpData::Return);
+    auto* ret = instr->data_as_Return();
+    EXPECT_EQ(ret->value_type(), ValueData::IntValue);
+    EXPECT_EQ(ret->value_as_IntValue()->val(), 42);
+    EXPECT_EQ(ret->expr(), nullptr);
+}
+
+TEST(ParserTest, ReturnVariable) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ result = 10\n"
+        "    return result\n");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* node = story->nodes()->Get(0);
+    ASSERT_EQ(node->lines()->size(), 2u);
+
+    auto* instr = node->lines()->Get(1);
+    EXPECT_EQ(instr->data_type(), OpData::Return);
+    auto* ret = instr->data_as_Return();
+    // 변수 참조는 Expression으로 파싱됨 (PushVar)
+    EXPECT_NE(ret->expr(), nullptr);
+    EXPECT_GE(ret->expr()->tokens()->size(), 1u);
+    EXPECT_EQ(ret->expr()->tokens()->Get(0)->op(), ExprOp::PushVar);
+}
+
+TEST(ParserTest, ReturnExpression) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    return 2 + 3\n");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* node = story->nodes()->Get(0);
+    auto* instr = node->lines()->Get(0);
+    EXPECT_EQ(instr->data_type(), OpData::Return);
+    auto* ret = instr->data_as_Return();
+    EXPECT_NE(ret->expr(), nullptr);
+    // RPN: 2 3 Add
+    EXPECT_EQ(ret->expr()->tokens()->size(), 3u);
+}
+
+TEST(ParserTest, ReturnStringLiteral) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    return \"hello\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* node = story->nodes()->Get(0);
+    auto* instr = node->lines()->Get(0);
+    EXPECT_EQ(instr->data_type(), OpData::Return);
+    auto* ret = instr->data_as_Return();
+    EXPECT_EQ(ret->value_type(), ValueData::StringRef);
+}
+
+TEST(ParserTest, ReturnBoolLiteral) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    return true\n");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* node = story->nodes()->Get(0);
+    auto* instr = node->lines()->Get(0);
+    EXPECT_EQ(instr->data_type(), OpData::Return);
+    auto* ret = instr->data_as_Return();
+    EXPECT_EQ(ret->value_type(), ValueData::BoolValue);
+    EXPECT_TRUE(ret->value_as_BoolValue()->val());
+}
+
+TEST(ParserTest, BareReturn) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    return\n");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* node = story->nodes()->Get(0);
+    auto* instr = node->lines()->Get(0);
+    EXPECT_EQ(instr->data_type(), OpData::Return);
+    auto* ret = instr->data_as_Return();
+    EXPECT_EQ(ret->expr(), nullptr);
+    EXPECT_EQ(ret->value_type(), ValueData::NONE);
+}
+
+TEST(ParserTest, CallWithReturnVar) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ result = call calc\n"
+        "\n"
+        "label calc:\n"
+        "    return 42\n");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* node = story->nodes()->Get(0);
+    ASSERT_EQ(node->lines()->size(), 1u);
+
+    auto* instr = node->lines()->Get(0);
+    EXPECT_EQ(instr->data_type(), OpData::CallWithReturn);
+    auto* cwr = instr->data_as_CallWithReturn();
+
+    // target node name
+    auto targetName = story->string_pool()->Get(cwr->target_node_name_id())->c_str();
+    EXPECT_STREQ(targetName, "calc");
+
+    // return var name
+    auto retVarName = story->string_pool()->Get(cwr->return_var_name_id())->c_str();
+    EXPECT_STREQ(retVarName, "result");
+}
+
+TEST(ParserTest, CallWithReturnValidation) {
+    // target이 존재하면 에러 없이 컴파일됨
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = call helper\n"
+        "\n"
+        "label helper:\n"
+        "    return 1\n");
+    EXPECT_FALSE(buf.empty());
+}
+
+// --- Return / CallWithReturn 에러 테스트 ---
+
+TEST(ParserErrorTest, ReturnOutsideLabel) {
+    // indent 0에서 return은 에러 (label/import/global 만 가능)
+    auto buf = GyeolTest::compileScript(
+        "return 42\n"
+        "\n"
+        "label start:\n"
+        "    narrator \"hello\"\n");
+    EXPECT_TRUE(buf.empty());
+}
+
+TEST(ParserErrorTest, CallWithReturnInvalidTarget) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = call nonexistent\n");
+    EXPECT_TRUE(buf.empty());
+}
+
+TEST(ParserErrorTest, ReturnInvalidExpression) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    return !!!\n");
+    EXPECT_TRUE(buf.empty());
+}
+
+// ===================================================================
+// Function Parameters (함수 매개변수) 파서 테스트
+// ===================================================================
+
+TEST(ParserTest, LabelWithParams) {
+    auto buf = GyeolTest::compileScript(
+        "label greet(name, title):\n"
+        "    narrator \"Hello\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* node = story->nodes()->Get(0);
+    EXPECT_STREQ(node->name()->c_str(), "greet");
+
+    // param_ids 확인
+    ASSERT_TRUE(node->param_ids() != nullptr);
+    ASSERT_EQ(node->param_ids()->size(), 2u);
+    EXPECT_STREQ(story->string_pool()->Get(node->param_ids()->Get(0))->c_str(), "name");
+    EXPECT_STREQ(story->string_pool()->Get(node->param_ids()->Get(1))->c_str(), "title");
+}
+
+TEST(ParserTest, LabelNoParams) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    narrator \"Hello\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* node = story->nodes()->Get(0);
+    // param_ids 비어있거나 nullptr (하위 호환)
+    EXPECT_TRUE(node->param_ids() == nullptr || node->param_ids()->size() == 0u);
+}
+
+TEST(ParserTest, LabelEmptyParens) {
+    auto buf = GyeolTest::compileScript(
+        "label func():\n"
+        "    narrator \"test\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* node = story->nodes()->Get(0);
+    EXPECT_STREQ(node->name()->c_str(), "func");
+    // 빈 괄호 → 0 params
+    EXPECT_TRUE(node->param_ids() == nullptr || node->param_ids()->size() == 0u);
+}
+
+TEST(ParserTest, LabelSingleParam) {
+    auto buf = GyeolTest::compileScript(
+        "label func(x):\n"
+        "    narrator \"{x}\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* node = story->nodes()->Get(0);
+    ASSERT_TRUE(node->param_ids() != nullptr);
+    ASSERT_EQ(node->param_ids()->size(), 1u);
+    EXPECT_STREQ(story->string_pool()->Get(node->param_ids()->Get(0))->c_str(), "x");
+}
+
+TEST(ParserTest, CallWithArgs) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    call greet(\"Hero\", \"Mr\")\n"
+        "\n"
+        "label greet(name, title):\n"
+        "    narrator \"Hello\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* startNode = story->nodes()->Get(0);
+    ASSERT_EQ(startNode->lines()->size(), 1u);
+
+    auto* instr = startNode->lines()->Get(0);
+    EXPECT_EQ(instr->data_type(), OpData::Jump);
+    auto* jump = instr->data_as_Jump();
+    EXPECT_TRUE(jump->is_call());
+
+    // arg_exprs 확인
+    ASSERT_TRUE(jump->arg_exprs() != nullptr);
+    EXPECT_EQ(jump->arg_exprs()->size(), 2u);
+}
+
+TEST(ParserTest, CallNoArgs) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    call sub\n"
+        "\n"
+        "label sub:\n"
+        "    narrator \"test\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* instr = story->nodes()->Get(0)->lines()->Get(0);
+    auto* jump = instr->data_as_Jump();
+    // arg_exprs 없음 (하위 호환)
+    EXPECT_TRUE(jump->arg_exprs() == nullptr || jump->arg_exprs()->size() == 0u);
+}
+
+TEST(ParserTest, CallWithReturnAndArgs) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ r = call calc(10, 20)\n"
+        "\n"
+        "label calc(a, b):\n"
+        "    return a + b\n");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* instr = story->nodes()->Get(0)->lines()->Get(0);
+    EXPECT_EQ(instr->data_type(), OpData::CallWithReturn);
+    auto* cwr = instr->data_as_CallWithReturn();
+
+    ASSERT_TRUE(cwr->arg_exprs() != nullptr);
+    EXPECT_EQ(cwr->arg_exprs()->size(), 2u);
+}
+
+TEST(ParserTest, CallArgExpression) {
+    auto buf = GyeolTest::compileScript(
+        "$ x = 10\n"
+        "$ y = 5\n"
+        "\n"
+        "label start:\n"
+        "    call func(x + 1, y * 2)\n"
+        "\n"
+        "label func(a, b):\n"
+        "    narrator \"test\"\n");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* instr = story->nodes()->Get(0)->lines()->Get(0);
+    auto* jump = instr->data_as_Jump();
+    ASSERT_TRUE(jump->arg_exprs() != nullptr);
+    EXPECT_EQ(jump->arg_exprs()->size(), 2u);
+
+    // 첫 번째 인자: x + 1 → 다중 토큰 Expression
+    auto* arg0 = jump->arg_exprs()->Get(0);
+    EXPECT_GT(arg0->tokens()->size(), 1u);  // PushVar, PushLiteral, Add 등
+}
+
+// --- Function Parameters 에러 테스트 ---
+
+TEST(ParserErrorTest, LabelDuplicateParam) {
+    auto buf = GyeolTest::compileScript(
+        "label func(a, a):\n"
+        "    narrator \"test\"\n");
+    EXPECT_TRUE(buf.empty());
+}
+
+TEST(ParserErrorTest, CallUnclosedParen) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    call func(1, 2\n"
+        "\n"
+        "label func(a, b):\n"
+        "    narrator \"test\"\n");
+    EXPECT_TRUE(buf.empty());
+}
+
+TEST(ParserErrorTest, JumpWithArgs) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    jump func(1, 2)\n"
+        "\n"
+        "label func(a, b):\n"
+        "    narrator \"test\"\n");
+    EXPECT_TRUE(buf.empty());
+}
+
+TEST(ParserErrorTest, CallEmptyArg) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    call func(, 2)\n"
+        "\n"
+        "label func(a, b):\n"
+        "    narrator \"test\"\n");
+    EXPECT_TRUE(buf.empty());
+}
+
+// ===================================================================
+// Visit Count 파서 테스트
+// ===================================================================
+
+TEST(ParserTest, VisitCountInExpression) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = visit_count(\"shop\")\n"
+        "    \"done\"\n"
+        "label shop:\n"
+        "    \"shop\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    ASSERT_NE(sv->expr(), nullptr);
+    ASSERT_EQ(sv->expr()->tokens()->size(), 1u);
+    EXPECT_EQ(sv->expr()->tokens()->Get(0)->op(), ExprOp::PushVisitCount);
+    // var_name_id는 "shop"을 가리킴
+    int32_t nameId = sv->expr()->tokens()->Get(0)->var_name_id();
+    EXPECT_STREQ(story->string_pool()->Get(nameId)->c_str(), "shop");
+}
+
+TEST(ParserTest, VisitedInExpression) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ seen = visited(\"shop\")\n"
+        "    \"done\"\n"
+        "label shop:\n"
+        "    \"shop\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    ASSERT_NE(sv->expr(), nullptr);
+    ASSERT_EQ(sv->expr()->tokens()->size(), 1u);
+    EXPECT_EQ(sv->expr()->tokens()->Get(0)->op(), ExprOp::PushVisited);
+}
+
+TEST(ParserTest, VisitCountBareArg) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = visit_count(shop)\n"
+        "    \"done\"\n"
+        "label shop:\n"
+        "    \"shop\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    ASSERT_NE(sv->expr(), nullptr);
+    ASSERT_EQ(sv->expr()->tokens()->size(), 1u);
+    EXPECT_EQ(sv->expr()->tokens()->Get(0)->op(), ExprOp::PushVisitCount);
+    int32_t nameId = sv->expr()->tokens()->Get(0)->var_name_id();
+    EXPECT_STREQ(story->string_pool()->Get(nameId)->c_str(), "shop");
+}
+
+TEST(ParserTest, VisitCountInCondition) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if visit_count(\"shop\") > 2 -> frequent\n"
+        "    \"normal\"\n"
+        "label frequent:\n"
+        "    \"frequent\"\n"
+        "label shop:\n"
+        "    \"shop\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* cond = story->nodes()->Get(0)->lines()->Get(0)->data_as_Condition();
+    ASSERT_NE(cond, nullptr);
+    ASSERT_NE(cond->cond_expr(), nullptr);
+    bool foundVisitCount = false;
+    for (flatbuffers::uoffset_t i = 0; i < cond->cond_expr()->tokens()->size(); ++i) {
+        if (cond->cond_expr()->tokens()->Get(i)->op() == ExprOp::PushVisitCount)
+            foundVisitCount = true;
+    }
+    EXPECT_TRUE(foundVisitCount);
+}
+
+TEST(ParserTest, VisitedInCondition) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if visited(\"shop\") -> seen\n"
+        "    \"unseen\"\n"
+        "label seen:\n"
+        "    \"seen\"\n"
+        "label shop:\n"
+        "    \"shop\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* cond = story->nodes()->Get(0)->lines()->Get(0)->data_as_Condition();
+    ASSERT_NE(cond, nullptr);
+    ASSERT_NE(cond->cond_expr(), nullptr);
+    bool foundVisited = false;
+    for (flatbuffers::uoffset_t i = 0; i < cond->cond_expr()->tokens()->size(); ++i) {
+        if (cond->cond_expr()->tokens()->Get(i)->op() == ExprOp::PushVisited)
+            foundVisited = true;
+    }
+    EXPECT_TRUE(foundVisited);
+}
+
+TEST(ParserTest, VisitCountInArithmeticExpr) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ total = visit_count(\"a\") + visit_count(\"b\")\n"
+        "    \"done\"\n"
+        "label a:\n"
+        "    \"a\"\n"
+        "label b:\n"
+        "    \"b\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    ASSERT_NE(sv->expr(), nullptr);
+    // RPN: [PushVisitCount("a"), PushVisitCount("b"), Add]
+    ASSERT_EQ(sv->expr()->tokens()->size(), 3u);
+    EXPECT_EQ(sv->expr()->tokens()->Get(0)->op(), ExprOp::PushVisitCount);
+    EXPECT_EQ(sv->expr()->tokens()->Get(1)->op(), ExprOp::PushVisitCount);
+    EXPECT_EQ(sv->expr()->tokens()->Get(2)->op(), ExprOp::Add);
 }

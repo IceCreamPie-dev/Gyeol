@@ -4,6 +4,7 @@
 #include <sstream>
 #include <algorithm>
 #include <cstdlib>
+#include <filesystem>
 
 using namespace ICPDev::Gyeol::Schema;
 
@@ -11,14 +12,34 @@ namespace Gyeol {
 
 // --- String Pool ---
 int32_t Parser::addString(const std::string& str) {
+    return addStringWithId(str, "");
+}
+
+int32_t Parser::addStringWithId(const std::string& str, const std::string& lineId) {
     auto it = stringMap_.find(str);
     if (it != stringMap_.end()) {
+        // 기존 lineId가 비어있고 새 lineId가 있으면 업데이트
+        if (!lineId.empty() && lineIds_[it->second].empty()) {
+            lineIds_[it->second] = lineId;
+        }
         return it->second;
     }
     int32_t idx = static_cast<int32_t>(story_.string_pool.size());
     story_.string_pool.push_back(str);
+    lineIds_.push_back(lineId);
     stringMap_[str] = idx;
     return idx;
+}
+
+std::string Parser::hashText(const std::string& text) {
+    uint32_t hash = 2166136261u; // FNV-1a
+    for (unsigned char c : text) {
+        hash ^= c;
+        hash *= 16777619u;
+    }
+    char buf[5];
+    std::snprintf(buf, sizeof(buf), "%04x", hash & 0xFFFF);
+    return buf;
 }
 
 // --- 유틸리티 ---
@@ -97,6 +118,28 @@ bool Parser::parseValue(const std::string& text, size_t& pos,
     skipSpaces(text, pos);
     if (pos >= text.size()) return false;
 
+    // 리스트 리터럴 []
+    if (text[pos] == '[') {
+        pos++; // skip '['
+        auto lv = std::make_unique<ListValueT>();
+        skipSpaces(text, pos);
+        while (pos < text.size() && text[pos] != ']') {
+            skipSpaces(text, pos);
+            if (pos < text.size() && text[pos] == '"') {
+                std::string item = parseQuotedString(text, pos);
+                lv->items.push_back(addString(item));
+            } else {
+                std::string item = parseWord(text, pos);
+                if (!item.empty()) lv->items.push_back(addString(item));
+            }
+            skipSpaces(text, pos);
+            if (pos < text.size() && text[pos] == ',') pos++; // skip ','
+        }
+        if (pos < text.size()) pos++; // skip ']'
+        outValue.Set(*lv);
+        return true;
+    }
+
     // 문자열
     if (text[pos] == '"') {
         std::string str = parseQuotedString(text, pos);
@@ -174,6 +217,31 @@ bool Parser::parseExpression(const std::string& text, size_t& pos,
         if (pos >= text.size()) break;
 
         char c = text[pos];
+
+        // 리스트 리터럴 []
+        if (c == '[') {
+            pos++; // skip '['
+            auto lv = std::make_unique<ListValueT>();
+            skipSpaces(text, pos);
+            while (pos < text.size() && text[pos] != ']') {
+                skipSpaces(text, pos);
+                if (pos < text.size() && text[pos] == '"') {
+                    std::string item = parseQuotedString(text, pos);
+                    lv->items.push_back(addString(item));
+                } else {
+                    std::string item = parseWord(text, pos);
+                    if (!item.empty()) lv->items.push_back(addString(item));
+                }
+                skipSpaces(text, pos);
+                if (pos < text.size() && text[pos] == ',') pos++;
+            }
+            if (pos < text.size()) pos++; // skip ']'
+            Token t; t.type = TokType::LITERAL;
+            t.literal.Set(*lv);
+            tokens.push_back(std::move(t));
+            expectOperand = false;
+            continue;
+        }
 
         // 괄호
         if (c == '(') {
@@ -277,6 +345,38 @@ bool Parser::parseExpression(const std::string& text, size_t& pos,
             }
             std::string word = text.substr(start, pos - start);
 
+            // visit_count()/visited()/len() 함수 호출 감지
+            if ((word == "visit_count" || word == "visited" || word == "len") &&
+                pos < text.size() && text[pos] == '(') {
+                pos++; // skip '('
+                skipSpaces(text, pos);
+                std::string argName;
+                if (pos < text.size() && text[pos] == '"') {
+                    pos++; // skip '"'
+                    while (pos < text.size() && text[pos] != '"') {
+                        argName += text[pos]; pos++;
+                    }
+                    if (pos < text.size()) pos++; // skip '"'
+                } else {
+                    while (pos < text.size() &&
+                           (std::isalnum(static_cast<unsigned char>(text[pos])) || text[pos] == '_')) {
+                        argName += text[pos]; pos++;
+                    }
+                }
+                skipSpaces(text, pos);
+                if (pos < text.size() && text[pos] == ')') pos++; // skip ')'
+
+                Token t;
+                t.type = TokType::VARREF;
+                t.varNameId = addString(argName);
+                if (word == "visit_count") t.op = ExprOp::PushVisitCount;
+                else if (word == "visited") t.op = ExprOp::PushVisited;
+                else t.op = ExprOp::ListLength;
+                tokens.push_back(std::move(t));
+                expectOperand = false;
+                continue;
+            }
+
             Token t;
             if (word == "true") {
                 t.type = TokType::LITERAL;
@@ -377,7 +477,9 @@ bool Parser::parseExpression(const std::string& text, size_t& pos,
                 et->literal_value = std::move(tok.literal);
                 break;
             case TokType::VARREF:
-                et->op = ExprOp::PushVar;
+                et->op = (tok.op == ExprOp::PushVisitCount || tok.op == ExprOp::PushVisited
+                          || tok.op == ExprOp::ListLength)
+                         ? tok.op : ExprOp::PushVar;
                 et->var_name_id = tok.varNameId;
                 break;
             case TokType::OP:
@@ -397,12 +499,19 @@ bool Parser::parseExpression(const std::string& text, size_t& pos,
 
 // --- label ---
 bool Parser::parseLabelLine(const std::string& content, int lineNum) {
-    // "label name:"
+    // "label name:" 또는 "label name(params):"
     size_t pos = 5; // skip "label"
     skipSpaces(content, pos);
-    std::string name = parseWord(content, pos);
 
-    // 콜론 제거
+    // 수동 스캔: 공백, '(', ':' 에서 정지
+    size_t nameStart = pos;
+    while (pos < content.size() && content[pos] != ' ' && content[pos] != '\t'
+           && content[pos] != '(' && content[pos] != ':') {
+        pos++;
+    }
+    std::string name = content.substr(nameStart, pos - nameStart);
+
+    // 콜론 제거 (name 끝에 붙은 경우)
     if (!name.empty() && name.back() == ':') {
         name.pop_back();
     }
@@ -412,17 +521,48 @@ bool Parser::parseLabelLine(const std::string& content, int lineNum) {
         return false;
     }
 
+    // 매개변수 리스트 파싱 (옵션)
+    std::vector<std::string> paramNames;
+    skipSpaces(content, pos);
+    if (pos < content.size() && content[pos] == '(') {
+        if (!parseParamList(content, pos, paramNames, lineNum)) {
+            return false;
+        }
+    }
+
+    // ':' 건너뛰기 (별도로 있는 경우)
+    skipSpaces(content, pos);
+    if (pos < content.size() && content[pos] == ':') {
+        pos++;
+    }
+
     seenFirstLabel_ = true;
+
+    // 중복 label 이름 검사
+    for (const auto& existingNode : story_.nodes) {
+        if (existingNode->name == name) {
+            addError(lineNum, "duplicate label name: " + name);
+            return false;
+        }
+    }
 
     auto node = std::make_unique<NodeT>();
     node->name = name;
+
+    // 매개변수 ID 저장
+    for (const auto& pn : paramNames) {
+        node->param_ids.push_back(addString(pn));
+    }
+
     story_.nodes.push_back(std::move(node));
     currentNode_ = story_.nodes.back().get();
+    currentNodeName_ = name;
     inMenu_ = false;
 
-    // 첫 번째 label을 start_node로 설정
-    if (story_.nodes.size() == 1) {
+    // 메인 파일의 첫 번째 label을 start_node로 설정
+    if (!startNodeSet_ && isMainFile_) {
         story_.start_node_name = name;
+        startNodeSet_ = true;
     }
 
     return true;
@@ -444,7 +584,9 @@ bool Parser::parseDialogueLine(const std::string& content, int lineNum) {
         // 나레이션: "대사"
         line->character_id = -1;
         std::string text = parseQuotedString(content, pos);
-        line->text_id = addString(text);
+        size_t instrIdx = currentNode_->lines.size();
+        std::string lid = currentNodeName_ + ":" + std::to_string(instrIdx) + ":" + hashText(text);
+        line->text_id = addStringWithId(text, lid);
     } else {
         // 캐릭터 대사: character "대사"
         std::string character = parseWord(content, pos);
@@ -456,21 +598,39 @@ bool Parser::parseDialogueLine(const std::string& content, int lineNum) {
             return false;
         }
         std::string text = parseQuotedString(content, pos);
-        line->text_id = addString(text);
+        size_t instrIdx = currentNode_->lines.size();
+        std::string lid = currentNodeName_ + ":" + std::to_string(instrIdx) + ":" + hashText(text);
+        line->text_id = addStringWithId(text, lid);
     }
 
-    // voice_asset_id: #voice:파일명 태그
+    // Tags: 복수 #key:value 파싱
     line->voice_asset_id = -1;
     skipSpaces(content, pos);
-    if (pos < content.size() && content[pos] == '#') {
+    while (pos < content.size() && content[pos] == '#') {
         pos++; // skip '#'
         std::string tag = parseWord(content, pos);
-        if (tag.substr(0, 6) == "voice:") {
-            std::string voiceFile = tag.substr(6);
-            if (!voiceFile.empty()) {
-                line->voice_asset_id = addString(voiceFile);
-            }
+        if (tag.empty()) break;
+
+        std::string key, value;
+        auto colonPos = tag.find(':');
+        if (colonPos != std::string::npos) {
+            key = tag.substr(0, colonPos);
+            value = tag.substr(colonPos + 1);
+        } else {
+            key = tag;
         }
+
+        auto tagObj = std::make_unique<TagT>();
+        tagObj->key_id = addString(key);
+        tagObj->value_id = value.empty() ? addString("") : addString(value);
+        line->tags.push_back(std::move(tagObj));
+
+        // 하위 호환: voice 태그 → voice_asset_id에도 저장
+        if (key == "voice" && !value.empty()) {
+            line->voice_asset_id = addString(value);
+        }
+
+        skipSpaces(content, pos);
     }
 
     auto instr = std::make_unique<InstructionT>();
@@ -511,7 +671,11 @@ bool Parser::parseMenuChoiceLine(const std::string& content, int lineNum) {
     }
 
     auto choice = std::make_unique<ChoiceT>();
-    choice->text_id = addString(text);
+    {
+        size_t instrIdx = currentNode_->lines.size();
+        std::string lid = currentNodeName_ + ":" + std::to_string(instrIdx) + ":" + hashText(text);
+        choice->text_id = addStringWithId(text, lid);
+    }
     choice->target_node_name_id = addString(target);
 
     // 선택적: "if 변수명"
@@ -545,16 +709,41 @@ bool Parser::parseJumpLine(const std::string& content, int lineNum, bool isCall)
         return false;
     }
 
-    size_t pos = isCall ? 4 : 4; // skip "jump" or "call"
-    std::string target = parseWord(content, pos);
+    size_t pos = 4; // skip "jump" or "call" (둘 다 4글자)
+    skipSpaces(content, pos);
+
+    // 수동 스캔: 공백, '(' 에서 정지
+    size_t nameStart = pos;
+    while (pos < content.size() && content[pos] != ' ' && content[pos] != '\t'
+           && content[pos] != '(') {
+        pos++;
+    }
+    std::string target = content.substr(nameStart, pos - nameStart);
+
     if (target.empty()) {
         addError(lineNum, "expected target node name");
+        return false;
+    }
+
+    // 인자 리스트 확인
+    skipSpaces(content, pos);
+    bool hasArgs = (pos < content.size() && content[pos] == '(');
+
+    if (hasArgs && !isCall) {
+        addError(lineNum, "jump does not support arguments, use 'call' instead");
         return false;
     }
 
     auto jump = std::make_unique<JumpT>();
     jump->target_node_name_id = addString(target);
     jump->is_call = isCall;
+
+    // 인자 리스트 파싱 (call만)
+    if (hasArgs && isCall) {
+        if (!parseArgList(content, pos, jump->arg_exprs, lineNum)) {
+            return false;
+        }
+    }
 
     auto instr = std::make_unique<InstructionT>();
     instr->data.Set(*jump);
@@ -583,14 +772,69 @@ bool Parser::parseSetVarLine(const std::string& content, int lineNum) {
     }
 
     skipSpaces(content, pos);
-    if (pos >= content.size() || content[pos] != '=') {
-        addError(lineNum, "expected '=' after variable name");
+    AssignOp assignOp = AssignOp::Assign;
+    if (pos + 1 < content.size() && content[pos] == '+' && content[pos + 1] == '=') {
+        assignOp = AssignOp::Append;
+        pos += 2; // skip '+='
+    } else if (pos + 1 < content.size() && content[pos] == '-' && content[pos + 1] == '=') {
+        assignOp = AssignOp::Remove;
+        pos += 2; // skip '-='
+    } else if (pos < content.size() && content[pos] == '=') {
+        pos++; // skip '='
+    } else {
+        addError(lineNum, "expected '=', '+=' or '-=' after variable name");
         return false;
     }
-    pos++; // skip '='
+    skipSpaces(content, pos);
+
+    // $ var = call node — CallWithReturn 감지 (= 할당만 허용)
+    if (assignOp == AssignOp::Assign &&
+        pos + 4 <= content.size() &&
+        content.substr(pos, 4) == "call" &&
+        (pos + 4 >= content.size() || content[pos + 4] == ' ' || content[pos + 4] == '\t')) {
+        pos += 4; // skip "call"
+        skipSpaces(content, pos);
+
+        // 수동 스캔: 공백, '(' 에서 정지
+        size_t nameStart = pos;
+        while (pos < content.size() && content[pos] != ' ' && content[pos] != '\t'
+               && content[pos] != '(') {
+            pos++;
+        }
+        std::string target = content.substr(nameStart, pos - nameStart);
+
+        if (target.empty()) {
+            addError(lineNum, "expected target node name after 'call'");
+            return false;
+        }
+
+        auto cwr = std::make_unique<CallWithReturnT>();
+        cwr->target_node_name_id = addString(target);
+        cwr->return_var_name_id = addString(varName);
+
+        // 인자 리스트 파싱
+        skipSpaces(content, pos);
+        if (pos < content.size() && content[pos] == '(') {
+            if (!parseArgList(content, pos, cwr->arg_exprs, lineNum)) {
+                return false;
+            }
+        }
+
+        auto instr = std::make_unique<InstructionT>();
+        instr->data.Set(*cwr);
+        currentNode_->lines.push_back(std::move(instr));
+
+        // 라인번호 기록 (jump target 검증용)
+        size_t nodeIdx = story_.nodes.size() - 1;
+        size_t instrIdx = currentNode_->lines.size() - 1;
+        instrLineMap_[instrKey(nodeIdx, instrIdx)] = lineNum;
+
+        return true;
+    }
 
     auto setvar = std::make_unique<SetVarT>();
     setvar->var_name_id = addString(varName);
+    setvar->assign_op = assignOp;
 
     bool isSimple = false;
     std::unique_ptr<ExpressionT> expr;
@@ -688,6 +932,31 @@ bool Parser::parseFullConditionExpr(const std::string& text, size_t& pos,
         if (pos >= text.size()) break;
 
         char c = text[pos];
+
+        // 리스트 리터럴 []
+        if (c == '[') {
+            pos++; // skip '['
+            auto lv = std::make_unique<ListValueT>();
+            skipSpaces(text, pos);
+            while (pos < text.size() && text[pos] != ']') {
+                skipSpaces(text, pos);
+                if (pos < text.size() && text[pos] == '"') {
+                    std::string item = parseQuotedString(text, pos);
+                    lv->items.push_back(addString(item));
+                } else {
+                    std::string item = parseWord(text, pos);
+                    if (!item.empty()) lv->items.push_back(addString(item));
+                }
+                skipSpaces(text, pos);
+                if (pos < text.size() && text[pos] == ',') pos++;
+            }
+            if (pos < text.size()) pos++; // skip ']'
+            Token t; t.type = TokType::LITERAL;
+            t.literal.Set(*lv);
+            tokens.push_back(std::move(t));
+            expectOperand = false;
+            continue;
+        }
 
         // 괄호
         if (c == '(') {
@@ -840,6 +1109,44 @@ bool Parser::parseFullConditionExpr(const std::string& text, size_t& pos,
                 hasLogicalOps = true;
                 continue;
             }
+            if (word == "in" && !expectOperand) {
+                Token t; t.type = TokType::OP; t.op = ExprOp::ListContains;
+                tokens.push_back(t);
+                expectOperand = true;
+                continue;
+            }
+
+            // visit_count()/visited()/len() 함수 호출 감지
+            if ((word == "visit_count" || word == "visited" || word == "len") &&
+                pos < text.size() && text[pos] == '(') {
+                pos++; // skip '('
+                skipSpaces(text, pos);
+                std::string argName;
+                if (pos < text.size() && text[pos] == '"') {
+                    pos++; // skip '"'
+                    while (pos < text.size() && text[pos] != '"') {
+                        argName += text[pos]; pos++;
+                    }
+                    if (pos < text.size()) pos++; // skip '"'
+                } else {
+                    while (pos < text.size() &&
+                           (std::isalnum(static_cast<unsigned char>(text[pos])) || text[pos] == '_')) {
+                        argName += text[pos]; pos++;
+                    }
+                }
+                skipSpaces(text, pos);
+                if (pos < text.size() && text[pos] == ')') pos++; // skip ')'
+
+                Token t;
+                t.type = TokType::VARREF;
+                t.varNameId = addString(argName);
+                if (word == "visit_count") t.op = ExprOp::PushVisitCount;
+                else if (word == "visited") t.op = ExprOp::PushVisited;
+                else t.op = ExprOp::ListLength;
+                tokens.push_back(std::move(t));
+                expectOperand = false;
+                continue;
+            }
 
             // 피연산자 위치가 아닌데 키워드가 아닌 식별자 → 종료
             if (!expectOperand) {
@@ -881,6 +1188,7 @@ bool Parser::parseFullConditionExpr(const std::string& text, size_t& pos,
             case ExprOp::CmpEq: case ExprOp::CmpNe:
             case ExprOp::CmpGt: case ExprOp::CmpLt:
             case ExprOp::CmpGe: case ExprOp::CmpLe:
+            case ExprOp::ListContains:
                                  return 4;
             case ExprOp::Add: case ExprOp::Sub: return 5;
             case ExprOp::Mul: case ExprOp::Div: case ExprOp::Mod: return 6;
@@ -949,7 +1257,9 @@ bool Parser::parseFullConditionExpr(const std::string& text, size_t& pos,
                 et->literal_value = std::move(tok.literal);
                 break;
             case TokType::VARREF:
-                et->op = ExprOp::PushVar;
+                et->op = (tok.op == ExprOp::PushVisitCount || tok.op == ExprOp::PushVisited
+                          || tok.op == ExprOp::ListLength)
+                         ? tok.op : ExprOp::PushVar;
                 et->var_name_id = tok.varNameId;
                 break;
             case TokType::OP:
@@ -985,8 +1295,17 @@ bool Parser::parseConditionLine(const std::string& content, int lineNum) {
         return false;
     }
 
-    if (hasLogicalOps) {
-        // 논리 연산자 사용 → cond_expr에 전체 Expression 저장
+    // 함수 호출(PushVisitCount/PushVisited) 포함 여부 체크
+    bool hasFuncCall = false;
+    for (auto& tok : fullExpr->tokens) {
+        if (tok->op == ExprOp::PushVisitCount || tok->op == ExprOp::PushVisited) {
+            hasFuncCall = true;
+            break;
+        }
+    }
+
+    if (hasLogicalOps || hasFuncCall) {
+        // 논리 연산자 또는 함수 호출 사용 → cond_expr에 전체 Expression 저장
         cond->cond_expr = std::move(fullExpr);
     } else {
         // 논리 연산자 없음 → 기존 lhs/op/rhs 방식으로 분해 (하위 호환)
@@ -1131,7 +1450,16 @@ bool Parser::parseElifLine(const std::string& content, int lineNum) {
         return false;
     }
 
-    if (hasLogicalOps) {
+    // 함수 호출 포함 여부 체크
+    bool hasFuncCallElif = false;
+    for (auto& tok : fullExpr->tokens) {
+        if (tok->op == ExprOp::PushVisitCount || tok->op == ExprOp::PushVisited) {
+            hasFuncCallElif = true;
+            break;
+        }
+    }
+
+    if (hasLogicalOps || hasFuncCallElif) {
         cond->cond_expr = std::move(fullExpr);
     } else {
         auto& tokens = fullExpr->tokens;
@@ -1381,6 +1709,193 @@ bool Parser::parseCommandLine(const std::string& content, int lineNum) {
     return true;
 }
 
+// --- return [expr] ---
+bool Parser::parseReturnLine(const std::string& content, int lineNum) {
+    if (!currentNode_) {
+        addError(lineNum, "return outside of label");
+        return false;
+    }
+
+    size_t pos = 6; // skip "return"
+    skipSpaces(content, pos);
+
+    auto ret = std::make_unique<ReturnT>();
+
+    if (pos < content.size()) {
+        // return expr — 표현식 파싱
+        bool isSimple = false;
+        std::unique_ptr<ExpressionT> expr;
+        if (!parseExpression(content, pos, expr, ret->value, isSimple)) {
+            addError(lineNum, "invalid expression after 'return'");
+            return false;
+        }
+        if (!isSimple) {
+            ret->expr = std::move(expr);
+        }
+    }
+    // else: bare "return" (값 없음) — expr=nullptr, value=NONE
+
+    auto instr = std::make_unique<InstructionT>();
+    instr->data.Set(*ret);
+    currentNode_->lines.push_back(std::move(instr));
+    return true;
+}
+
+// --- 매개변수 리스트 파싱 (label 선언용) ---
+bool Parser::parseParamList(const std::string& content, size_t& pos,
+                            std::vector<std::string>& outParamNames, int lineNum) {
+    skipSpaces(content, pos);
+    if (pos >= content.size() || content[pos] != '(') return true; // 괄호 없음 = 매개변수 없음
+
+    pos++; // skip '('
+    skipSpaces(content, pos);
+
+    // 빈 괄호: ()
+    if (pos < content.size() && content[pos] == ')') {
+        pos++; // skip ')'
+        return true; // 0 params, valid
+    }
+
+    std::unordered_set<std::string> seen;
+    while (pos < content.size()) {
+        skipSpaces(content, pos);
+        if (pos >= content.size()) {
+            addError(lineNum, "unclosed parameter list, expected ')'");
+            return false;
+        }
+        if (content[pos] == ')') {
+            pos++; // skip ')'
+            return true;
+        }
+
+        // 식별자 파싱
+        size_t nameStart = pos;
+        while (pos < content.size() &&
+               (std::isalnum(static_cast<unsigned char>(content[pos])) || content[pos] == '_')) {
+            pos++;
+        }
+        std::string paramName = content.substr(nameStart, pos - nameStart);
+        if (paramName.empty()) {
+            addError(lineNum, "expected parameter name");
+            return false;
+        }
+
+        // 중복 검사
+        if (seen.count(paramName)) {
+            addError(lineNum, "duplicate parameter name: " + paramName);
+            return false;
+        }
+        seen.insert(paramName);
+        outParamNames.push_back(paramName);
+
+        skipSpaces(content, pos);
+        if (pos < content.size() && content[pos] == ',') {
+            pos++; // skip comma
+            continue;
+        }
+        // 다음은 ')' 또는 에러
+    }
+
+    addError(lineNum, "unclosed parameter list, expected ')'");
+    return false;
+}
+
+// --- 인자 리스트 파싱 (call 호출용) ---
+bool Parser::parseArgList(const std::string& content, size_t& pos,
+                          std::vector<std::unique_ptr<ExpressionT>>& outArgExprs,
+                          int lineNum) {
+    skipSpaces(content, pos);
+    if (pos >= content.size() || content[pos] != '(') return true; // 괄호 없음 = 인자 없음
+
+    pos++; // skip '('
+    skipSpaces(content, pos);
+
+    // 빈 괄호: ()
+    if (pos < content.size() && content[pos] == ')') {
+        pos++; // skip ')'
+        return true; // 0 args, valid
+    }
+
+    while (pos < content.size()) {
+        skipSpaces(content, pos);
+        if (pos >= content.size()) {
+            addError(lineNum, "unclosed argument list, expected ')'");
+            return false;
+        }
+        if (content[pos] == ')') {
+            pos++; // skip ')'
+            return true;
+        }
+
+        // 인자 범위 찾기: ',' 또는 ')' (괄호 depth, 따옴표 고려)
+        size_t argStart = pos;
+        int parenDepth = 0;
+        bool inQuote = false;
+        size_t argEnd = pos;
+        while (argEnd < content.size()) {
+            char c = content[argEnd];
+            if (c == '"') {
+                inQuote = !inQuote;
+                argEnd++;
+                continue;
+            }
+            if (inQuote) { argEnd++; continue; }
+            if (c == '(') { parenDepth++; argEnd++; continue; }
+            if (c == ')') {
+                if (parenDepth == 0) break;
+                parenDepth--;
+                argEnd++;
+                continue;
+            }
+            if (c == ',' && parenDepth == 0) break;
+            argEnd++;
+        }
+
+        // 인자 문자열 추출
+        std::string argStr = content.substr(argStart, argEnd - argStart);
+        // 뒤 공백 제거
+        while (!argStr.empty() && (argStr.back() == ' ' || argStr.back() == '\t'))
+            argStr.pop_back();
+
+        if (argStr.empty()) {
+            addError(lineNum, "empty argument in argument list");
+            return false;
+        }
+
+        // 표현식 파싱
+        size_t exprPos = 0;
+        std::unique_ptr<ExpressionT> expr;
+        ValueDataUnion simpleValue;
+        bool isSimple = false;
+
+        if (!parseExpression(argStr, exprPos, expr, simpleValue, isSimple)) {
+            addError(lineNum, "invalid expression in argument: " + argStr);
+            return false;
+        }
+
+        if (isSimple) {
+            // 단순 리터럴을 Expression으로 래핑 (PushLiteral 단일 토큰)
+            auto exprWrap = std::make_unique<ExpressionT>();
+            auto token = std::make_unique<ExprTokenT>();
+            token->op = ExprOp::PushLiteral;
+            token->literal_value = std::move(simpleValue);
+            exprWrap->tokens.push_back(std::move(token));
+            outArgExprs.push_back(std::move(exprWrap));
+        } else {
+            outArgExprs.push_back(std::move(expr));
+        }
+
+        pos = argEnd;
+        if (pos < content.size() && content[pos] == ',') {
+            pos++; // skip comma
+            continue;
+        }
+    }
+
+    addError(lineNum, "unclosed argument list, expected ')'");
+    return false;
+}
+
 // =================================================================
 // 메인 파서
 // =================================================================
@@ -1389,6 +1904,8 @@ bool Parser::parse(const std::string& filepath) {
     story_ = StoryT();
     story_.version = "0.1.0";
     stringMap_.clear();
+    lineIds_.clear();
+    currentNodeName_.clear();
     currentNode_ = nullptr;
     inMenu_ = false;
     inRandom_ = false;
@@ -1398,11 +1915,43 @@ bool Parser::parse(const std::string& filepath) {
     errors_.clear();
     instrLineMap_.clear();
     pendingRandomBranches_.clear();
+    importedFiles_.clear();
+    isMainFile_ = true;
+    startNodeSet_ = false;
+
+    // 절대 경로 등록 (순환 import 감지용)
+    auto absPath = std::filesystem::absolute(filepath);
+    importedFiles_.insert(absPath.string());
+
+    // 메인 파일 파싱
+    parseFile(filepath);
+
+    // "No labels found" 체크 (전체 병합 결과)
+    if (!hasErrors() && story_.nodes.empty()) {
+        std::string msg = "No labels found in " + filepath;
+        if (error_.empty()) error_ = msg;
+        errors_.push_back(msg);
+    }
+
+    // Jump target 검증 패스 (모든 파일의 노드 대상)
+    if (!hasErrors()) {
+        validateJumpTargets();
+    }
+
+    return !hasErrors();
+}
+
+// =================================================================
+// 단일 파일 파싱 (state 리셋 없이, import 재귀 호출용)
+// =================================================================
+bool Parser::parseFile(const std::string& filepath) {
+    std::string savedFilename = filename_;
+    filename_ = filepath;
 
     std::ifstream ifs(filepath);
     if (!ifs.is_open()) {
-        error_ = "Failed to open file: " + filepath;
-        errors_.push_back(error_);
+        addError(0, "Failed to open file: " + filepath);
+        filename_ = savedFilename;
         return false;
     }
 
@@ -1432,8 +1981,48 @@ bool Parser::parse(const std::string& filepath) {
 
         size_t indent = countIndent(rawLine);
 
-        // --- 들여쓰기 레벨 0: label 또는 global var ---
+        // --- 들여쓰기 레벨 0: import, label, 또는 global var ---
         if (indent == 0) {
+            // import "filepath"
+            if (trimmed.size() >= 6 && trimmed.substr(0, 6) == "import" &&
+                (trimmed.size() == 6 || trimmed[6] == ' ')) {
+                size_t pos = 6;
+                skipSpaces(trimmed, pos);
+                if (pos >= trimmed.size() || trimmed[pos] != '"') {
+                    addError(lineNum, "import requires a quoted file path");
+                    continue;
+                }
+                std::string importPath = parseQuotedString(trimmed, pos);
+                if (importPath.empty()) {
+                    addError(lineNum, "import requires a non-empty file path");
+                    continue;
+                }
+
+                // 현재 파일 기준 상대 경로 해석
+                std::filesystem::path currentDir = std::filesystem::path(filepath).parent_path();
+                std::filesystem::path resolvedPath = std::filesystem::absolute(currentDir / importPath);
+                std::string absImportPath = resolvedPath.string();
+
+                // 순환 import 감지
+                if (importedFiles_.count(absImportPath)) {
+                    addError(lineNum, "circular import detected: " + importPath);
+                    continue;
+                }
+
+                // 파일 존재 확인
+                if (!std::filesystem::exists(resolvedPath)) {
+                    addError(lineNum, "imported file not found: " + importPath);
+                    continue;
+                }
+
+                importedFiles_.insert(absImportPath);
+                bool savedIsMainFile = isMainFile_;
+                isMainFile_ = false;
+                parseFile(resolvedPath.string());
+                isMainFile_ = savedIsMainFile;
+                continue;
+            }
+
             if (trimmed.substr(0, 5) == "label") {
                 if (inRandom_) { flushRandomBlock(lineNum); inRandom_ = false; }
                 inMenu_ = false;
@@ -1449,7 +2038,7 @@ bool Parser::parse(const std::string& filepath) {
             }
 
             // 들여쓰기 0에서 다른 것은 에러
-            addError(lineNum, "unexpected content at column 0 (expected 'label' or global '$')");
+            addError(lineNum, "unexpected content at column 0 (expected 'label', 'import', or global '$')");
             continue; // 에러 복구
         }
 
@@ -1481,6 +2070,14 @@ bool Parser::parse(const std::string& filepath) {
             // call
             if (trimmed.substr(0, 4) == "call" && (trimmed.size() == 4 || trimmed[4] == ' ')) {
                 parseJumpLine(trimmed, lineNum, true);
+                prevLineType_ = PrevLineType::NONE;
+                continue;
+            }
+
+            // return [expr]
+            if (trimmed.size() >= 6 && trimmed.substr(0, 6) == "return" &&
+                (trimmed.size() == 6 || trimmed[6] == ' ')) {
+                parseReturnLine(trimmed, lineNum);
                 prevLineType_ = PrevLineType::NONE;
                 continue;
             }
@@ -1553,17 +2150,8 @@ bool Parser::parse(const std::string& filepath) {
     // 파일 끝에서 pending random 블록 flush
     if (inRandom_) { flushRandomBlock(lineNum); inRandom_ = false; }
 
-    if (story_.nodes.empty()) {
-        std::string msg = "No labels found in " + filepath;
-        if (error_.empty()) error_ = msg;
-        errors_.push_back(msg);
-        return false;
-    }
-
-    // Jump target 검증 패스
-    validateJumpTargets();
-
-    return errors_.empty();
+    filename_ = savedFilename;
+    return true;
 }
 
 // =================================================================
@@ -1631,6 +2219,14 @@ void Parser::validateJumpTargets() {
                     }
                     break;
                 }
+                case OpData::CallWithReturn: {
+                    auto* cwr = instr->data.AsCallWithReturn();
+                    const std::string& target = story_.string_pool[cwr->target_node_name_id];
+                    if (nodeNames.find(target) == nodeNames.end()) {
+                        addError(lineNum, "call target '" + target + "' does not exist");
+                    }
+                    break;
+                }
                 default:
                     break;
             }
@@ -1641,11 +2237,66 @@ void Parser::validateJumpTargets() {
 // =================================================================
 // 컴파일 (.gyb 출력)
 // =================================================================
+// --- CSV 헬퍼 ---
+static std::string escapeCSV(const std::string& s) {
+    if (s.find_first_of(",\"\n\r") == std::string::npos) return s;
+    std::string r = "\"";
+    for (char c : s) {
+        if (c == '"') r += "\"\"";
+        else r += c;
+    }
+    return r + "\"";
+}
+
+// --- 번역 문자열 CSV 추출 ---
+bool Parser::exportStrings(const std::string& outputPath) const {
+    std::ofstream ofs(outputPath);
+    if (!ofs.is_open()) {
+        std::cerr << "Failed to write: " << outputPath << std::endl;
+        return false;
+    }
+
+    ofs << "line_id,type,node,character,text\n";
+
+    for (const auto& node : story_.nodes) {
+        for (size_t i = 0; i < node->lines.size(); ++i) {
+            const auto& instr = node->lines[i];
+
+            if (instr->data.type == OpData::Line) {
+                auto* line = instr->data.AsLine();
+                int32_t idx = line->text_id;
+                if (idx >= 0 && idx < static_cast<int32_t>(lineIds_.size()) && !lineIds_[idx].empty()) {
+                    std::string character = (line->character_id >= 0)
+                        ? story_.string_pool[static_cast<size_t>(line->character_id)] : "";
+                    ofs << lineIds_[idx] << ",LINE," << node->name << ","
+                        << escapeCSV(character) << ","
+                        << escapeCSV(story_.string_pool[static_cast<size_t>(idx)]) << "\n";
+                }
+            }
+            else if (instr->data.type == OpData::Choice) {
+                auto* choice = instr->data.AsChoice();
+                int32_t idx = choice->text_id;
+                if (idx >= 0 && idx < static_cast<int32_t>(lineIds_.size()) && !lineIds_[idx].empty()) {
+                    ofs << lineIds_[idx] << ",CHOICE," << node->name << ",,"
+                        << escapeCSV(story_.string_pool[static_cast<size_t>(idx)]) << "\n";
+                }
+            }
+        }
+    }
+
+    ofs.close();
+    std::cout << "Exported: " << outputPath << std::endl;
+    return true;
+}
+
 bool Parser::compile(const std::string& outputPath) {
     if (hasErrors()) {
         if (error_.empty()) error_ = "Cannot compile: parse errors exist";
         return false;
     }
+
+    // line_ids → story_ 복사
+    story_.line_ids = lineIds_;
 
     flatbuffers::FlatBufferBuilder builder;
 

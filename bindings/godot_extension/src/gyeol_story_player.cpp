@@ -23,11 +23,19 @@ void StoryPlayer::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_variable", "name"), &StoryPlayer::get_variable);
     ClassDB::bind_method(D_METHOD("set_variable", "name", "value"), &StoryPlayer::set_variable);
     ClassDB::bind_method(D_METHOD("has_variable", "name"), &StoryPlayer::has_variable);
+    ClassDB::bind_method(D_METHOD("load_locale", "path"), &StoryPlayer::load_locale);
+    ClassDB::bind_method(D_METHOD("clear_locale"), &StoryPlayer::clear_locale);
+    ClassDB::bind_method(D_METHOD("get_locale"), &StoryPlayer::get_locale);
+    ClassDB::bind_method(D_METHOD("get_visit_count", "node_name"), &StoryPlayer::get_visit_count);
+    ClassDB::bind_method(D_METHOD("has_visited", "node_name"), &StoryPlayer::has_visited);
+    ClassDB::bind_method(D_METHOD("get_variable_names"), &StoryPlayer::get_variable_names);
+    ClassDB::bind_method(D_METHOD("set_seed", "seed"), &StoryPlayer::set_seed);
 
     // Signals
     ADD_SIGNAL(MethodInfo("dialogue_line",
         PropertyInfo(Variant::STRING, "character"),
-        PropertyInfo(Variant::STRING, "text")));
+        PropertyInfo(Variant::STRING, "text"),
+        PropertyInfo(Variant::DICTIONARY, "tags")));
 
     ADD_SIGNAL(MethodInfo("choices_presented",
         PropertyInfo(Variant::ARRAY, "choices")));
@@ -82,7 +90,13 @@ void StoryPlayer::advance() {
         case Gyeol::StepType::LINE: {
             String character = result.line.character ? String::utf8(result.line.character) : String("");
             String text = result.line.text ? String::utf8(result.line.text) : String("");
-            emit_signal("dialogue_line", character, text);
+            Dictionary tags;
+            for (const auto& tag : result.line.tags) {
+                String key = tag.first ? String::utf8(tag.first) : String("");
+                String value = tag.second ? String::utf8(tag.second) : String("");
+                tags[key] = value;
+            }
+            emit_signal("dialogue_line", character, text, tags);
             break;
         }
 
@@ -190,6 +204,13 @@ godot::Variant StoryPlayer::get_variable(const String &name) const {
         case Gyeol::Variant::INT:    return godot::Variant(v.i);
         case Gyeol::Variant::FLOAT:  return godot::Variant(static_cast<double>(v.f));
         case Gyeol::Variant::STRING: return godot::Variant(String::utf8(v.s.c_str()));
+        case Gyeol::Variant::LIST: {
+            Array arr;
+            for (const auto& item : v.list) {
+                arr.append(String::utf8(item.c_str()));
+            }
+            return godot::Variant(arr);
+        }
     }
     return godot::Variant();
 }
@@ -211,6 +232,16 @@ void StoryPlayer::set_variable(const String &name, const godot::Variant &value) 
             runner_.setVariable(n, Gyeol::Variant::String(s.utf8().get_data()));
             break;
         }
+        case godot::Variant::ARRAY: {
+            Array arr = value;
+            std::vector<std::string> items;
+            for (int j = 0; j < arr.size(); ++j) {
+                String s = arr[j];
+                items.push_back(s.utf8().get_data());
+            }
+            runner_.setVariable(n, Gyeol::Variant::List(std::move(items)));
+            break;
+        }
         default:
             UtilityFunctions::printerr("[Gyeol] Unsupported variant type for set_variable");
             break;
@@ -219,4 +250,63 @@ void StoryPlayer::set_variable(const String &name, const godot::Variant &value) 
 
 bool StoryPlayer::has_variable(const String &name) const {
     return runner_.hasVariable(name.utf8().get_data());
+}
+
+bool StoryPlayer::load_locale(const String &path) {
+    if (!runner_.hasStory()) {
+        UtilityFunctions::printerr("[Gyeol] No story loaded for locale.");
+        return false;
+    }
+
+    // Godot 경로 → 시스템 경로 변환
+    String global_path = path;
+    if (path.begins_with("res://") || path.begins_with("user://")) {
+        if (!FileAccess::file_exists(path)) {
+            UtilityFunctions::printerr("[Gyeol] Locale file not found: ", path);
+            return false;
+        }
+        Ref<FileAccess> probe = FileAccess::open(path, FileAccess::READ);
+        if (probe.is_null()) {
+            UtilityFunctions::printerr("[Gyeol] Cannot open locale file: ", path);
+            return false;
+        }
+        global_path = probe->get_path_absolute();
+        probe->close();
+    }
+
+    bool ok = runner_.loadLocale(global_path.utf8().get_data());
+    if (ok) {
+        UtilityFunctions::print("[Gyeol] Locale loaded: ", path);
+    } else {
+        UtilityFunctions::printerr("[Gyeol] Failed to load locale: ", path);
+    }
+    return ok;
+}
+
+void StoryPlayer::clear_locale() {
+    runner_.clearLocale();
+}
+
+String StoryPlayer::get_locale() const {
+    return String::utf8(runner_.getLocale().c_str());
+}
+
+int StoryPlayer::get_visit_count(const String &node_name) const {
+    return runner_.getVisitCount(node_name.utf8().get_data());
+}
+
+bool StoryPlayer::has_visited(const String &node_name) const {
+    return runner_.hasVisited(node_name.utf8().get_data());
+}
+
+PackedStringArray StoryPlayer::get_variable_names() const {
+    PackedStringArray result;
+    for (const auto &name : runner_.getVariableNames()) {
+        result.append(String::utf8(name.c_str()));
+    }
+    return result;
+}
+
+void StoryPlayer::set_seed(int seed) {
+    runner_.setSeed(static_cast<uint32_t>(seed));
 }

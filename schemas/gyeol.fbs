@@ -5,12 +5,20 @@ enum Operator : byte {
     Equal, NotEqual, Greater, Less, GreaterOrEqual, LessOrEqual
 }
 
+// 할당 연산자 (SetVar)
+enum AssignOp : byte {
+    Assign,   // = (기본값, 하위 호환)
+    Append,   // += (리스트에 추가)
+    Remove    // -= (리스트에서 제거)
+}
+
 // 값 타입 (변수)
 union ValueData {
     BoolValue,  // table wrapping bool
     IntValue,   // table wrapping int
     FloatValue, // table wrapping float
-    StringRef   // table wrapping string index
+    StringRef,  // table wrapping string index
+    ListValue   // table wrapping list of string indices
 }
 
 // 명령 타입
@@ -21,7 +29,9 @@ union OpData {
     Command,    // 엔진 명령 (배경 변경, 사운드 등)
     SetVar,     // 변수 값 변경
     Condition,  // 조건 분기 (If)
-    Random      // 랜덤 분기 (가중치 기반)
+    Random,         // 랜덤 분기 (가중치 기반)
+    Return,         // 서브루틴 반환값
+    CallWithReturn  // 반환값을 변수에 저장하는 call
 }
 
 // 래핑 테이블
@@ -29,16 +39,24 @@ table BoolValue { val:bool; }
 table IntValue { val:int; }
 table FloatValue { val:float; }
 table StringRef { index:int; } // String Pool의 인덱스 참조
+table ListValue { items:[int]; } // String Pool 인덱스 배열 (리스트/집합)
 
 // -------------------------------------------------------------------------
 // 로직
 // -------------------------------------------------------------------------
 
+// [메타데이터 태그] (key-value pair, String Pool 참조)
+table Tag {
+    key_id:int;     // "mood", "pose", "voice" 등 — String Pool Index
+    value_id:int;   // "angry", "arms_crossed", "hero.wav" 등 — String Pool Index
+}
+
 // [대사] (Character + Text + Tags)
 table Line {
     character_id:int = -1;  // String Pool Index (-1이면 내레이션)
     text_id:int;            // String Pool Index (실제 대사)
-    voice_asset_id:int = -1; // 보이스 파일 키 (선택)
+    voice_asset_id:int = -1; // 보이스 파일 키 (선택, 하위 호환)
+    tags:[Tag];             // 메타데이터 태그 (#key:value)
 }
 
 // [선택지]
@@ -52,6 +70,7 @@ table Choice {
 table Jump {
     target_node_name_id:int; // 이동할 노드 이름
     is_call:bool = false;    // true면 stack에 push (Call/Return 구조)
+    arg_exprs:[Expression];  // 함수 호출 인자 표현식 (is_call=true일 때)
 }
 
 // [명령] (배경, 사운드 등등) - Godot/Unity 등에서 처리
@@ -80,7 +99,13 @@ enum ExprOp : byte {
     // --- 논리 연산자 ---
     And,            // pop 2, push a && b (bool)
     Or,             // pop 2, push a || b (bool)
-    Not             // pop 1, push !a (bool)
+    Not,            // pop 1, push !a (bool)
+    // --- 함수 연산자 ---
+    PushVisitCount, // var_name_id = 노드명, push Int(방문 횟수)
+    PushVisited,    // var_name_id = 노드명, push Bool(방문 여부)
+    // --- 리스트 연산자 ---
+    ListContains,   // pop 2 (list, string), push Bool(포함 여부)
+    ListLength      // var_name_id = 변수명, push Int(리스트 크기)
 }
 
 table ExprToken {
@@ -93,11 +118,12 @@ table Expression {
     tokens:[ExprToken];
 }
 
-// [변수 설정] (hp = 10, hp = hp + 1)
+// [변수 설정] (hp = 10, hp = hp + 1, inventory += "item")
 table SetVar {
     var_name_id:int;
-    value:ValueData;        // Union (Int, Float, Bool, String) - 단순 리터럴
+    value:ValueData;        // Union (Int, Float, Bool, String, List) - 단순 리터럴
     expr:Expression;        // 복합 표현식 (있으면 value보다 우선)
+    assign_op:AssignOp = Assign; // 할당 연산자 (=, +=, -=)
 }
 
 // [조건] (hp > 10, hp - 10 > 0, hp > 0 and has_key == true)
@@ -123,6 +149,19 @@ table Random {
     branches:[RandomBranch];  // 가중치 기반 분기 리스트
 }
 
+// [서브루틴 반환값]
+table Return {
+    expr:Expression;        // 반환 표현식 (있으면 평가해서 반환)
+    value:ValueData;        // 단순 리터럴 반환 (expr 없을 때)
+}
+
+// [반환값을 변수에 저장하는 call]
+table CallWithReturn {
+    target_node_name_id:int;    // 호출할 노드 이름 (String Pool Index)
+    return_var_name_id:int;     // 반환값을 저장할 변수 이름 (String Pool Index)
+    arg_exprs:[Expression];     // 함수 호출 인자 표현식
+}
+
 // -------------------------------------------------------------------------
 // 구조
 // -------------------------------------------------------------------------
@@ -134,6 +173,7 @@ table Instruction {
 table Node {
     name:string (key);      // 노드 이름 (검색용 key)
     lines:[Instruction];    // 실행할 명령들의 리스트
+    param_ids:[int];        // 매개변수 이름 String Pool 인덱스 (함수 파라미터)
 }
 
 // -------------------------------------------------------------------------
@@ -145,18 +185,37 @@ table SavedVar {
     name:string;            // 변수 이름 (직접 문자열)
     value:ValueData;        // 기존 ValueData union 재사용
     string_value:string;    // STRING 타입일 때 실제 값 (StringRef 대체)
+    list_items:[string];    // LIST 타입일 때 항목들
+}
+
+// 섀도된 변수 (함수 매개변수 로컬 스코프 복원용)
+table SavedShadowedVar {
+    name:string;            // 변수 이름
+    value:ValueData;        // 이전 값 (ValueData union)
+    string_value:string;    // STRING 타입일 때 실제 값
+    existed:bool = true;    // false면 변수가 원래 없었음 → 복원 시 삭제
+    list_items:[string];    // LIST 타입일 때 항목들
 }
 
 // Call stack 프레임
 table SavedCallFrame {
     node_name:string;       // 노드 이름
     pc:uint32;              // program counter
+    return_var_name:string; // 반환값 저장 변수 (빈 문자열이면 반환값 무시)
+    shadowed_vars:[SavedShadowedVar];  // 섀도된 변수들 (함수 매개변수 복원용)
+    param_names:[string];               // 매개변수 이름들
 }
 
 // 대기 중인 선택지
 table SavedPendingChoice {
     text:string;            // 선택지 텍스트
     target_node_name:string; // 이동 대상 노드 이름
+}
+
+// 노드 방문 횟수
+table SavedVisitCount {
+    node_name:string;       // 노드 이름 (직접 문자열)
+    count:uint32;           // 방문 횟수
 }
 
 // 세이브 상태 루트
@@ -169,6 +228,7 @@ table SaveState {
     variables:[SavedVar];                 // 런타임 변수
     call_stack:[SavedCallFrame];          // 콜 스택
     pending_choices:[SavedPendingChoice]; // 대기 선택지
+    visit_counts:[SavedVisitCount];       // 노드 방문 횟수
 }
 
 // -------------------------------------------------------------------------
@@ -179,8 +239,11 @@ table Story {
     version:string;
     
     // [String Pool] 모든 텍스트는 여기에 모여있고, 위에서는 index로 참조함
-    string_pool:[string]; 
-    
+    string_pool:[string];
+
+    // [Line IDs] 번역용 Line ID (string_pool과 병렬, 빈 문자열이면 구조적)
+    line_ids:[string];
+
     // [Initial Variables] 초기 변수 세팅
     global_vars:[SetVar];
     
