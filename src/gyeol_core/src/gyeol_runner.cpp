@@ -125,6 +125,17 @@ static bool compareVariants(const Variant& lhs, Operator op, const Variant& rhs)
     return false;
 }
 
+// --- truthiness 변환 ---
+static bool variantToBool(const Variant& v) {
+    switch (v.type) {
+        case Variant::BOOL:   return v.b;
+        case Variant::INT:    return v.i != 0;
+        case Variant::FLOAT:  return v.f != 0.0f;
+        case Variant::STRING: return !v.s.empty();
+    }
+    return false;
+}
+
 // --- 산술 연산 ---
 static Variant applyBinaryOp(const Variant& lhs, ExprOp op, const Variant& rhs) {
     // Float 하나라도 있으면 float 연산
@@ -213,6 +224,50 @@ Variant Runner::evaluateExpression(const void* exprPtr) const {
                     int32_t v = (val.type == Variant::BOOL) ? (val.b ? 1 : 0) : val.i;
                     stack.push_back(Variant::Int(-v));
                 }
+                break;
+            }
+            // --- 비교 연산자 ---
+            case ExprOp::CmpEq:
+            case ExprOp::CmpNe:
+            case ExprOp::CmpGt:
+            case ExprOp::CmpLt:
+            case ExprOp::CmpGe:
+            case ExprOp::CmpLe: {
+                if (stack.size() < 2) return Variant::Int(0);
+                Variant rhs = stack.back(); stack.pop_back();
+                Variant lhs = stack.back(); stack.pop_back();
+                Operator cmpOp = Operator::Equal;
+                switch (token->op()) {
+                    case ExprOp::CmpEq: cmpOp = Operator::Equal; break;
+                    case ExprOp::CmpNe: cmpOp = Operator::NotEqual; break;
+                    case ExprOp::CmpGt: cmpOp = Operator::Greater; break;
+                    case ExprOp::CmpLt: cmpOp = Operator::Less; break;
+                    case ExprOp::CmpGe: cmpOp = Operator::GreaterOrEqual; break;
+                    case ExprOp::CmpLe: cmpOp = Operator::LessOrEqual; break;
+                    default: break;
+                }
+                stack.push_back(Variant::Bool(compareVariants(lhs, cmpOp, rhs)));
+                break;
+            }
+            // --- 논리 연산자 ---
+            case ExprOp::And: {
+                if (stack.size() < 2) return Variant::Int(0);
+                Variant rhs = stack.back(); stack.pop_back();
+                Variant lhs = stack.back(); stack.pop_back();
+                stack.push_back(Variant::Bool(variantToBool(lhs) && variantToBool(rhs)));
+                break;
+            }
+            case ExprOp::Or: {
+                if (stack.size() < 2) return Variant::Int(0);
+                Variant rhs = stack.back(); stack.pop_back();
+                Variant lhs = stack.back(); stack.pop_back();
+                stack.push_back(Variant::Bool(variantToBool(lhs) || variantToBool(rhs)));
+                break;
+            }
+            case ExprOp::Not: {
+                if (stack.empty()) return Variant::Int(0);
+                Variant val = stack.back(); stack.pop_back();
+                stack.push_back(Variant::Bool(!variantToBool(val)));
                 break;
             }
         }
@@ -445,28 +500,34 @@ StepResult Runner::step() {
 
             case OpData::Condition: {
                 auto* cond = instr->data_as_Condition();
+                bool condResult;
 
-                // LHS 평가: lhs_expr 있으면 표현식, 없으면 기존 변수 조회
-                Variant lhs = Variant::Int(0);
-                if (cond->lhs_expr()) {
-                    lhs = evaluateExpression(cond->lhs_expr());
+                if (cond->cond_expr()) {
+                    // 논리 연산자 경로: 전체 불리언 표현식 평가
+                    Variant result = evaluateExpression(cond->cond_expr());
+                    condResult = variantToBool(result);
                 } else {
-                    std::string varName = poolStr(cond->var_name_id());
-                    auto it = variables_.find(varName);
-                    if (it != variables_.end()) {
-                        lhs = it->second;
+                    // 기존 경로: lhs_expr/op/rhs_expr 또는 var_name_id/compare_value
+                    Variant lhs = Variant::Int(0);
+                    if (cond->lhs_expr()) {
+                        lhs = evaluateExpression(cond->lhs_expr());
+                    } else {
+                        std::string varName = poolStr(cond->var_name_id());
+                        auto it = variables_.find(varName);
+                        if (it != variables_.end()) {
+                            lhs = it->second;
+                        }
                     }
-                }
 
-                // RHS 평가: rhs_expr 있으면 표현식, 없으면 기존 리터럴
-                Variant rhs = Variant::Int(0);
-                if (cond->rhs_expr()) {
-                    rhs = evaluateExpression(cond->rhs_expr());
-                } else if (cond->compare_value() && cond->compare_value_type() != ValueData::NONE) {
-                    rhs = readValueData(cond->compare_value(), cond->compare_value_type(), pool);
-                }
+                    Variant rhs = Variant::Int(0);
+                    if (cond->rhs_expr()) {
+                        rhs = evaluateExpression(cond->rhs_expr());
+                    } else if (cond->compare_value() && cond->compare_value_type() != ValueData::NONE) {
+                        rhs = readValueData(cond->compare_value(), cond->compare_value_type(), pool);
+                    }
 
-                bool condResult = compareVariants(lhs, cond->op(), rhs);
+                    condResult = compareVariants(lhs, cond->op(), rhs);
+                }
 
                 int32_t targetId = condResult ? cond->true_jump_node_id() : cond->false_jump_node_id();
                 if (targetId >= 0) {

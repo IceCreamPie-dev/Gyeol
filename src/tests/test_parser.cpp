@@ -712,9 +712,118 @@ TEST(ParserTest, ConditionSimpleBackwardCompat) {
     auto* story = GetStory(buf.data());
     auto* cond = story->nodes()->Get(0)->lines()->Get(0)->data_as_Condition();
     ASSERT_NE(cond, nullptr);
+    EXPECT_EQ(cond->cond_expr(), nullptr); // 논리 연산자 없음 → cond_expr 미사용
     EXPECT_EQ(cond->lhs_expr(), nullptr); // 단순 변수 → var_name_id
     EXPECT_GE(cond->var_name_id(), 0);
     EXPECT_EQ(cond->op(), Operator::Equal);
     EXPECT_EQ(cond->compare_value_type(), ValueData::IntValue);
     EXPECT_EQ(cond->compare_value_as_IntValue()->val(), 1);
+}
+
+// --- 논리 연산자 파싱 ---
+
+TEST(ParserTest, ConditionAndOp) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if hp > 0 and has_key == true -> target\n"
+        "    \"fallthrough\"\n"
+        "\n"
+        "label target:\n"
+        "    \"hit\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* cond = story->nodes()->Get(0)->lines()->Get(0)->data_as_Condition();
+    ASSERT_NE(cond, nullptr);
+    ASSERT_NE(cond->cond_expr(), nullptr); // 논리 연산자 사용 → cond_expr
+    // And 토큰이 있는지 확인
+    bool foundAnd = false;
+    for (flatbuffers::uoffset_t i = 0; i < cond->cond_expr()->tokens()->size(); ++i) {
+        if (cond->cond_expr()->tokens()->Get(i)->op() == ExprOp::And) foundAnd = true;
+    }
+    EXPECT_TRUE(foundAnd);
+}
+
+TEST(ParserTest, ConditionOrOp) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if x > 10 or y > 10 -> target\n"
+        "    \"fallthrough\"\n"
+        "\n"
+        "label target:\n"
+        "    \"hit\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* cond = story->nodes()->Get(0)->lines()->Get(0)->data_as_Condition();
+    ASSERT_NE(cond, nullptr);
+    ASSERT_NE(cond->cond_expr(), nullptr);
+    bool foundOr = false;
+    for (flatbuffers::uoffset_t i = 0; i < cond->cond_expr()->tokens()->size(); ++i) {
+        if (cond->cond_expr()->tokens()->Get(i)->op() == ExprOp::Or) foundOr = true;
+    }
+    EXPECT_TRUE(foundOr);
+}
+
+TEST(ParserTest, ConditionNotOp) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if not game_over == true -> target\n"
+        "    \"fallthrough\"\n"
+        "\n"
+        "label target:\n"
+        "    \"hit\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* cond = story->nodes()->Get(0)->lines()->Get(0)->data_as_Condition();
+    ASSERT_NE(cond, nullptr);
+    ASSERT_NE(cond->cond_expr(), nullptr);
+    bool foundNot = false;
+    for (flatbuffers::uoffset_t i = 0; i < cond->cond_expr()->tokens()->size(); ++i) {
+        if (cond->cond_expr()->tokens()->Get(i)->op() == ExprOp::Not) foundNot = true;
+    }
+    EXPECT_TRUE(foundNot);
+}
+
+TEST(ParserTest, ConditionLogicalPrecedence) {
+    // and가 or보다 우선순위 높음: a == 1 or b == 2 and c == 3
+    // = a == 1 or (b == 2 and c == 3)
+    // RPN: [a, 1, CmpEq, b, 2, CmpEq, c, 3, CmpEq, And, Or]
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if a == 1 or b == 2 and c == 3 -> target\n"
+        "    \"fallthrough\"\n"
+        "\n"
+        "label target:\n"
+        "    \"hit\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* cond = story->nodes()->Get(0)->lines()->Get(0)->data_as_Condition();
+    ASSERT_NE(cond, nullptr);
+    ASSERT_NE(cond->cond_expr(), nullptr);
+    auto* toks = cond->cond_expr()->tokens();
+    ASSERT_GE(toks->size(), 2u);
+    // 마지막 토큰이 Or, 그 전이 And (and가 먼저 실행)
+    EXPECT_EQ(toks->Get(toks->size() - 1)->op(), ExprOp::Or);
+    EXPECT_EQ(toks->Get(toks->size() - 2)->op(), ExprOp::And);
+}
+
+TEST(ParserTest, ConditionSimpleNoRegression) {
+    // 논리 연산자 없는 단순 조건은 여전히 기존 방식 (cond_expr=null)
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if hp > 10 -> target\n"
+        "    \"fallthrough\"\n"
+        "\n"
+        "label target:\n"
+        "    \"hit\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* cond = story->nodes()->Get(0)->lines()->Get(0)->data_as_Condition();
+    ASSERT_NE(cond, nullptr);
+    EXPECT_EQ(cond->cond_expr(), nullptr); // 논리 없음 → 기존 경로
+    EXPECT_EQ(cond->op(), Operator::Greater);
 }

@@ -474,11 +474,20 @@ enum class ExprOp : int8_t {
   Div = 5,
   Mod = 6,
   Negate = 7,
+  CmpEq = 8,
+  CmpNe = 9,
+  CmpGt = 10,
+  CmpLt = 11,
+  CmpGe = 12,
+  CmpLe = 13,
+  And = 14,
+  Or = 15,
+  Not = 16,
   MIN = PushLiteral,
-  MAX = Negate
+  MAX = Not
 };
 
-inline const ExprOp (&EnumValuesExprOp())[8] {
+inline const ExprOp (&EnumValuesExprOp())[17] {
   static const ExprOp values[] = {
     ExprOp::PushLiteral,
     ExprOp::PushVar,
@@ -487,13 +496,22 @@ inline const ExprOp (&EnumValuesExprOp())[8] {
     ExprOp::Mul,
     ExprOp::Div,
     ExprOp::Mod,
-    ExprOp::Negate
+    ExprOp::Negate,
+    ExprOp::CmpEq,
+    ExprOp::CmpNe,
+    ExprOp::CmpGt,
+    ExprOp::CmpLt,
+    ExprOp::CmpGe,
+    ExprOp::CmpLe,
+    ExprOp::And,
+    ExprOp::Or,
+    ExprOp::Not
   };
   return values;
 }
 
 inline const char * const *EnumNamesExprOp() {
-  static const char * const names[9] = {
+  static const char * const names[18] = {
     "PushLiteral",
     "PushVar",
     "Add",
@@ -502,13 +520,22 @@ inline const char * const *EnumNamesExprOp() {
     "Div",
     "Mod",
     "Negate",
+    "CmpEq",
+    "CmpNe",
+    "CmpGt",
+    "CmpLt",
+    "CmpGe",
+    "CmpLe",
+    "And",
+    "Or",
+    "Not",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameExprOp(ExprOp e) {
-  if (::flatbuffers::IsOutRange(e, ExprOp::PushLiteral, ExprOp::Negate)) return "";
+  if (::flatbuffers::IsOutRange(e, ExprOp::PushLiteral, ExprOp::Not)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesExprOp()[index];
 }
@@ -1382,6 +1409,7 @@ struct ConditionT : public ::flatbuffers::NativeTable {
   int32_t false_jump_node_id = 0;
   std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT> lhs_expr{};
   std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT> rhs_expr{};
+  std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT> cond_expr{};
   ConditionT() = default;
   ConditionT(const ConditionT &o);
   ConditionT(ConditionT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1400,7 +1428,8 @@ struct Condition FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_TRUE_JUMP_NODE_ID = 12,
     VT_FALSE_JUMP_NODE_ID = 14,
     VT_LHS_EXPR = 16,
-    VT_RHS_EXPR = 18
+    VT_RHS_EXPR = 18,
+    VT_COND_EXPR = 20
   };
   int32_t var_name_id() const {
     return GetField<int32_t>(VT_VAR_NAME_ID, 0);
@@ -1439,6 +1468,9 @@ struct Condition FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ICPDev::Gyeol::Schema::Expression *rhs_expr() const {
     return GetPointer<const ICPDev::Gyeol::Schema::Expression *>(VT_RHS_EXPR);
   }
+  const ICPDev::Gyeol::Schema::Expression *cond_expr() const {
+    return GetPointer<const ICPDev::Gyeol::Schema::Expression *>(VT_COND_EXPR);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<int32_t>(verifier, VT_VAR_NAME_ID, 4) &&
@@ -1452,6 +1484,8 @@ struct Condition FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyTable(lhs_expr()) &&
            VerifyOffset(verifier, VT_RHS_EXPR) &&
            verifier.VerifyTable(rhs_expr()) &&
+           VerifyOffset(verifier, VT_COND_EXPR) &&
+           verifier.VerifyTable(cond_expr()) &&
            verifier.EndTable();
   }
   ConditionT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1503,6 +1537,9 @@ struct ConditionBuilder {
   void add_rhs_expr(::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> rhs_expr) {
     fbb_.AddOffset(Condition::VT_RHS_EXPR, rhs_expr);
   }
+  void add_cond_expr(::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> cond_expr) {
+    fbb_.AddOffset(Condition::VT_COND_EXPR, cond_expr);
+  }
   explicit ConditionBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1523,8 +1560,10 @@ inline ::flatbuffers::Offset<Condition> CreateCondition(
     int32_t true_jump_node_id = 0,
     int32_t false_jump_node_id = 0,
     ::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> lhs_expr = 0,
-    ::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> rhs_expr = 0) {
+    ::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> rhs_expr = 0,
+    ::flatbuffers::Offset<ICPDev::Gyeol::Schema::Expression> cond_expr = 0) {
   ConditionBuilder builder_(_fbb);
+  builder_.add_cond_expr(cond_expr);
   builder_.add_rhs_expr(rhs_expr);
   builder_.add_lhs_expr(lhs_expr);
   builder_.add_false_jump_node_id(false_jump_node_id);
@@ -2721,7 +2760,8 @@ inline ConditionT::ConditionT(const ConditionT &o)
         true_jump_node_id(o.true_jump_node_id),
         false_jump_node_id(o.false_jump_node_id),
         lhs_expr((o.lhs_expr) ? new ICPDev::Gyeol::Schema::ExpressionT(*o.lhs_expr) : nullptr),
-        rhs_expr((o.rhs_expr) ? new ICPDev::Gyeol::Schema::ExpressionT(*o.rhs_expr) : nullptr) {
+        rhs_expr((o.rhs_expr) ? new ICPDev::Gyeol::Schema::ExpressionT(*o.rhs_expr) : nullptr),
+        cond_expr((o.cond_expr) ? new ICPDev::Gyeol::Schema::ExpressionT(*o.cond_expr) : nullptr) {
 }
 
 inline ConditionT &ConditionT::operator=(ConditionT o) FLATBUFFERS_NOEXCEPT {
@@ -2732,6 +2772,7 @@ inline ConditionT &ConditionT::operator=(ConditionT o) FLATBUFFERS_NOEXCEPT {
   std::swap(false_jump_node_id, o.false_jump_node_id);
   std::swap(lhs_expr, o.lhs_expr);
   std::swap(rhs_expr, o.rhs_expr);
+  std::swap(cond_expr, o.cond_expr);
   return *this;
 }
 
@@ -2752,6 +2793,7 @@ inline void Condition::UnPackTo(ConditionT *_o, const ::flatbuffers::resolver_fu
   { auto _e = false_jump_node_id(); _o->false_jump_node_id = _e; }
   { auto _e = lhs_expr(); if (_e) { if(_o->lhs_expr) { _e->UnPackTo(_o->lhs_expr.get(), _resolver); } else { _o->lhs_expr = std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT>(_e->UnPack(_resolver)); } } else if (_o->lhs_expr) { _o->lhs_expr.reset(); } }
   { auto _e = rhs_expr(); if (_e) { if(_o->rhs_expr) { _e->UnPackTo(_o->rhs_expr.get(), _resolver); } else { _o->rhs_expr = std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT>(_e->UnPack(_resolver)); } } else if (_o->rhs_expr) { _o->rhs_expr.reset(); } }
+  { auto _e = cond_expr(); if (_e) { if(_o->cond_expr) { _e->UnPackTo(_o->cond_expr.get(), _resolver); } else { _o->cond_expr = std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT>(_e->UnPack(_resolver)); } } else if (_o->cond_expr) { _o->cond_expr.reset(); } }
 }
 
 inline ::flatbuffers::Offset<Condition> Condition::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ConditionT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -2770,6 +2812,7 @@ inline ::flatbuffers::Offset<Condition> CreateCondition(::flatbuffers::FlatBuffe
   auto _false_jump_node_id = _o->false_jump_node_id;
   auto _lhs_expr = _o->lhs_expr ? CreateExpression(_fbb, _o->lhs_expr.get(), _rehasher) : 0;
   auto _rhs_expr = _o->rhs_expr ? CreateExpression(_fbb, _o->rhs_expr.get(), _rehasher) : 0;
+  auto _cond_expr = _o->cond_expr ? CreateExpression(_fbb, _o->cond_expr.get(), _rehasher) : 0;
   return ICPDev::Gyeol::Schema::CreateCondition(
       _fbb,
       _var_name_id,
@@ -2779,7 +2822,8 @@ inline ::flatbuffers::Offset<Condition> CreateCondition(::flatbuffers::FlatBuffe
       _true_jump_node_id,
       _false_jump_node_id,
       _lhs_expr,
-      _rhs_expr);
+      _rhs_expr,
+      _cond_expr);
 }
 
 inline InstructionT *Instruction::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {

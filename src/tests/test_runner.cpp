@@ -822,3 +822,97 @@ TEST(RunnerTest, CondExprNoElse) {
     auto r = runner.step();
     EXPECT_STREQ(r.line.text, "continued");
 }
+
+// --- 논리 연산자 실행 ---
+
+TEST(RunnerTest, CondAndTrue) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ hp = 10\n"
+        "    $ has_key = true\n"
+        "    if hp > 0 and has_key == true -> yes else no\n"
+        "\n"
+        "label yes:\n"
+        "    \"yes\"\n"
+        "label no:\n"
+        "    \"no\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "yes");
+}
+
+TEST(RunnerTest, CondAndFalse) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ hp = 10\n"
+        "    $ has_key = false\n"
+        "    if hp > 0 and has_key == true -> yes else no\n"
+        "\n"
+        "label yes:\n"
+        "    \"yes\"\n"
+        "label no:\n"
+        "    \"no\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "no");
+}
+
+TEST(RunnerTest, CondOrTrue) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ x = 5\n"
+        "    $ y = 15\n"
+        "    if x > 10 or y > 10 -> yes else no\n"
+        "\n"
+        "label yes:\n"
+        "    \"yes\"\n"
+        "label no:\n"
+        "    \"no\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "yes");
+}
+
+TEST(RunnerTest, CondNotTrue) {
+    // not game_over == true: game_over=false → false == true → false → not false → true
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ game_over = false\n"
+        "    if not game_over == true -> yes else no\n"
+        "\n"
+        "label yes:\n"
+        "    \"yes\"\n"
+        "label no:\n"
+        "    \"no\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "yes");
+}
+
+TEST(RunnerTest, CondNestedParens) {
+    // hp > 0 and (has_key == true or has_pick == true)
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ hp = 10\n"
+        "    $ has_key = false\n"
+        "    $ has_pick = true\n"
+        "    if hp > 0 and (has_key == true or has_pick == true) -> yes else no\n"
+        "\n"
+        "label yes:\n"
+        "    \"yes\"\n"
+        "label no:\n"
+        "    \"no\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "yes");
+}

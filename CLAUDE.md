@@ -61,10 +61,10 @@ src/
     compiler_main.cpp    # CLI 엔트리포인트
     gyeol_parser.h       # Parser 클래스 API
     gyeol_parser.cpp     # Line-by-line 파서 구현
-  tests/                 # Google Test 유닛 테스트 (99 tests)
+  tests/                 # Google Test 유닛 테스트 (109 tests)
     test_helpers.h       # 테스트 유틸리티 (compileScript, startRunner)
-    test_parser.cpp      # Parser 테스트 (34 cases)
-    test_runner.cpp      # Runner VM 테스트 (43 cases)
+    test_parser.cpp      # Parser 테스트 (39 cases)
+    test_runner.cpp      # Runner VM 테스트 (48 cases)
     test_story.cpp       # Story loader 테스트 (4 cases)
     test_saveload.cpp    # Save/Load 라운드트립 테스트 (9 cases)
 bindings/
@@ -106,7 +106,8 @@ demo/
 - **Runner VM** — 이벤트 기반 step()/choose() API, 엔진 독립적 설계
   - `StepResult` 반환: LINE (대사), CHOICES (선택지), COMMAND (엔진 명령), END
   - `Variant` 타입으로 변수 저장 (Bool/Int/Float/String)
-  - 산술 표현식: `$ x = x + 1`, `$ y = a * 2 + b` — Shunting-yard → RPN → 스택 머신 평가
+  - 산술 표현식: `$ x = x + 1`, `$ y = a * 2 + b` — Shunting-yard → RPN → 스택 머신
+  - 논리 연산자: `if hp > 0 and has_key == true`, `or`, `not` — 비교+논리 RPN 플래튼
   - 문자열 보간: `"Hello {name}!"` → 런타임 변수 치환, LINE/CHOICES 텍스트 지원
   - Call stack으로 Jump is_call=true 지원 (서브루틴 호출/복귀)
   - Save/Load: `saveState(filepath)` / `loadState(filepath)` — `.gys` FlatBuffers 바이너리
@@ -140,6 +141,9 @@ label 노드이름:                     # 노드 선언 (첫 label = start_node)
     $ 변수 = 표현식                  # SetVar + 산술 (x + 1, a * 2 + b, (x + y) * 3)
     if 변수 op 값 -> 참 else 거짓    # Condition (==, !=, >, <, >=, <=)
     if 표현식 op 표현식 -> 참 else 거짓 # Condition + 산술 (hp-10 > 0, x+y == z)
+    if 조건 and 조건 -> 참 else 거짓   # 논리 AND (둘 다 참)
+    if 조건 or 조건 -> 참 else 거짓    # 논리 OR (하나 이상 참)
+    if not 조건 -> 참 else 거짓       # 논리 NOT (부정)
     @ 명령 파라미터1 파라미터2        # Command (bg, sfx 등)
     # 주석
 ```
@@ -156,7 +160,7 @@ label 노드이름:                     # 노드 선언 (첫 label = start_node)
 | `Jump` | 흐름 제어 — target_node, is_call flag |
 | `Command` | 엔진 명령 (bg, sfx 등) — type_id, params[] |
 | `SetVar` | 변수 설정 — var_name_id, ValueData (리터럴), Expression (산술) |
-| `Expression` | RPN 토큰 리스트 — ExprToken[] (PushLiteral/PushVar/Add/Sub/Mul/Div/Mod/Negate) |
+| `Expression` | RPN 토큰 리스트 — ExprToken[] (산술/비교/논리 연산자) |
 | `Condition` | 조건 분기 — var/lhs_expr, op, compare_value/rhs_expr, true/false jumps |
 | `SaveState` | 세이브 루트 — version, node, pc, finished, variables, call_stack, pending_choices |
 | `SavedVar` | 저장된 변수 — name, ValueData, string_value |
@@ -178,7 +182,7 @@ label 노드이름:                     # 노드 선언 (첫 label = start_node)
 
 ## Testing
 
-Google Test v1.14.0 기반 자동화 테스트 (99 tests):
+Google Test v1.14.0 기반 자동화 테스트 (109 tests):
 
 ```bash
 # 유닛 테스트 실행
@@ -189,9 +193,9 @@ cd build && ctest --output-on-failure
 ```
 
 테스트 범위:
-- **ParserTest** (34): 문법 요소별 파싱, 에스케이프, String Pool, voice_asset, global_vars, jump 검증, 표현식 파싱, 조건 표현식
+- **ParserTest** (39): 문법 요소별 파싱, 에스케이프, String Pool, voice_asset, global_vars, jump 검증, 표현식, 조건 표현식, 논리 연산자
 - **ParserErrorTest** (9): 에러 케이스, 에러 복구, 다중 에러 수집, 잘못된 jump/choice/condition 타겟
-- **RunnerTest** (43): VM 실행 흐름, 선택지, Jump/Call, 변수/조건, Command, 변수 API, 산술 표현식, 문자열 보간, 조건 표현식
+- **RunnerTest** (48): VM 실행 흐름, 선택지, Jump/Call, 변수/조건, Command, 변수 API, 산술 표현식, 문자열 보간, 조건 표현식, 논리 연산자
 - **StoryTest** (4): .gyb 로드/검증, 잘못된 파일 처리
 - **SaveLoadTest** (9): 라운드트립, 선택지/변수/콜스택 저장복원, 에러 케이스
 

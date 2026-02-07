@@ -663,6 +663,310 @@ static bool parseComparisonOp(const std::string& text, size_t& pos, Operator& op
     return false;
 }
 
+// --- 조건 표현식 파서 (산술 + 비교 + 논리 → 단일 RPN) ---
+bool Parser::parseFullConditionExpr(const std::string& text, size_t& pos,
+                                     std::unique_ptr<ExpressionT>& outExpr,
+                                     bool& hasLogicalOps) {
+    hasLogicalOps = false;
+    skipSpaces(text, pos);
+    if (pos >= text.size()) return false;
+
+    // 내부 토큰 타입
+    enum class TokType { LITERAL, VARREF, OP, LPAREN, RPAREN, NEGATE, NOTOP };
+    struct Token {
+        TokType type;
+        ValueDataUnion literal;
+        int32_t varNameId = -1;
+        ExprOp op = ExprOp::Add;
+    };
+
+    std::vector<Token> tokens;
+    bool expectOperand = true;
+
+    while (pos < text.size()) {
+        skipSpaces(text, pos);
+        if (pos >= text.size()) break;
+
+        char c = text[pos];
+
+        // 괄호
+        if (c == '(') {
+            Token t; t.type = TokType::LPAREN;
+            tokens.push_back(t);
+            pos++;
+            expectOperand = true;
+            continue;
+        }
+        if (c == ')') {
+            Token t; t.type = TokType::RPAREN;
+            tokens.push_back(t);
+            pos++;
+            expectOperand = false;
+            continue;
+        }
+
+        // '->' 화살표 → 종료
+        if (c == '-' && pos + 1 < text.size() && text[pos + 1] == '>') break;
+
+        // 비교 연산자 (피연산자 뒤에서만)
+        if (!expectOperand) {
+            if (c == '=' && pos + 1 < text.size() && text[pos + 1] == '=') {
+                Token t; t.type = TokType::OP; t.op = ExprOp::CmpEq;
+                tokens.push_back(t); pos += 2; expectOperand = true; continue;
+            }
+            if (c == '!' && pos + 1 < text.size() && text[pos + 1] == '=') {
+                Token t; t.type = TokType::OP; t.op = ExprOp::CmpNe;
+                tokens.push_back(t); pos += 2; expectOperand = true; continue;
+            }
+            if (c == '>' && pos + 1 < text.size() && text[pos + 1] == '=') {
+                Token t; t.type = TokType::OP; t.op = ExprOp::CmpGe;
+                tokens.push_back(t); pos += 2; expectOperand = true; continue;
+            }
+            if (c == '<' && pos + 1 < text.size() && text[pos + 1] == '=') {
+                Token t; t.type = TokType::OP; t.op = ExprOp::CmpLe;
+                tokens.push_back(t); pos += 2; expectOperand = true; continue;
+            }
+            if (c == '>') {
+                Token t; t.type = TokType::OP; t.op = ExprOp::CmpGt;
+                tokens.push_back(t); pos += 1; expectOperand = true; continue;
+            }
+            if (c == '<') {
+                Token t; t.type = TokType::OP; t.op = ExprOp::CmpLt;
+                tokens.push_back(t); pos += 1; expectOperand = true; continue;
+            }
+        }
+
+        // 산술 연산자
+        if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%') {
+            if (c == '-' && expectOperand) {
+                Token t; t.type = TokType::NEGATE; t.op = ExprOp::Negate;
+                tokens.push_back(t);
+                pos++;
+                expectOperand = true;
+                continue;
+            }
+            if (expectOperand) break;
+
+            Token t; t.type = TokType::OP;
+            switch (c) {
+                case '+': t.op = ExprOp::Add; break;
+                case '-': t.op = ExprOp::Sub; break;
+                case '*': t.op = ExprOp::Mul; break;
+                case '/': t.op = ExprOp::Div; break;
+                case '%': t.op = ExprOp::Mod; break;
+            }
+            tokens.push_back(t);
+            pos++;
+            expectOperand = true;
+            continue;
+        }
+
+        // 식별자가 아닌 문자가 피연산자 위치가 아닌 곳에 오면 종료
+        // (식별자는 and/or 키워드일 수 있으므로 아래에서 처리)
+        if (!expectOperand && !(std::isalpha(static_cast<unsigned char>(c)) || c == '_')) break;
+
+        // 문자열 리터럴
+        if (c == '"') {
+            std::string str = parseQuotedString(text, pos);
+            Token t; t.type = TokType::LITERAL;
+            auto ref = std::make_unique<StringRefT>();
+            ref->index = addString(str);
+            t.literal.Set(*ref);
+            tokens.push_back(std::move(t));
+            expectOperand = false;
+            continue;
+        }
+
+        // 숫자
+        if (std::isdigit(static_cast<unsigned char>(c)) || c == '.') {
+            size_t start = pos;
+            bool hasDot = false;
+            while (pos < text.size()) {
+                char ch = text[pos];
+                if (ch == '.') {
+                    if (hasDot) break;
+                    hasDot = true;
+                    pos++;
+                } else if (std::isdigit(static_cast<unsigned char>(ch))) {
+                    pos++;
+                } else {
+                    break;
+                }
+            }
+            std::string numStr = text.substr(start, pos - start);
+            Token t; t.type = TokType::LITERAL;
+            if (hasDot) {
+                auto val = std::make_unique<FloatValueT>();
+                val->val = std::strtof(numStr.c_str(), nullptr);
+                t.literal.Set(*val);
+            } else {
+                auto val = std::make_unique<IntValueT>();
+                val->val = static_cast<int32_t>(std::strtol(numStr.c_str(), nullptr, 10));
+                t.literal.Set(*val);
+            }
+            tokens.push_back(std::move(t));
+            expectOperand = false;
+            continue;
+        }
+
+        // 식별자 (변수명, true/false, and/or/not)
+        if (std::isalpha(static_cast<unsigned char>(c)) || c == '_') {
+            size_t start = pos;
+            while (pos < text.size() &&
+                   (std::isalnum(static_cast<unsigned char>(text[pos])) || text[pos] == '_')) {
+                pos++;
+            }
+            std::string word = text.substr(start, pos - start);
+
+            // 논리 연산자 키워드
+            if (word == "and" && !expectOperand) {
+                Token t; t.type = TokType::OP; t.op = ExprOp::And;
+                tokens.push_back(t);
+                expectOperand = true;
+                hasLogicalOps = true;
+                continue;
+            }
+            if (word == "or" && !expectOperand) {
+                Token t; t.type = TokType::OP; t.op = ExprOp::Or;
+                tokens.push_back(t);
+                expectOperand = true;
+                hasLogicalOps = true;
+                continue;
+            }
+            if (word == "not" && expectOperand) {
+                Token t; t.type = TokType::NOTOP; t.op = ExprOp::Not;
+                tokens.push_back(t);
+                expectOperand = true;
+                hasLogicalOps = true;
+                continue;
+            }
+
+            // 피연산자 위치가 아닌데 키워드가 아닌 식별자 → 종료
+            if (!expectOperand) {
+                pos = start; // 되감기
+                break;
+            }
+
+            Token t;
+            if (word == "true") {
+                t.type = TokType::LITERAL;
+                auto val = std::make_unique<BoolValueT>();
+                val->val = true;
+                t.literal.Set(*val);
+            } else if (word == "false") {
+                t.type = TokType::LITERAL;
+                auto val = std::make_unique<BoolValueT>();
+                val->val = false;
+                t.literal.Set(*val);
+            } else {
+                t.type = TokType::VARREF;
+                t.varNameId = addString(word);
+            }
+            tokens.push_back(std::move(t));
+            expectOperand = false;
+            continue;
+        }
+
+        break;
+    }
+
+    if (tokens.empty()) return false;
+
+    // Shunting-yard: infix → RPN (확장된 우선순위)
+    auto precedence = [](ExprOp op) -> int {
+        switch (op) {
+            case ExprOp::Or:     return 1;
+            case ExprOp::And:    return 2;
+            case ExprOp::Not:    return 3;
+            case ExprOp::CmpEq: case ExprOp::CmpNe:
+            case ExprOp::CmpGt: case ExprOp::CmpLt:
+            case ExprOp::CmpGe: case ExprOp::CmpLe:
+                                 return 4;
+            case ExprOp::Add: case ExprOp::Sub: return 5;
+            case ExprOp::Mul: case ExprOp::Div: case ExprOp::Mod: return 6;
+            case ExprOp::Negate: return 7;
+            default: return 0;
+        }
+    };
+
+    std::vector<Token> output;
+    std::vector<Token> opStack;
+
+    for (auto& tok : tokens) {
+        switch (tok.type) {
+            case TokType::LITERAL:
+            case TokType::VARREF:
+                output.push_back(std::move(tok));
+                break;
+
+            case TokType::NEGATE:
+            case TokType::NOTOP:
+                opStack.push_back(std::move(tok));
+                break;
+
+            case TokType::OP:
+                while (!opStack.empty()) {
+                    auto& top = opStack.back();
+                    if (top.type == TokType::LPAREN) break;
+                    if ((top.type == TokType::OP || top.type == TokType::NEGATE ||
+                         top.type == TokType::NOTOP) &&
+                        precedence(top.op) >= precedence(tok.op)) {
+                        output.push_back(std::move(top));
+                        opStack.pop_back();
+                    } else {
+                        break;
+                    }
+                }
+                opStack.push_back(std::move(tok));
+                break;
+
+            case TokType::LPAREN:
+                opStack.push_back(std::move(tok));
+                break;
+
+            case TokType::RPAREN:
+                while (!opStack.empty() && opStack.back().type != TokType::LPAREN) {
+                    output.push_back(std::move(opStack.back()));
+                    opStack.pop_back();
+                }
+                if (!opStack.empty()) opStack.pop_back();
+                break;
+        }
+    }
+
+    while (!opStack.empty()) {
+        output.push_back(std::move(opStack.back()));
+        opStack.pop_back();
+    }
+
+    // RPN → ExprToken 리스트
+    auto expr = std::make_unique<ExpressionT>();
+    for (auto& tok : output) {
+        auto et = std::make_unique<ExprTokenT>();
+        switch (tok.type) {
+            case TokType::LITERAL:
+                et->op = ExprOp::PushLiteral;
+                et->literal_value = std::move(tok.literal);
+                break;
+            case TokType::VARREF:
+                et->op = ExprOp::PushVar;
+                et->var_name_id = tok.varNameId;
+                break;
+            case TokType::OP:
+            case TokType::NEGATE:
+            case TokType::NOTOP:
+                et->op = tok.op;
+                break;
+            default:
+                break;
+        }
+        expr->tokens.push_back(std::move(et));
+    }
+
+    outExpr = std::move(expr);
+    return true;
+}
+
 // --- if 표현식 op 표현식 -> 참 else 거짓 ---
 bool Parser::parseConditionLine(const std::string& content, int lineNum) {
     if (!currentNode_) {
@@ -673,70 +977,98 @@ bool Parser::parseConditionLine(const std::string& content, int lineNum) {
     size_t pos = 2; // skip "if"
     auto cond = std::make_unique<ConditionT>();
 
-    // LHS: 표현식 파싱 (비교 연산자에서 자동 멈춤)
-    bool lhsSimple = false;
-    std::unique_ptr<ExpressionT> lhsExpr;
-    ValueDataUnion lhsValue;
-    if (!parseExpression(content, pos, lhsExpr, lhsValue, lhsSimple)) {
+    // 전체 조건식 파싱 (산술 + 비교 + 논리 → 단일 RPN)
+    bool hasLogicalOps = false;
+    std::unique_ptr<ExpressionT> fullExpr;
+    if (!parseFullConditionExpr(content, pos, fullExpr, hasLogicalOps)) {
         addError(lineNum, "expected expression after 'if'");
         return false;
     }
 
-    if (lhsSimple) {
-        // 단일 변수인지 확인 (PushVar 토큰 하나 = 기존 var_name_id 방식)
-        // parseExpression isSimpleLiteral=true는 리터럴이므로 var_name_id에 넣을 수 없음
-        // 단순 변수 참조는 isSimpleLiteral=false, expr에 PushVar 토큰 하나
-        // → 리터럴이면 lhs_expr에 Expression으로 감싸서 넣어야 함
-        // 실제로 단순 변수 "x"는 parseExpression에서 VARREF 1개 → isSimpleLiteral=false
-        // → 이 경우 lhsExpr에 PushVar 토큰 하나가 들어감
-        // lhsSimple=true인 경우는 리터럴 값 → LHS로 올 수 없음 (하지만 허용은 함)
-        // 리터럴 LHS: Expression으로 감쌈
-        auto expr = std::make_unique<ExpressionT>();
-        auto token = std::make_unique<ExprTokenT>();
-        token->op = ExprOp::PushLiteral;
-        token->literal_value = std::move(lhsValue);
-        expr->tokens.push_back(std::move(token));
-        cond->lhs_expr = std::move(expr);
+    if (hasLogicalOps) {
+        // 논리 연산자 사용 → cond_expr에 전체 Expression 저장
+        cond->cond_expr = std::move(fullExpr);
     } else {
-        // 표현식 또는 단순 변수 참조
-        // 단일 PushVar 토큰이면 기존 var_name_id 최적화
-        if (lhsExpr && lhsExpr->tokens.size() == 1 &&
-            lhsExpr->tokens[0]->op == ExprOp::PushVar) {
-            cond->var_name_id = lhsExpr->tokens[0]->var_name_id;
+        // 논리 연산자 없음 → 기존 lhs/op/rhs 방식으로 분해 (하위 호환)
+        // RPN에서 비교 연산자를 찾아 분리
+        auto& tokens = fullExpr->tokens;
+
+        // 비교 연산자 찾기 (마지막 토큰이 비교 연산자)
+        ExprOp lastOp = tokens.back()->op;
+        if (lastOp >= ExprOp::CmpEq && lastOp <= ExprOp::CmpLe) {
+            // Operator 매핑
+            switch (lastOp) {
+                case ExprOp::CmpEq: cond->op = Operator::Equal; break;
+                case ExprOp::CmpNe: cond->op = Operator::NotEqual; break;
+                case ExprOp::CmpGt: cond->op = Operator::Greater; break;
+                case ExprOp::CmpLt: cond->op = Operator::Less; break;
+                case ExprOp::CmpGe: cond->op = Operator::GreaterOrEqual; break;
+                case ExprOp::CmpLe: cond->op = Operator::LessOrEqual; break;
+                default: break;
+            }
+            tokens.pop_back(); // 비교 연산자 제거
+
+            // RPN에서 LHS/RHS 분리: 스택 시뮬레이션으로 RHS 시작 지점 찾기
+            // 스택 깊이가 마지막으로 1이 되는 지점 = LHS 끝 (그 이후가 RHS)
+            size_t splitIdx = 0;
+            int stackDepth = 0;
+            for (size_t i = 0; i < tokens.size(); ++i) {
+                ExprOp op = tokens[i]->op;
+                if (op == ExprOp::PushLiteral || op == ExprOp::PushVar) {
+                    stackDepth++;
+                } else if (op == ExprOp::Negate || op == ExprOp::Not) {
+                    // 단항: pop 1 push 1 → 변화 없음
+                } else {
+                    // 이항: pop 2 push 1 → -1
+                    stackDepth--;
+                }
+                if (stackDepth == 1) {
+                    splitIdx = i + 1; // 매번 갱신 → 마지막 분할점
+                }
+            }
+
+            // LHS 토큰 (0..splitIdx-1)
+            if (splitIdx == 1 && tokens[0]->op == ExprOp::PushVar) {
+                // 단일 변수 → var_name_id (하위 호환)
+                cond->var_name_id = tokens[0]->var_name_id;
+            } else if (splitIdx == 1 && tokens[0]->op == ExprOp::PushLiteral) {
+                // 단일 리터럴 LHS → lhs_expr
+                auto lhsExpr = std::make_unique<ExpressionT>();
+                lhsExpr->tokens.push_back(std::move(tokens[0]));
+                cond->lhs_expr = std::move(lhsExpr);
+            } else {
+                // 복합 LHS → lhs_expr
+                auto lhsExpr = std::make_unique<ExpressionT>();
+                for (size_t i = 0; i < splitIdx; ++i) {
+                    lhsExpr->tokens.push_back(std::move(tokens[i]));
+                }
+                cond->lhs_expr = std::move(lhsExpr);
+            }
+
+            // RHS 토큰 (splitIdx..end)
+            size_t rhsCount = tokens.size() - splitIdx;
+            if (rhsCount == 1 && tokens[splitIdx]->op == ExprOp::PushLiteral) {
+                // 단일 리터럴 → compare_value (하위 호환)
+                cond->compare_value = std::move(tokens[splitIdx]->literal_value);
+            } else if (rhsCount > 0) {
+                // 복합 RHS → rhs_expr
+                auto rhsExpr = std::make_unique<ExpressionT>();
+                for (size_t i = splitIdx; i < tokens.size(); ++i) {
+                    rhsExpr->tokens.push_back(std::move(tokens[i]));
+                }
+                cond->rhs_expr = std::move(rhsExpr);
+            }
         } else {
-            cond->lhs_expr = std::move(lhsExpr);
+            // 비교 연산자 없음 → 에러
+            addError(lineNum, "expected comparison operator (==, !=, >, <, >=, <=)");
+            return false;
         }
-    }
-
-    // 비교 연산자
-    Operator op = Operator::Equal;
-    if (!parseComparisonOp(content, pos, op)) {
-        addError(lineNum, "expected comparison operator (==, !=, >, <, >=, <=)");
-        return false;
-    }
-    cond->op = op;
-
-    // RHS: 표현식 파싱 (-> 에서 자동 멈춤)
-    bool rhsSimple = false;
-    std::unique_ptr<ExpressionT> rhsExpr;
-    ValueDataUnion rhsValue;
-    if (!parseExpression(content, pos, rhsExpr, rhsValue, rhsSimple)) {
-        addError(lineNum, "expected expression after operator");
-        return false;
-    }
-
-    if (rhsSimple) {
-        // 단순 리터럴 → 기존 compare_value 방식
-        cond->compare_value = std::move(rhsValue);
-    } else {
-        // 표현식 또는 단순 변수 참조 → rhs_expr
-        cond->rhs_expr = std::move(rhsExpr);
     }
 
     // -> true_node
     skipSpaces(content, pos);
     if (pos + 1 >= content.size() || content[pos] != '-' || content[pos + 1] != '>') {
-        addError(lineNum, "expected '->' after value");
+        addError(lineNum, "expected '->' after condition");
         return false;
     }
     pos += 2;

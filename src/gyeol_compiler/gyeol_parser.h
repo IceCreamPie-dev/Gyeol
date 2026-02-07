@@ -70,6 +70,11 @@ private:
                          ICPDev::Gyeol::Schema::ValueDataUnion& outSimpleValue,
                          bool& isSimpleLiteral);
 
+    // 조건 표현식 파싱 (산술 + 비교 + 논리 → 단일 RPN)
+    bool parseFullConditionExpr(const std::string& text, size_t& pos,
+                                std::unique_ptr<ICPDev::Gyeol::Schema::ExpressionT>& outExpr,
+                                bool& hasLogicalOps);
+
     // Jump target 검증
     std::unordered_map<uint64_t, int> instrLineMap_;
     static uint64_t instrKey(size_t nodeIdx, size_t instrIdx) {
