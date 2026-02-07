@@ -720,6 +720,25 @@ StepResult Runner::step() {
             return result;
         }
 
+        // --- Debug: breakpoint/step mode check (zero-cost when not debugging) ---
+        if (!breakpoints_.empty() || stepMode_) {
+            if (hitBreakpoint_) {
+                // 이전 호출에서 여기서 멈췄음 — 해제하고 계속 진행
+                hitBreakpoint_ = false;
+            } else if (stepMode_) {
+                // Step mode: 매 instruction마다 정지
+                hitBreakpoint_ = true;
+                return result;
+            } else {
+                // Breakpoint만 체크 (stepMode_ == false)
+                std::string curNode = nodeNameFromPtr(currentNode_);
+                if (breakpoints_.count({curNode, pc_}) > 0) {
+                    hitBreakpoint_ = true;
+                    return result;
+                }
+            }
+        }
+
         auto* instr = node->lines()->Get(pc_);
         pc_++;
 
@@ -1539,6 +1558,199 @@ void Runner::clearLocale() {
 
 std::string Runner::getLocale() const {
     return currentLocale_;
+}
+
+// ==========================================================================
+// Debug API 구현
+// ==========================================================================
+
+// --- Breakpoint management ---
+void Runner::addBreakpoint(const std::string& nodeName, uint32_t pc) {
+    breakpoints_.insert({nodeName, pc});
+}
+
+void Runner::removeBreakpoint(const std::string& nodeName, uint32_t pc) {
+    breakpoints_.erase({nodeName, pc});
+}
+
+void Runner::clearBreakpoints() {
+    breakpoints_.clear();
+}
+
+bool Runner::hasBreakpoint(const std::string& nodeName, uint32_t pc) const {
+    return breakpoints_.count({nodeName, pc}) > 0;
+}
+
+std::vector<std::pair<std::string, uint32_t>> Runner::getBreakpoints() const {
+    std::vector<std::pair<std::string, uint32_t>> result;
+    result.reserve(breakpoints_.size());
+    for (const auto& bp : breakpoints_) {
+        result.push_back(bp);
+    }
+    return result;
+}
+
+// --- Step control ---
+void Runner::setStepMode(bool enabled) {
+    stepMode_ = enabled;
+}
+
+bool Runner::isStepMode() const {
+    return stepMode_;
+}
+
+// --- Debug info ---
+Runner::DebugLocation Runner::getLocation() const {
+    DebugLocation loc;
+    if (!currentNode_) return loc;
+
+    loc.nodeName = currentNodeName();
+    loc.pc = pc_;
+
+    auto* node = asNode(currentNode_);
+    if (node && node->lines() && pc_ < node->lines()->size()) {
+        auto* instr = node->lines()->Get(pc_);
+        switch (instr->data_type()) {
+            case OpData::Line:            loc.instructionType = "Line"; break;
+            case OpData::Choice:          loc.instructionType = "Choice"; break;
+            case OpData::Jump:            loc.instructionType = "Jump"; break;
+            case OpData::Command:         loc.instructionType = "Command"; break;
+            case OpData::SetVar:          loc.instructionType = "SetVar"; break;
+            case OpData::Condition:       loc.instructionType = "Condition"; break;
+            case OpData::Random:          loc.instructionType = "Random"; break;
+            case OpData::Return:          loc.instructionType = "Return"; break;
+            case OpData::CallWithReturn:  loc.instructionType = "CallWithReturn"; break;
+            default:                      loc.instructionType = "Unknown"; break;
+        }
+    }
+
+    return loc;
+}
+
+std::vector<Runner::CallFrameInfo> Runner::getCallStack() const {
+    std::vector<CallFrameInfo> result;
+    result.reserve(callStack_.size());
+    for (const auto& frame : callStack_) {
+        CallFrameInfo info;
+        info.nodeName = nodeNameFromPtr(frame.node);
+        info.pc = frame.pc;
+        info.returnVarName = frame.returnVarName;
+        info.paramNames = frame.paramNames;
+        result.push_back(std::move(info));
+    }
+    return result;
+}
+
+std::string Runner::getCurrentNodeName() const {
+    return currentNodeName();
+}
+
+uint32_t Runner::getCurrentPC() const {
+    return pc_;
+}
+
+// --- Node inspection ---
+std::vector<std::string> Runner::getNodeNames() const {
+    std::vector<std::string> result;
+    auto* story = asStory(story_);
+    if (!story || !story->nodes()) return result;
+
+    auto* nodes = story->nodes();
+    result.reserve(nodes->size());
+    for (flatbuffers::uoffset_t i = 0; i < nodes->size(); ++i) {
+        auto* node = nodes->Get(i);
+        if (node->name()) {
+            result.push_back(node->name()->c_str());
+        }
+    }
+    return result;
+}
+
+uint32_t Runner::getNodeInstructionCount(const std::string& nodeName) const {
+    const void* nodePtr = findNodeByName(nodeName.c_str());
+    if (!nodePtr) return 0;
+    auto* node = asNode(nodePtr);
+    if (!node->lines()) return 0;
+    return node->lines()->size();
+}
+
+std::string Runner::getInstructionInfo(const std::string& nodeName, uint32_t pc) const {
+    if (!story_) return "";
+    const void* nodePtr = findNodeByName(nodeName.c_str());
+    if (!nodePtr) return "";
+    auto* node = asNode(nodePtr);
+    if (!node->lines() || pc >= node->lines()->size()) return "";
+
+    auto* instr = node->lines()->Get(pc);
+    switch (instr->data_type()) {
+        case OpData::Line: {
+            auto* line = instr->data_as_Line();
+            std::string chr = (line->character_id() >= 0)
+                ? poolStr(line->character_id()) : "(narration)";
+            std::string txt = poolStr(line->text_id());
+            return "Line: " + chr + " \"" + txt + "\"";
+        }
+        case OpData::Choice: {
+            auto* choice = instr->data_as_Choice();
+            std::string txt = poolStr(choice->text_id());
+            std::string target = poolStr(choice->target_node_name_id());
+            return "Choice: \"" + txt + "\" -> " + target;
+        }
+        case OpData::Jump: {
+            auto* jump = instr->data_as_Jump();
+            std::string target = poolStr(jump->target_node_name_id());
+            if (jump->is_call()) {
+                return "Call: -> " + target;
+            }
+            return "Jump: -> " + target;
+        }
+        case OpData::Command: {
+            auto* cmd = instr->data_as_Command();
+            std::string info = "Command: @ " + std::string(poolStr(cmd->type_id()));
+            auto* params = cmd->params();
+            if (params) {
+                for (flatbuffers::uoffset_t k = 0; k < params->size(); ++k) {
+                    info += " " + std::string(poolStr(params->Get(k)));
+                }
+            }
+            return info;
+        }
+        case OpData::SetVar: {
+            auto* sv = instr->data_as_SetVar();
+            return "SetVar: $ " + std::string(poolStr(sv->var_name_id())) + " = ...";
+        }
+        case OpData::Condition: {
+            auto* cond = instr->data_as_Condition();
+            std::string info = "Condition: if ...";
+            if (cond->true_jump_node_id() >= 0) {
+                info += " -> " + std::string(poolStr(cond->true_jump_node_id()));
+            }
+            if (cond->false_jump_node_id() >= 0) {
+                info += " else -> " + std::string(poolStr(cond->false_jump_node_id()));
+            }
+            return info;
+        }
+        case OpData::Random: {
+            auto* random = instr->data_as_Random();
+            uint32_t count = (random->branches()) ? random->branches()->size() : 0;
+            return "Random: " + std::to_string(count) + " branches";
+        }
+        case OpData::Return: {
+            auto* ret = instr->data_as_Return();
+            if (ret->expr() || (ret->value() && ret->value_type() != ValueData::NONE)) {
+                return "Return: <expr>";
+            }
+            return "Return";
+        }
+        case OpData::CallWithReturn: {
+            auto* cwr = instr->data_as_CallWithReturn();
+            std::string var = poolStr(cwr->return_var_name_id());
+            std::string target = poolStr(cwr->target_node_name_id());
+            return "CallWithReturn: $ " + var + " = call " + target;
+        }
+        default:
+            return "Unknown";
+    }
 }
 
 } // namespace Gyeol
