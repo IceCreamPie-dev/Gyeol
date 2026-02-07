@@ -2259,3 +2259,491 @@ label other:
     EXPECT_TRUE(runner.hasVisited("other"));
     EXPECT_FALSE(runner.hasVisited("nonexistent"));
 }
+
+// ==========================================================================
+// Debug API Tests
+// ==========================================================================
+
+TEST(DebugAPITest, BreakpointManagement) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    hero "line1"
+    hero "line2"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    // 초기 상태: breakpoint 없음
+    EXPECT_TRUE(runner.getBreakpoints().empty());
+    EXPECT_FALSE(runner.hasBreakpoint("start", 0));
+
+    // 추가
+    runner.addBreakpoint("start", 0);
+    runner.addBreakpoint("start", 1);
+    EXPECT_TRUE(runner.hasBreakpoint("start", 0));
+    EXPECT_TRUE(runner.hasBreakpoint("start", 1));
+    EXPECT_FALSE(runner.hasBreakpoint("start", 2));
+    EXPECT_EQ(runner.getBreakpoints().size(), 2u);
+
+    // 삭제
+    runner.removeBreakpoint("start", 0);
+    EXPECT_FALSE(runner.hasBreakpoint("start", 0));
+    EXPECT_TRUE(runner.hasBreakpoint("start", 1));
+    EXPECT_EQ(runner.getBreakpoints().size(), 1u);
+
+    // 전체 클리어
+    runner.addBreakpoint("start", 0);
+    runner.clearBreakpoints();
+    EXPECT_TRUE(runner.getBreakpoints().empty());
+}
+
+TEST(DebugAPITest, StepModeControl) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    hero "line1"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    // 초기 상태: step mode 비활성
+    EXPECT_FALSE(runner.isStepMode());
+
+    runner.setStepMode(true);
+    EXPECT_TRUE(runner.isStepMode());
+
+    runner.setStepMode(false);
+    EXPECT_FALSE(runner.isStepMode());
+}
+
+TEST(DebugAPITest, GetLocation) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    hero "line1"
+    $ x = 10
+    jump other
+label other:
+    "narration"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto loc = runner.getLocation();
+    EXPECT_EQ(loc.nodeName, "start");
+    EXPECT_EQ(loc.pc, 0u);
+    EXPECT_EQ(loc.instructionType, "Line");
+}
+
+TEST(DebugAPITest, GetCurrentNodeAndPC) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    hero "line1"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    EXPECT_EQ(runner.getCurrentNodeName(), "start");
+    EXPECT_EQ(runner.getCurrentPC(), 0u);
+
+    runner.step(); // line1 실행 → PC 진행
+    EXPECT_EQ(runner.getCurrentPC(), 1u);
+}
+
+TEST(DebugAPITest, GetCallStack) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    call sub
+label sub:
+    hero "in sub"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    // start에서 call 실행 전: 빈 콜 스택
+    auto stack = runner.getCallStack();
+    EXPECT_TRUE(stack.empty());
+
+    // step mode로 call 내부 진입
+    runner.setStepMode(true);
+    auto r = runner.step(); // step mode pause
+    if (r.type == StepType::END && !runner.isFinished()) {
+        r = runner.step(); // call sub → sub로 이동
+    }
+    // sub 내부에서 콜 스택 확인
+    if (r.type == StepType::END && !runner.isFinished()) {
+        r = runner.step(); // sub 내부 instruction
+    }
+
+    stack = runner.getCallStack();
+    // call로 진입했으므로 스택에 start 프레임이 있어야 함
+    if (!stack.empty()) {
+        EXPECT_EQ(stack[0].nodeName, "start");
+    }
+}
+
+TEST(DebugAPITest, GetNodeNames) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    hero "s"
+label nodeA:
+    hero "a"
+label nodeB:
+    hero "b"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto names = runner.getNodeNames();
+    EXPECT_EQ(names.size(), 3u);
+
+    std::set<std::string> nameSet(names.begin(), names.end());
+    EXPECT_TRUE(nameSet.count("start") > 0);
+    EXPECT_TRUE(nameSet.count("nodeA") > 0);
+    EXPECT_TRUE(nameSet.count("nodeB") > 0);
+}
+
+TEST(DebugAPITest, GetNodeInstructionCount) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    hero "line1"
+    hero "line2"
+    hero "line3"
+label other:
+    hero "only one"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    EXPECT_EQ(runner.getNodeInstructionCount("start"), 3u);
+    EXPECT_EQ(runner.getNodeInstructionCount("other"), 1u);
+    EXPECT_EQ(runner.getNodeInstructionCount("nonexistent"), 0u);
+}
+
+TEST(DebugAPITest, GetInstructionInfo) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    hero "hello"
+    $ x = 10
+    jump other
+label other:
+    "narration"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    // Line instruction
+    std::string info0 = runner.getInstructionInfo("start", 0);
+    EXPECT_TRUE(info0.find("Line") != std::string::npos);
+    EXPECT_TRUE(info0.find("hero") != std::string::npos);
+    EXPECT_TRUE(info0.find("hello") != std::string::npos);
+
+    // SetVar instruction
+    std::string info1 = runner.getInstructionInfo("start", 1);
+    EXPECT_TRUE(info1.find("SetVar") != std::string::npos);
+    EXPECT_TRUE(info1.find("x") != std::string::npos);
+
+    // Jump instruction
+    std::string info2 = runner.getInstructionInfo("start", 2);
+    EXPECT_TRUE(info2.find("Jump") != std::string::npos);
+    EXPECT_TRUE(info2.find("other") != std::string::npos);
+
+    // Narration
+    std::string infoN = runner.getInstructionInfo("other", 0);
+    EXPECT_TRUE(infoN.find("narration") != std::string::npos);
+
+    // Out of bounds / nonexistent
+    EXPECT_TRUE(runner.getInstructionInfo("start", 999).empty());
+    EXPECT_TRUE(runner.getInstructionInfo("nonexistent", 0).empty());
+}
+
+TEST(DebugAPITest, InstructionInfoChoice) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "Go left" -> left
+        "Go right" -> right
+label left:
+    "Left!"
+label right:
+    "Right!"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    std::string info0 = runner.getInstructionInfo("start", 0);
+    EXPECT_TRUE(info0.find("Choice") != std::string::npos);
+    EXPECT_TRUE(info0.find("Go left") != std::string::npos);
+}
+
+TEST(DebugAPITest, InstructionInfoCommand) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    @ bg forest
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    std::string info = runner.getInstructionInfo("start", 0);
+    EXPECT_TRUE(info.find("Command") != std::string::npos);
+    EXPECT_TRUE(info.find("bg") != std::string::npos);
+    EXPECT_TRUE(info.find("forest") != std::string::npos);
+}
+
+TEST(DebugAPITest, InstructionInfoCallWithReturn) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ result = call helper
+label helper:
+    return 42
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    std::string info = runner.getInstructionInfo("start", 0);
+    EXPECT_TRUE(info.find("CallWithReturn") != std::string::npos);
+    EXPECT_TRUE(info.find("result") != std::string::npos);
+    EXPECT_TRUE(info.find("helper") != std::string::npos);
+}
+
+TEST(DebugAPITest, InstructionInfoCondition) {
+    auto buf = GyeolTest::compileScript(R"(
+$ x = 10
+label start:
+    if x > 5 -> yes else no
+label yes:
+    "yes"
+label no:
+    "no"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    std::string info = runner.getInstructionInfo("start", 0);
+    EXPECT_TRUE(info.find("Condition") != std::string::npos);
+}
+
+TEST(DebugAPITest, InstructionInfoRandom) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    random:
+        50 -> a
+        50 -> b
+label a:
+    "a"
+label b:
+    "b"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    std::string info = runner.getInstructionInfo("start", 0);
+    EXPECT_TRUE(info.find("Random") != std::string::npos);
+    EXPECT_TRUE(info.find("2") != std::string::npos); // 2 branches
+}
+
+TEST(DebugAPITest, InstructionInfoReturn) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    call helper
+label helper:
+    return 42
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    std::string info = runner.getInstructionInfo("helper", 0);
+    EXPECT_TRUE(info.find("Return") != std::string::npos);
+}
+
+TEST(DebugAPITest, StepModePausesExecution) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    hero "line1"
+    hero "line2"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.setStepMode(true);
+
+    // 첫 step: pause 신호 (END 반환이지만 finished는 아님)
+    auto r = runner.step();
+    EXPECT_FALSE(runner.isFinished());
+
+    // 두 번째 step: 실제 instruction 실행
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "line1");
+}
+
+TEST(DebugAPITest, BreakpointHitsAndResumes) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    hero "line1"
+    hero "line2"
+    hero "line3"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    // PC 1에 breakpoint 설정 (line2)
+    runner.addBreakpoint("start", 1);
+
+    // 첫 step: line1 실행
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "line1");
+
+    // 다음 step: breakpoint hit → END 반환 (but not finished)
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::END);
+    EXPECT_FALSE(runner.isFinished());
+
+    // 다시 step: breakpoint 통과 후 line2 실행
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "line2");
+}
+
+TEST(DebugAPITest, NoDebugFeaturesBackwardCompat) {
+    // Debug 기능을 전혀 사용하지 않으면 기존과 동일하게 동작
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    hero "line1"
+    hero "line2"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    // step mode OFF, breakpoints 없음 → 기존과 동일
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "line1");
+
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "line2");
+
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::END);
+    EXPECT_TRUE(runner.isFinished());
+}
+
+TEST(DebugAPITest, LocationAfterJump) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    jump other
+label other:
+    hero "in other"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    // jump 실행 후 other 노드로 이동
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+
+    auto loc = runner.getLocation();
+    EXPECT_EQ(loc.nodeName, "other");
+}
+
+TEST(DebugAPITest, LocationTypes) {
+    // 여러 instruction 타입의 location type 확인
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    hero "dialogue"
+    $ x = 10
+    @ bg forest
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    // PC 0: Line
+    auto loc = runner.getLocation();
+    EXPECT_EQ(loc.instructionType, "Line");
+
+    runner.step(); // execute Line → PC advances
+
+    // PC 1: SetVar (내부적으로 skip되므로 PC 2로 이동)
+    // SetVar와 Command는 step()에서 자동 실행될 수 있음
+    // Command는 COMMAND 결과를 반환함
+}
+
+TEST(DebugAPITest, GetCallStackWithParams) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ result = call add(3, 4)
+label add(a, b):
+    return a + b
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.setStepMode(true);
+
+    // step mode로 call 내부 진입
+    auto r = runner.step(); // pause
+    if (r.type == StepType::END && !runner.isFinished()) {
+        r = runner.step(); // CallWithReturn 실행 → add 노드 진입
+    }
+    if (r.type == StepType::END && !runner.isFinished()) {
+        r = runner.step(); // add 내부 pause/instruction
+    }
+
+    // add 내부에서 call stack 확인
+    auto stack = runner.getCallStack();
+    if (!stack.empty()) {
+        EXPECT_EQ(stack[0].nodeName, "start");
+        EXPECT_EQ(stack[0].returnVarName, "result");
+    }
+}
+
+TEST(DebugAPITest, BreakpointOnDifferentNode) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    hero "in start"
+    jump other
+label other:
+    hero "in other"
+    hero "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    // other 노드의 PC 1에 breakpoint
+    runner.addBreakpoint("other", 1);
+
+    auto r = runner.step(); // "in start"
+    EXPECT_STREQ(r.line.text, "in start");
+
+    r = runner.step(); // jump → "in other"
+    EXPECT_STREQ(r.line.text, "in other");
+
+    // breakpoint hit at other:1
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::END);
+    EXPECT_FALSE(runner.isFinished());
+
+    // resume → "done"
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "done");
+}

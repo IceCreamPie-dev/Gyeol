@@ -274,11 +274,12 @@ label 함수(a, b):                   # 함수 선언 (매개변수 바인딩, �
 
 ## Testing
 
-Google Test v1.14.0 기반 자동화 테스트 (233 tests):
+Google Test v1.14.0 기반 자동화 테스트 (284 tests):
 
 ```bash
 # 유닛 테스트 실행
-./build/src/tests/GyeolTests.exe
+./build/src/tests/GyeolTests          # Core + Parser + Runner (254 tests)
+./build/src/tests/GyeolLSPTests       # LSP Analyzer + Server (30 tests)
 
 # CTest로 실행
 cd build && ctest --output-on-failure
@@ -288,8 +289,11 @@ cd build && ctest --output-on-failure
 - **ParserTest** (83): 문법 요소별 파싱, 에스케이프, String Pool, voice_asset, 태그 시스템, global_vars, jump 검증, 표현식, 조건 표현식, 논리 연산자, elif 체인, random 블록, Line ID, Import (병합/다중파일/global vars/string pool공유/start_node/순서/중첩), Return (리터럴/변수/표현식/문자열/bool/bare), CallWithReturn (파싱/검증), Function Parameters (label params/call args/empty parens/expression args/single param), Visit Count (표현식/조건/맨문자/산술조합)
 - **ParserErrorTest** (25): 에러 케이스, 에러 복구, 다중 에러 수집, 잘못된 jump/choice/condition/random 타겟, elif/else 검증, Import (순환감지/자기참조/파일없음/중복label/경로오류), Return (label밖/잘못된타겟/잘못된표현식), Function Parameters (중복param/unclosed paren/jump args/empty arg)
 - **RunnerTest** (106): VM 실행 흐름, 선택지, Jump/Call, 변수/조건, Command, 변수 API, 산술 표현식, 문자열 보간, 인라인 조건 텍스트, 태그 노출, 조건 표현식, 논리 연산자, elif 체인, random 분기, 로케일 오버레이/폴백/보간/클리어, Import 통합 (노드 jump/global vars), CallWithReturn (리터럴/변수/표현식/문자열/float/bool), Return (bare/implicit/no-frame), 중첩 call return, 기존 call 호환, Function Parameters (단일/다중 param, 로컬 스코프, 전역 섀도잉, 표현식 인자, return+params, 중첩, 기본값, 하위 호환), Visit Count (기본/미방문/bool/표현식/조건분기/비교/보간/인라인조건/API)
+- **DebugAPITest** (21): Breakpoint 관리 (추가/삭제/클리어/조회), Step mode 제어, Location 정보 (노드/PC/타입), Call stack 조회, Node 목록/instruction 수/상세 정보, Instruction 타입별 info (Line/Choice/Jump/Command/SetVar/Condition/Random/Return/CallWithReturn), Step mode 실행 흐름, Breakpoint hit/resume, 하위 호환 (디버그 미사용 시 동일 동작), 다른 노드 breakpoint
 - **StoryTest** (4): .gyb 로드/검증, 잘못된 파일 처리
 - **SaveLoadTest** (15): 라운드트립, 선택지/변수/콜스택 저장복원, 에러 케이스, CallWithReturn 프레임 저장복원, 하위 호환, Function Parameters (섀도 변수 포함 프레임 저장복원, 하위 호환), Visit Count (방문횟수 저장복원, 하위 호환)
+- **AnalyzerTest** (13): Label 스캔 (이름/줄번호/파라미터), 변수 스캔 (전역/로컬/중복제거), Jump/Call/Choice 참조, 주석/빈 내용 무시, Parser 기반 진단 (유효/무효 스크립트)
+- **LspServerTest** (17): Initialize (capabilities), Shutdown/Exit, DidOpen/DidChange/DidClose 진단 게시, Completion (키워드/라벨/변수/내장함수), Go to Definition (라벨/변수), Hover (키워드/라벨/파라미터), Document Symbols, 알 수 없는 메서드 에러
 
 수동 파이프라인 테스트:
 ```bash
