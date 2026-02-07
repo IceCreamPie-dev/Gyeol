@@ -41,6 +41,12 @@
 # Allow GDExtension DLL in demo
 !demo/godot/bin/*.dll
 
+# MSVC export files in demo
+demo/godot/bin/*.exp
+
+# Generated test files
+test_export_strings.csv
+
 # SCons cache
 .sconsign.dblite
 
