@@ -916,3 +916,241 @@ TEST(RunnerTest, CondNestedParens) {
     auto r = runner.step();
     EXPECT_STREQ(r.line.text, "yes");
 }
+
+// --- Elif/Else 체인 ---
+
+TEST(RunnerTest, ElifChainFirstMatch) {
+    // 첫 조건 참 → 첫 번째 분기
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ hp = 100\n"
+        "    if hp > 80 -> high\n"
+        "    elif hp > 50 -> mid\n"
+        "    elif hp > 20 -> low\n"
+        "    else -> crit\n"
+        "\n"
+        "label high:\n"
+        "    \"high hp\"\n"
+        "label mid:\n"
+        "    \"mid hp\"\n"
+        "label low:\n"
+        "    \"low hp\"\n"
+        "label crit:\n"
+        "    \"critical\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "high hp");
+}
+
+TEST(RunnerTest, ElifChainMiddleMatch) {
+    // 중간 elif 참
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ hp = 60\n"
+        "    if hp > 80 -> high\n"
+        "    elif hp > 50 -> mid\n"
+        "    elif hp > 20 -> low\n"
+        "    else -> crit\n"
+        "\n"
+        "label high:\n"
+        "    \"high hp\"\n"
+        "label mid:\n"
+        "    \"mid hp\"\n"
+        "label low:\n"
+        "    \"low hp\"\n"
+        "label crit:\n"
+        "    \"critical\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "mid hp");
+}
+
+TEST(RunnerTest, ElifChainElseFallthrough) {
+    // 모든 조건 거짓 → else
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ hp = 10\n"
+        "    if hp > 80 -> high\n"
+        "    elif hp > 50 -> mid\n"
+        "    elif hp > 20 -> low\n"
+        "    else -> crit\n"
+        "\n"
+        "label high:\n"
+        "    \"high hp\"\n"
+        "label mid:\n"
+        "    \"mid hp\"\n"
+        "label low:\n"
+        "    \"low hp\"\n"
+        "label crit:\n"
+        "    \"critical\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "critical");
+}
+
+TEST(RunnerTest, ElifChainNoElse) {
+    // 모든 조건 거짓 + else 없음 → 다음 줄 fall-through
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ hp = 10\n"
+        "    if hp > 80 -> high\n"
+        "    elif hp > 50 -> mid\n"
+        "    elif hp > 20 -> low\n"
+        "    \"default path\"\n"
+        "\n"
+        "label high:\n"
+        "    \"high hp\"\n"
+        "label mid:\n"
+        "    \"mid hp\"\n"
+        "label low:\n"
+        "    \"low hp\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "default path");
+}
+
+TEST(RunnerTest, ElifWithStringVar) {
+    // 문자열 변수 비교
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ cls = \"mage\"\n"
+        "    if cls == \"warrior\" -> w\n"
+        "    elif cls == \"mage\" -> m\n"
+        "    elif cls == \"rogue\" -> r\n"
+        "    \"unknown\"\n"
+        "\n"
+        "label w:\n"
+        "    \"warrior path\"\n"
+        "label m:\n"
+        "    \"mage path\"\n"
+        "label r:\n"
+        "    \"rogue path\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "mage path");
+}
+
+TEST(RunnerTest, ElifWithLogicalOps) {
+    // elif에서 논리 연산자 사용
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ hp = 50\n"
+        "    $ has_key = true\n"
+        "    if hp > 80 -> high\n"
+        "    elif hp > 30 and has_key == true -> mid_key\n"
+        "    else -> low\n"
+        "\n"
+        "label high:\n"
+        "    \"high\"\n"
+        "label mid_key:\n"
+        "    \"mid with key\"\n"
+        "label low:\n"
+        "    \"low\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "mid with key");
+}
+
+// --- Random 분기 러너 테스트 ---
+
+TEST(RunnerTest, RandomWeightedGuaranteed) {
+    // weight 0/100 → 항상 100쪽 선택
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    random:\n"
+        "        0 -> never\n"
+        "        100 -> always\n"
+        "label never:\n"
+        "    \"never\"\n"
+        "label always:\n"
+        "    \"always\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    runner.setSeed(12345);
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "always");
+}
+
+TEST(RunnerTest, RandomAllZeroSkip) {
+    // 모든 weight 0 → skip → 다음 줄 실행
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    random:\n"
+        "        0 -> path_a\n"
+        "        0 -> path_b\n"
+        "    \"fallthrough\"\n"
+        "label path_a:\n"
+        "    \"a\"\n"
+        "label path_b:\n"
+        "    \"b\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "fallthrough");
+}
+
+TEST(RunnerTest, RandomSeedDeterminism) {
+    // 같은 시드 → 같은 결과
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    random:\n"
+        "        50 -> path_a\n"
+        "        50 -> path_b\n"
+        "label path_a:\n"
+        "    \"a\"\n"
+        "label path_b:\n"
+        "    \"b\"\n"
+    );
+
+    std::string firstResult;
+    {
+        Runner runner;
+        ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+        runner.setSeed(42);
+        auto r = runner.step();
+        firstResult = r.line.text;
+    }
+
+    // 같은 시드로 다시 실행 → 같은 결과
+    for (int trial = 0; trial < 5; ++trial) {
+        Runner runner;
+        ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+        runner.setSeed(42);
+        auto r = runner.step();
+        EXPECT_STREQ(r.line.text, firstResult.c_str());
+    }
+}
+
+TEST(RunnerTest, RandomEqualWeight) {
+    // weight 1/1 → 유효한 결과 중 하나
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    random:\n"
+        "        -> path_a\n"
+        "        -> path_b\n"
+        "label path_a:\n"
+        "    \"a\"\n"
+        "label path_b:\n"
+        "    \"b\"\n"
+    );
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    runner.setSeed(99);
+    auto r = runner.step();
+    std::string text = r.line.text;
+    EXPECT_TRUE(text == "a" || text == "b");
+}

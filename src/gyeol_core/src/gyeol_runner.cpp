@@ -353,6 +353,7 @@ bool Runner::start(const uint8_t* buffer, size_t size) {
     // start_node로 이동
     callStack_.clear();
     pendingChoices_.clear();
+    rng_.seed(std::random_device{}());
     finished_ = false;
 
     if (story->start_node_name()) {
@@ -542,6 +543,36 @@ StepResult Runner::step() {
                 continue;
             }
 
+            case OpData::Random: {
+                auto* random = instr->data_as_Random();
+                if (!random || !random->branches() || random->branches()->size() == 0)
+                    continue;
+
+                int totalWeight = 0;
+                for (flatbuffers::uoffset_t k = 0; k < random->branches()->size(); ++k) {
+                    int w = random->branches()->Get(k)->weight();
+                    if (w > 0) totalWeight += w;
+                }
+                if (totalWeight <= 0) continue; // 모든 weight 0 → skip
+
+                std::uniform_int_distribution<int> dist(0, totalWeight - 1);
+                int roll = dist(rng_);
+
+                int cumulative = 0;
+                for (flatbuffers::uoffset_t k = 0; k < random->branches()->size(); ++k) {
+                    int w = random->branches()->Get(k)->weight();
+                    if (w <= 0) continue;
+                    cumulative += w;
+                    if (roll < cumulative) {
+                        jumpToNodeById(random->branches()->Get(k)->target_node_name_id());
+                        node = asNode(currentNode_);
+                        if (finished_) { result.type = StepType::END; return result; }
+                        break;
+                    }
+                }
+                continue;
+            }
+
             case OpData::Command: {
                 auto* cmd = instr->data_as_Command();
                 result.type = StepType::COMMAND;
@@ -576,6 +607,11 @@ void Runner::choose(int index) {
 // --- isFinished ---
 bool Runner::isFinished() const {
     return finished_;
+}
+
+// --- setSeed ---
+void Runner::setSeed(uint32_t seed) {
+    rng_.seed(seed);
 }
 
 // --- Variable access API ---

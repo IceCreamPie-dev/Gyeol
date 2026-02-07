@@ -65,6 +65,14 @@ struct Condition;
 struct ConditionBuilder;
 struct ConditionT;
 
+struct RandomBranch;
+struct RandomBranchBuilder;
+struct RandomBranchT;
+
+struct Random;
+struct RandomBuilder;
+struct RandomT;
+
 struct Instruction;
 struct InstructionBuilder;
 struct InstructionT;
@@ -289,11 +297,12 @@ enum class OpData : uint8_t {
   Command = 4,
   SetVar = 5,
   Condition = 6,
+  Random = 7,
   MIN = NONE,
-  MAX = Condition
+  MAX = Random
 };
 
-inline const OpData (&EnumValuesOpData())[7] {
+inline const OpData (&EnumValuesOpData())[8] {
   static const OpData values[] = {
     OpData::NONE,
     OpData::Line,
@@ -301,13 +310,14 @@ inline const OpData (&EnumValuesOpData())[7] {
     OpData::Jump,
     OpData::Command,
     OpData::SetVar,
-    OpData::Condition
+    OpData::Condition,
+    OpData::Random
   };
   return values;
 }
 
 inline const char * const *EnumNamesOpData() {
-  static const char * const names[8] = {
+  static const char * const names[9] = {
     "NONE",
     "Line",
     "Choice",
@@ -315,13 +325,14 @@ inline const char * const *EnumNamesOpData() {
     "Command",
     "SetVar",
     "Condition",
+    "Random",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameOpData(OpData e) {
-  if (::flatbuffers::IsOutRange(e, OpData::NONE, OpData::Condition)) return "";
+  if (::flatbuffers::IsOutRange(e, OpData::NONE, OpData::Random)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesOpData()[index];
 }
@@ -354,6 +365,10 @@ template<> struct OpDataTraits<ICPDev::Gyeol::Schema::Condition> {
   static const OpData enum_value = OpData::Condition;
 };
 
+template<> struct OpDataTraits<ICPDev::Gyeol::Schema::Random> {
+  static const OpData enum_value = OpData::Random;
+};
+
 template<typename T> struct OpDataUnionTraits {
   static const OpData enum_value = OpData::NONE;
 };
@@ -380,6 +395,10 @@ template<> struct OpDataUnionTraits<ICPDev::Gyeol::Schema::SetVarT> {
 
 template<> struct OpDataUnionTraits<ICPDev::Gyeol::Schema::ConditionT> {
   static const OpData enum_value = OpData::Condition;
+};
+
+template<> struct OpDataUnionTraits<ICPDev::Gyeol::Schema::RandomT> {
+  static const OpData enum_value = OpData::Random;
 };
 
 struct OpDataUnion {
@@ -459,6 +478,14 @@ struct OpDataUnion {
   const ICPDev::Gyeol::Schema::ConditionT *AsCondition() const {
     return type == OpData::Condition ?
       reinterpret_cast<const ICPDev::Gyeol::Schema::ConditionT *>(value) : nullptr;
+  }
+  ICPDev::Gyeol::Schema::RandomT *AsRandom() {
+    return type == OpData::Random ?
+      reinterpret_cast<ICPDev::Gyeol::Schema::RandomT *>(value) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::RandomT *AsRandom() const {
+    return type == OpData::Random ?
+      reinterpret_cast<const ICPDev::Gyeol::Schema::RandomT *>(value) : nullptr;
   }
 };
 
@@ -1582,6 +1609,148 @@ struct Condition::Traits {
 
 ::flatbuffers::Offset<Condition> CreateCondition(::flatbuffers::FlatBufferBuilder &_fbb, const ConditionT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct RandomBranchT : public ::flatbuffers::NativeTable {
+  typedef RandomBranch TableType;
+  int32_t target_node_name_id = 0;
+  int32_t weight = 1;
+};
+
+struct RandomBranch FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RandomBranchT NativeTableType;
+  typedef RandomBranchBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_TARGET_NODE_NAME_ID = 4,
+    VT_WEIGHT = 6
+  };
+  int32_t target_node_name_id() const {
+    return GetField<int32_t>(VT_TARGET_NODE_NAME_ID, 0);
+  }
+  int32_t weight() const {
+    return GetField<int32_t>(VT_WEIGHT, 1);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int32_t>(verifier, VT_TARGET_NODE_NAME_ID, 4) &&
+           VerifyField<int32_t>(verifier, VT_WEIGHT, 4) &&
+           verifier.EndTable();
+  }
+  RandomBranchT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(RandomBranchT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<RandomBranch> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RandomBranchT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct RandomBranchBuilder {
+  typedef RandomBranch Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_target_node_name_id(int32_t target_node_name_id) {
+    fbb_.AddElement<int32_t>(RandomBranch::VT_TARGET_NODE_NAME_ID, target_node_name_id, 0);
+  }
+  void add_weight(int32_t weight) {
+    fbb_.AddElement<int32_t>(RandomBranch::VT_WEIGHT, weight, 1);
+  }
+  explicit RandomBranchBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RandomBranch> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RandomBranch>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RandomBranch> CreateRandomBranch(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    int32_t target_node_name_id = 0,
+    int32_t weight = 1) {
+  RandomBranchBuilder builder_(_fbb);
+  builder_.add_weight(weight);
+  builder_.add_target_node_name_id(target_node_name_id);
+  return builder_.Finish();
+}
+
+struct RandomBranch::Traits {
+  using type = RandomBranch;
+  static auto constexpr Create = CreateRandomBranch;
+};
+
+::flatbuffers::Offset<RandomBranch> CreateRandomBranch(::flatbuffers::FlatBufferBuilder &_fbb, const RandomBranchT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct RandomT : public ::flatbuffers::NativeTable {
+  typedef Random TableType;
+  std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::RandomBranchT>> branches{};
+  RandomT() = default;
+  RandomT(const RandomT &o);
+  RandomT(RandomT&&) FLATBUFFERS_NOEXCEPT = default;
+  RandomT &operator=(RandomT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct Random FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RandomT NativeTableType;
+  typedef RandomBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_BRANCHES = 4
+  };
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::RandomBranch>> *branches() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::RandomBranch>> *>(VT_BRANCHES);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_BRANCHES) &&
+           verifier.VerifyVector(branches()) &&
+           verifier.VerifyVectorOfTables(branches()) &&
+           verifier.EndTable();
+  }
+  RandomT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(RandomT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<Random> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RandomT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct RandomBuilder {
+  typedef Random Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_branches(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::RandomBranch>>> branches) {
+    fbb_.AddOffset(Random::VT_BRANCHES, branches);
+  }
+  explicit RandomBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<Random> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<Random>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<Random> CreateRandom(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::RandomBranch>>> branches = 0) {
+  RandomBuilder builder_(_fbb);
+  builder_.add_branches(branches);
+  return builder_.Finish();
+}
+
+struct Random::Traits {
+  using type = Random;
+  static auto constexpr Create = CreateRandom;
+};
+
+inline ::flatbuffers::Offset<Random> CreateRandomDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::RandomBranch>> *branches = nullptr) {
+  auto branches__ = branches ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::RandomBranch>>(*branches) : 0;
+  return ICPDev::Gyeol::Schema::CreateRandom(
+      _fbb,
+      branches__);
+}
+
+::flatbuffers::Offset<Random> CreateRandom(::flatbuffers::FlatBufferBuilder &_fbb, const RandomT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct InstructionT : public ::flatbuffers::NativeTable {
   typedef Instruction TableType;
   ICPDev::Gyeol::Schema::OpDataUnion data{};
@@ -1620,6 +1789,9 @@ struct Instruction FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ICPDev::Gyeol::Schema::Condition *data_as_Condition() const {
     return data_type() == ICPDev::Gyeol::Schema::OpData::Condition ? static_cast<const ICPDev::Gyeol::Schema::Condition *>(data()) : nullptr;
   }
+  const ICPDev::Gyeol::Schema::Random *data_as_Random() const {
+    return data_type() == ICPDev::Gyeol::Schema::OpData::Random ? static_cast<const ICPDev::Gyeol::Schema::Random *>(data()) : nullptr;
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_DATA_TYPE, 1) &&
@@ -1654,6 +1826,10 @@ template<> inline const ICPDev::Gyeol::Schema::SetVar *Instruction::data_as<ICPD
 
 template<> inline const ICPDev::Gyeol::Schema::Condition *Instruction::data_as<ICPDev::Gyeol::Schema::Condition>() const {
   return data_as_Condition();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::Random *Instruction::data_as<ICPDev::Gyeol::Schema::Random>() const {
+  return data_as_Random();
 }
 
 struct InstructionBuilder {
@@ -2826,6 +3002,71 @@ inline ::flatbuffers::Offset<Condition> CreateCondition(::flatbuffers::FlatBuffe
       _cond_expr);
 }
 
+inline RandomBranchT *RandomBranch::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<RandomBranchT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void RandomBranch::UnPackTo(RandomBranchT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = target_node_name_id(); _o->target_node_name_id = _e; }
+  { auto _e = weight(); _o->weight = _e; }
+}
+
+inline ::flatbuffers::Offset<RandomBranch> RandomBranch::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RandomBranchT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateRandomBranch(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<RandomBranch> CreateRandomBranch(::flatbuffers::FlatBufferBuilder &_fbb, const RandomBranchT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const RandomBranchT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _target_node_name_id = _o->target_node_name_id;
+  auto _weight = _o->weight;
+  return ICPDev::Gyeol::Schema::CreateRandomBranch(
+      _fbb,
+      _target_node_name_id,
+      _weight);
+}
+
+inline RandomT::RandomT(const RandomT &o) {
+  branches.reserve(o.branches.size());
+  for (const auto &branches_ : o.branches) { branches.emplace_back((branches_) ? new ICPDev::Gyeol::Schema::RandomBranchT(*branches_) : nullptr); }
+}
+
+inline RandomT &RandomT::operator=(RandomT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(branches, o.branches);
+  return *this;
+}
+
+inline RandomT *Random::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<RandomT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void Random::UnPackTo(RandomT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = branches(); if (_e) { _o->branches.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->branches[_i]) { _e->Get(_i)->UnPackTo(_o->branches[_i].get(), _resolver); } else { _o->branches[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::RandomBranchT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->branches.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<Random> Random::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RandomT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateRandom(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<Random> CreateRandom(::flatbuffers::FlatBufferBuilder &_fbb, const RandomT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const RandomT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _branches = _o->branches.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::RandomBranch>> (_o->branches.size(), [](size_t i, _VectorArgs *__va) { return CreateRandomBranch(*__va->__fbb, __va->__o->branches[i].get(), __va->__rehasher); }, &_va ) : 0;
+  return ICPDev::Gyeol::Schema::CreateRandom(
+      _fbb,
+      _branches);
+}
+
 inline InstructionT *Instruction::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<InstructionT>();
   UnPackTo(_o.get(), _resolver);
@@ -3282,6 +3523,10 @@ inline bool VerifyOpData(::flatbuffers::Verifier &verifier, const void *obj, OpD
       auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::Condition *>(obj);
       return verifier.VerifyTable(ptr);
     }
+    case OpData::Random: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::Random *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
     default: return true;
   }
 }
@@ -3325,6 +3570,10 @@ inline void *OpDataUnion::UnPack(const void *obj, OpData type, const ::flatbuffe
       auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::Condition *>(obj);
       return ptr->UnPack(resolver);
     }
+    case OpData::Random: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::Random *>(obj);
+      return ptr->UnPack(resolver);
+    }
     default: return nullptr;
   }
 }
@@ -3356,6 +3605,10 @@ inline ::flatbuffers::Offset<void> OpDataUnion::Pack(::flatbuffers::FlatBufferBu
       auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::ConditionT *>(value);
       return CreateCondition(_fbb, ptr, _rehasher).Union();
     }
+    case OpData::Random: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::RandomT *>(value);
+      return CreateRandom(_fbb, ptr, _rehasher).Union();
+    }
     default: return 0;
   }
 }
@@ -3384,6 +3637,10 @@ inline OpDataUnion::OpDataUnion(const OpDataUnion &u) : type(u.type), value(null
     }
     case OpData::Condition: {
       value = new ICPDev::Gyeol::Schema::ConditionT(*reinterpret_cast<ICPDev::Gyeol::Schema::ConditionT *>(u.value));
+      break;
+    }
+    case OpData::Random: {
+      value = new ICPDev::Gyeol::Schema::RandomT(*reinterpret_cast<ICPDev::Gyeol::Schema::RandomT *>(u.value));
       break;
     }
     default:
@@ -3420,6 +3677,11 @@ inline void OpDataUnion::Reset() {
     }
     case OpData::Condition: {
       auto ptr = reinterpret_cast<ICPDev::Gyeol::Schema::ConditionT *>(value);
+      delete ptr;
+      break;
+    }
+    case OpData::Random: {
+      auto ptr = reinterpret_cast<ICPDev::Gyeol::Schema::RandomT *>(value);
       delete ptr;
       break;
     }

@@ -20,7 +20,8 @@ union OpData {
     Jump,       // 다른 노드로 이동
     Command,    // 엔진 명령 (배경 변경, 사운드 등)
     SetVar,     // 변수 값 변경
-    Condition   // 조건 분기 (If)
+    Condition,  // 조건 분기 (If)
+    Random      // 랜덤 분기 (가중치 기반)
 }
 
 // 래핑 테이블
@@ -109,6 +110,17 @@ table Condition {
     lhs_expr:Expression;        // 좌변 표현식 (있으면 var_name_id 대신 사용)
     rhs_expr:Expression;        // 우변 표현식 (있으면 compare_value 대신 사용)
     cond_expr:Expression;       // 전체 불리언 표현식 (있으면 위 필드 무시, 논리 연산자용)
+}
+
+// [랜덤 분기 항목]
+table RandomBranch {
+    target_node_name_id:int;  // 분기할 노드 이름 (String Pool Index)
+    weight:int = 1;           // 가중치 (기본 1, 0이면 선택 불가)
+}
+
+// [랜덤 분기]
+table Random {
+    branches:[RandomBranch];  // 가중치 기반 분기 리스트
 }
 
 // -------------------------------------------------------------------------

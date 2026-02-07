@@ -1101,6 +1101,248 @@ bool Parser::parseConditionLine(const std::string& content, int lineNum) {
     return true;
 }
 
+// --- elif 조건식 -> 참 ---
+bool Parser::parseElifLine(const std::string& content, int lineNum) {
+    if (!currentNode_) {
+        addError(lineNum, "elif outside of label");
+        return false;
+    }
+
+    // 이전 Condition에 이미 inline else가 있는지 체크
+    if (!currentNode_->lines.empty()) {
+        auto& prev = currentNode_->lines.back();
+        if (prev->data.type == OpData::Condition) {
+            auto* prevCond = prev->data.AsCondition();
+            if (prevCond->false_jump_node_id >= 0) {
+                addError(lineNum, "'elif' cannot follow a condition that already has 'else'");
+                return false;
+            }
+        }
+    }
+
+    size_t pos = 4; // skip "elif"
+    auto cond = std::make_unique<ConditionT>();
+
+    // 전체 조건식 파싱 (parseConditionLine과 동일한 로직)
+    bool hasLogicalOps = false;
+    std::unique_ptr<ExpressionT> fullExpr;
+    if (!parseFullConditionExpr(content, pos, fullExpr, hasLogicalOps)) {
+        addError(lineNum, "expected expression after 'elif'");
+        return false;
+    }
+
+    if (hasLogicalOps) {
+        cond->cond_expr = std::move(fullExpr);
+    } else {
+        auto& tokens = fullExpr->tokens;
+        ExprOp lastOp = tokens.back()->op;
+        if (lastOp >= ExprOp::CmpEq && lastOp <= ExprOp::CmpLe) {
+            switch (lastOp) {
+                case ExprOp::CmpEq: cond->op = Operator::Equal; break;
+                case ExprOp::CmpNe: cond->op = Operator::NotEqual; break;
+                case ExprOp::CmpGt: cond->op = Operator::Greater; break;
+                case ExprOp::CmpLt: cond->op = Operator::Less; break;
+                case ExprOp::CmpGe: cond->op = Operator::GreaterOrEqual; break;
+                case ExprOp::CmpLe: cond->op = Operator::LessOrEqual; break;
+                default: break;
+            }
+            tokens.pop_back();
+
+            size_t splitIdx = 0;
+            int stackDepth = 0;
+            for (size_t i = 0; i < tokens.size(); ++i) {
+                ExprOp op = tokens[i]->op;
+                if (op == ExprOp::PushLiteral || op == ExprOp::PushVar) {
+                    stackDepth++;
+                } else if (op == ExprOp::Negate || op == ExprOp::Not) {
+                    // 단항: 변화 없음
+                } else {
+                    stackDepth--;
+                }
+                if (stackDepth == 1) {
+                    splitIdx = i + 1;
+                }
+            }
+
+            // LHS
+            if (splitIdx == 1 && tokens[0]->op == ExprOp::PushVar) {
+                cond->var_name_id = tokens[0]->var_name_id;
+            } else if (splitIdx == 1 && tokens[0]->op == ExprOp::PushLiteral) {
+                auto lhsExpr = std::make_unique<ExpressionT>();
+                lhsExpr->tokens.push_back(std::move(tokens[0]));
+                cond->lhs_expr = std::move(lhsExpr);
+            } else {
+                auto lhsExpr = std::make_unique<ExpressionT>();
+                for (size_t i = 0; i < splitIdx; ++i) {
+                    lhsExpr->tokens.push_back(std::move(tokens[i]));
+                }
+                cond->lhs_expr = std::move(lhsExpr);
+            }
+
+            // RHS
+            size_t rhsCount = tokens.size() - splitIdx;
+            if (rhsCount == 1 && tokens[splitIdx]->op == ExprOp::PushLiteral) {
+                cond->compare_value = std::move(tokens[splitIdx]->literal_value);
+            } else if (rhsCount > 0) {
+                auto rhsExpr = std::make_unique<ExpressionT>();
+                for (size_t i = splitIdx; i < tokens.size(); ++i) {
+                    rhsExpr->tokens.push_back(std::move(tokens[i]));
+                }
+                cond->rhs_expr = std::move(rhsExpr);
+            }
+        } else {
+            addError(lineNum, "expected comparison operator (==, !=, >, <, >=, <=)");
+            return false;
+        }
+    }
+
+    // -> true_node (elif은 항상 false_jump=-1)
+    skipSpaces(content, pos);
+    if (pos + 1 >= content.size() || content[pos] != '-' || content[pos + 1] != '>') {
+        addError(lineNum, "expected '->' after elif condition");
+        return false;
+    }
+    pos += 2;
+
+    std::string trueTarget = parseWord(content, pos);
+    if (trueTarget.empty()) {
+        addError(lineNum, "expected target node name after '->'");
+        return false;
+    }
+    cond->true_jump_node_id = addString(trueTarget);
+    cond->false_jump_node_id = -1; // 항상 fall-through
+
+    auto instr = std::make_unique<InstructionT>();
+    instr->data.Set(*cond);
+    currentNode_->lines.push_back(std::move(instr));
+
+    size_t nodeIdx = story_.nodes.size() - 1;
+    size_t instrIdx = currentNode_->lines.size() - 1;
+    instrLineMap_[instrKey(nodeIdx, instrIdx)] = lineNum;
+
+    return true;
+}
+
+// --- else -> 타겟 ---
+bool Parser::parseElseLine(const std::string& content, int lineNum) {
+    if (!currentNode_) {
+        addError(lineNum, "else outside of label");
+        return false;
+    }
+
+    // 이전 Condition에 이미 inline else가 있는지 체크
+    if (!currentNode_->lines.empty()) {
+        auto& prev = currentNode_->lines.back();
+        if (prev->data.type == OpData::Condition) {
+            auto* prevCond = prev->data.AsCondition();
+            if (prevCond->false_jump_node_id >= 0) {
+                addError(lineNum, "'else' cannot follow a condition that already has 'else'");
+                return false;
+            }
+        }
+    }
+
+    size_t pos = 4; // skip "else"
+    skipSpaces(content, pos);
+
+    // -> 필수
+    if (pos + 1 >= content.size() || content[pos] != '-' || content[pos + 1] != '>') {
+        addError(lineNum, "expected '->' after 'else'");
+        return false;
+    }
+    pos += 2;
+
+    std::string target = parseWord(content, pos);
+    if (target.empty()) {
+        addError(lineNum, "expected target node name after 'else ->'");
+        return false;
+    }
+
+    // Jump 명령어 생성
+    auto jump = std::make_unique<JumpT>();
+    jump->target_node_name_id = addString(target);
+    jump->is_call = false;
+
+    auto instr = std::make_unique<InstructionT>();
+    instr->data.Set(*jump);
+    currentNode_->lines.push_back(std::move(instr));
+
+    size_t nodeIdx = story_.nodes.size() - 1;
+    size_t instrIdx = currentNode_->lines.size() - 1;
+    instrLineMap_[instrKey(nodeIdx, instrIdx)] = lineNum;
+
+    return true;
+}
+
+// --- random: 블록 내 분기 라인 ---
+bool Parser::parseRandomBranchLine(const std::string& content, int lineNum) {
+    if (!currentNode_) {
+        addError(lineNum, "random branch outside of label");
+        return false;
+    }
+
+    size_t pos = 0;
+    skipSpaces(content, pos);
+
+    int weight = 1; // 기본 가중치
+
+    // 숫자(가중치)인지 '->'인지 판별
+    if (pos < content.size() && content[pos] != '-') {
+        // 가중치 숫자 파싱
+        size_t start = pos;
+        std::string weightStr = parseWord(content, pos);
+        char* end = nullptr;
+        long w = std::strtol(weightStr.c_str(), &end, 10);
+        if (end == weightStr.c_str() || *end != '\0' || w < 0) {
+            addError(lineNum, "expected weight (non-negative integer) or '->' in random branch");
+            return false;
+        }
+        weight = static_cast<int>(w);
+        skipSpaces(content, pos);
+    }
+
+    // -> 필수
+    if (pos + 1 >= content.size() || content[pos] != '-' || content[pos + 1] != '>') {
+        addError(lineNum, "expected '->' in random branch");
+        return false;
+    }
+    pos += 2;
+
+    std::string target = parseWord(content, pos);
+    if (target.empty()) {
+        addError(lineNum, "expected target node name after '->'");
+        return false;
+    }
+
+    auto branch = std::make_unique<RandomBranchT>();
+    branch->target_node_name_id = addString(target);
+    branch->weight = weight;
+    pendingRandomBranches_.push_back(std::move(branch));
+
+    return true;
+}
+
+// --- random 블록 flush ---
+void Parser::flushRandomBlock(int lineNum) {
+    if (pendingRandomBranches_.empty()) return;
+    if (!currentNode_) {
+        pendingRandomBranches_.clear();
+        return;
+    }
+
+    auto random = std::make_unique<RandomT>();
+    random->branches = std::move(pendingRandomBranches_);
+    pendingRandomBranches_.clear();
+
+    auto instr = std::make_unique<InstructionT>();
+    instr->data.Set(*random);
+    currentNode_->lines.push_back(std::move(instr));
+
+    size_t nodeIdx = story_.nodes.size() - 1;
+    size_t instrIdx = currentNode_->lines.size() - 1;
+    instrLineMap_[instrKey(nodeIdx, instrIdx)] = lineNum;
+}
+
 // --- @ 명령 파라미터... ---
 bool Parser::parseCommandLine(const std::string& content, int lineNum) {
     if (!currentNode_) {
@@ -1149,10 +1391,13 @@ bool Parser::parse(const std::string& filepath) {
     stringMap_.clear();
     currentNode_ = nullptr;
     inMenu_ = false;
+    inRandom_ = false;
     seenFirstLabel_ = false;
+    prevLineType_ = PrevLineType::NONE;
     error_.clear();
     errors_.clear();
     instrLineMap_.clear();
+    pendingRandomBranches_.clear();
 
     std::ifstream ifs(filepath);
     if (!ifs.is_open()) {
@@ -1190,7 +1435,9 @@ bool Parser::parse(const std::string& filepath) {
         // --- 들여쓰기 레벨 0: label 또는 global var ---
         if (indent == 0) {
             if (trimmed.substr(0, 5) == "label") {
+                if (inRandom_) { flushRandomBlock(lineNum); inRandom_ = false; }
                 inMenu_ = false;
+                prevLineType_ = PrevLineType::NONE;
                 if (!parseLabelLine(trimmed, lineNum)) continue; // 에러 복구
                 continue;
             }
@@ -1208,59 +1455,103 @@ bool Parser::parse(const std::string& filepath) {
 
         // --- 들여쓰기 레벨 4+: label 내부 ---
         if (indent >= 4 && indent < 8) {
+            if (inRandom_) { flushRandomBlock(lineNum); }
+            inRandom_ = false;
             inMenu_ = false; // menu 블록 종료
 
             if (trimmed == "menu:") {
                 inMenu_ = true;
+                prevLineType_ = PrevLineType::NONE;
+                continue;
+            }
+
+            if (trimmed == "random:") {
+                inRandom_ = true;
+                prevLineType_ = PrevLineType::NONE;
                 continue;
             }
 
             // jump
             if (trimmed.substr(0, 4) == "jump" && (trimmed.size() == 4 || trimmed[4] == ' ')) {
                 parseJumpLine(trimmed, lineNum, false);
+                prevLineType_ = PrevLineType::NONE;
                 continue;
             }
 
             // call
             if (trimmed.substr(0, 4) == "call" && (trimmed.size() == 4 || trimmed[4] == ' ')) {
                 parseJumpLine(trimmed, lineNum, true);
+                prevLineType_ = PrevLineType::NONE;
                 continue;
             }
 
             // $ 변수 설정
             if (trimmed[0] == '$') {
                 parseSetVarLine(trimmed, lineNum);
+                prevLineType_ = PrevLineType::NONE;
                 continue;
             }
 
             // if 조건문
             if (trimmed.substr(0, 2) == "if" && (trimmed.size() == 2 || trimmed[2] == ' ')) {
                 parseConditionLine(trimmed, lineNum);
+                prevLineType_ = PrevLineType::IF;
+                continue;
+            }
+
+            // elif 조건문
+            if (trimmed.size() >= 4 && trimmed.substr(0, 4) == "elif" && (trimmed.size() == 4 || trimmed[4] == ' ')) {
+                if (prevLineType_ == PrevLineType::IF || prevLineType_ == PrevLineType::ELIF) {
+                    parseElifLine(trimmed, lineNum);
+                    prevLineType_ = PrevLineType::ELIF;
+                } else {
+                    addError(lineNum, "'elif' must follow 'if' or 'elif'");
+                }
+                continue;
+            }
+
+            // standalone else
+            if (trimmed.size() >= 4 && trimmed.substr(0, 4) == "else" && (trimmed.size() == 4 || trimmed[4] == ' ')) {
+                if (prevLineType_ == PrevLineType::IF || prevLineType_ == PrevLineType::ELIF) {
+                    parseElseLine(trimmed, lineNum);
+                } else {
+                    // 체인 밖의 else → dialogue로 처리 (캐릭터 이름)
+                    parseDialogueLine(trimmed, lineNum);
+                }
+                prevLineType_ = PrevLineType::NONE;
                 continue;
             }
 
             // @ 엔진 명령
             if (trimmed[0] == '@') {
                 parseCommandLine(trimmed, lineNum);
+                prevLineType_ = PrevLineType::NONE;
                 continue;
             }
 
             // 대사 (캐릭터 "대사" 또는 "나레이션")
             parseDialogueLine(trimmed, lineNum);
+            prevLineType_ = PrevLineType::NONE;
             continue;
         }
 
-        // --- 들여쓰기 레벨 8+: menu 선택지 ---
+        // --- 들여쓰기 레벨 8+: menu 선택지 / random 분기 ---
         if (indent >= 8) {
-            if (!inMenu_) {
-                addError(lineNum, "unexpected deep indentation (not inside menu:)");
-                continue; // 에러 복구
+            if (inMenu_) {
+                parseMenuChoiceLine(trimmed, lineNum);
+                continue;
             }
-
-            parseMenuChoiceLine(trimmed, lineNum);
-            continue;
+            if (inRandom_) {
+                parseRandomBranchLine(trimmed, lineNum);
+                continue;
+            }
+            addError(lineNum, "unexpected deep indentation (not inside menu: or random:)");
+            continue; // 에러 복구
         }
     }
+
+    // 파일 끝에서 pending random 블록 flush
+    if (inRandom_) { flushRandomBlock(lineNum); inRandom_ = false; }
 
     if (story_.nodes.empty()) {
         std::string msg = "No labels found in " + filepath;
@@ -1326,6 +1617,16 @@ void Parser::validateJumpTargets() {
                         const std::string& target = story_.string_pool[cond->false_jump_node_id];
                         if (nodeNames.find(target) == nodeNames.end()) {
                             addError(lineNum, "condition false target '" + target + "' does not exist");
+                        }
+                    }
+                    break;
+                }
+                case OpData::Random: {
+                    auto* random = instr->data.AsRandom();
+                    for (const auto& branch : random->branches) {
+                        const std::string& target = story_.string_pool[branch->target_node_name_id];
+                        if (nodeNames.find(target) == nodeNames.end()) {
+                            addError(lineNum, "random target '" + target + "' does not exist");
                         }
                     }
                     break;

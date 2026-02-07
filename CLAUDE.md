@@ -61,10 +61,10 @@ src/
     compiler_main.cpp    # CLI 엔트리포인트
     gyeol_parser.h       # Parser 클래스 API
     gyeol_parser.cpp     # Line-by-line 파서 구현
-  tests/                 # Google Test 유닛 테스트 (109 tests)
+  tests/                 # Google Test 유닛 테스트 (128 tests)
     test_helpers.h       # 테스트 유틸리티 (compileScript, startRunner)
-    test_parser.cpp      # Parser 테스트 (39 cases)
-    test_runner.cpp      # Runner VM 테스트 (48 cases)
+    test_parser.cpp      # Parser 테스트 (42 cases)
+    test_runner.cpp      # Runner VM 테스트 (54 cases)
     test_story.cpp       # Story loader 테스트 (4 cases)
     test_saveload.cpp    # Save/Load 라운드트립 테스트 (9 cases)
 bindings/
@@ -99,7 +99,7 @@ demo/
 
 - **String Pool** — 모든 텍스트를 중앙 풀에 저장, 인덱스로 참조 (메모리 효율 + 다국어)
 - **FlatBuffers Object API** — `T` suffix types (`StoryT`, `NodeT`) for building, Pack/Unpack for serialization
-- **Union types** — `OpData` (Line/Choice/Jump/Command/SetVar/Condition), `ValueData` (Bool/Int/Float/String), `ExprOp` (산술 연산)
+- **Union types** — `OpData` (Line/Choice/Jump/Command/SetVar/Condition/Random), `ValueData` (Bool/Int/Float/String), `ExprOp` (산술 연산)
 - **Expression system** — RPN 토큰 리스트 (Shunting-yard 알고리즘으로 infix→RPN 변환, 스택 머신 평가)
 - **Node graph** — 노드 이름 기반 참조, Jump으로 분기, is_call로 스택 Call/Return 지원
 - **Binary format** — `.gyb` (Gyeol Binary, Story), `.gys` (Gyeol Save, SaveState) — zero-copy FlatBuffers
@@ -111,12 +111,14 @@ demo/
   - 문자열 보간: `"Hello {name}!"` → 런타임 변수 치환, LINE/CHOICES 텍스트 지원
   - Call stack으로 Jump is_call=true 지원 (서브루틴 호출/복귀)
   - Save/Load: `saveState(filepath)` / `loadState(filepath)` — `.gys` FlatBuffers 바이너리
+  - 랜덤 분기: `random:` 블록 → 가중치 기반 확률 분기, `std::mt19937` RNG, `setSeed()` 결정적 테스트
   - Variable API: `getVariable()`, `setVariable()`, `hasVariable()`, `getVariableNames()`
 - **Parser** — Ren'Py 스타일 순수 C++ line-by-line 파서, 외부 의존성 없음
   - 에러 복구: 첫 에러에서 멈추지 않고 모든 에러 수집 (`getErrors()`)
   - Jump target 검증: 파싱 후 모든 jump/choice/condition 타겟 유효성 검사
   - global_vars: label 앞 `$ var = val` 선언 → Story.global_vars에 저장
   - voice_asset_id: 대사 뒤 `#voice:파일명` 태그로 보이스 에셋 연결
+  - elif 체인: `if`/`elif`/`else` → 순차 Condition + Jump 변환 (스키마/런너 변경 없음)
 - **Compiler CLI** — `GyeolCompiler <input> [-o output]`, `-h`/`--help`, `--version`, 다중 에러 출력
 - **GDExtension** — StoryPlayer 노드, Signal 기반 (dialogue_line, choices_presented, command_received, story_ended)
   - `save_state(path)` / `load_state(path)` — Godot 경로 (res://, user://) 지원
@@ -144,6 +146,13 @@ label 노드이름:                     # 노드 선언 (첫 label = start_node)
     if 조건 and 조건 -> 참 else 거짓   # 논리 AND (둘 다 참)
     if 조건 or 조건 -> 참 else 거짓    # 논리 OR (하나 이상 참)
     if not 조건 -> 참 else 거짓       # 논리 NOT (부정)
+    if 조건 -> 노드                   # Elif 체인 시작
+    elif 조건 -> 노드                 # 추가 조건 분기 (if/elif 뒤에만)
+    else -> 노드                     # 기본 분기 (if/elif 뒤에만)
+    random:                        # 랜덤 분기 블록
+        50 -> 노드A                # 가중치 50 (확률 = 50/총합)
+        30 -> 노드B                # 가중치 30
+        -> 노드C                   # 기본 가중치 1
     @ 명령 파라미터1 파라미터2        # Command (bg, sfx 등)
     # 주석
 ```
@@ -162,6 +171,8 @@ label 노드이름:                     # 노드 선언 (첫 label = start_node)
 | `SetVar` | 변수 설정 — var_name_id, ValueData (리터럴), Expression (산술) |
 | `Expression` | RPN 토큰 리스트 — ExprToken[] (산술/비교/논리 연산자) |
 | `Condition` | 조건 분기 — var/lhs_expr, op, compare_value/rhs_expr, true/false jumps |
+| `RandomBranch` | 랜덤 분기 항목 — target_node_name_id, weight |
+| `Random` | 랜덤 분기 — branches[] (가중치 기반) |
 | `SaveState` | 세이브 루트 — version, node, pc, finished, variables, call_stack, pending_choices |
 | `SavedVar` | 저장된 변수 — name, ValueData, string_value |
 | `SavedCallFrame` | 콜 스택 프레임 — node_name, pc |
@@ -182,7 +193,7 @@ label 노드이름:                     # 노드 선언 (첫 label = start_node)
 
 ## Testing
 
-Google Test v1.14.0 기반 자동화 테스트 (109 tests):
+Google Test v1.14.0 기반 자동화 테스트 (128 tests):
 
 ```bash
 # 유닛 테스트 실행
@@ -193,9 +204,9 @@ cd build && ctest --output-on-failure
 ```
 
 테스트 범위:
-- **ParserTest** (39): 문법 요소별 파싱, 에스케이프, String Pool, voice_asset, global_vars, jump 검증, 표현식, 조건 표현식, 논리 연산자
-- **ParserErrorTest** (9): 에러 케이스, 에러 복구, 다중 에러 수집, 잘못된 jump/choice/condition 타겟
-- **RunnerTest** (48): VM 실행 흐름, 선택지, Jump/Call, 변수/조건, Command, 변수 API, 산술 표현식, 문자열 보간, 조건 표현식, 논리 연산자
+- **ParserTest** (45): 문법 요소별 파싱, 에스케이프, String Pool, voice_asset, global_vars, jump 검증, 표현식, 조건 표현식, 논리 연산자, elif 체인, random 블록
+- **ParserErrorTest** (12): 에러 케이스, 에러 복구, 다중 에러 수집, 잘못된 jump/choice/condition/random 타겟, elif/else 검증
+- **RunnerTest** (58): VM 실행 흐름, 선택지, Jump/Call, 변수/조건, Command, 변수 API, 산술 표현식, 문자열 보간, 조건 표현식, 논리 연산자, elif 체인, random 분기
 - **StoryTest** (4): .gyb 로드/검증, 잘못된 파일 처리
 - **SaveLoadTest** (9): 라운드트립, 선택지/변수/콜스택 저장복원, 에러 케이스
 

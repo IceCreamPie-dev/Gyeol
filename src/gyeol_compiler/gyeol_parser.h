@@ -36,7 +36,15 @@ private:
     // 현재 파싱 상태
     ICPDev::Gyeol::Schema::NodeT* currentNode_ = nullptr;
     bool inMenu_ = false;
+    bool inRandom_ = false;
     bool seenFirstLabel_ = false; // global_vars 처리용
+
+    // random: 블록 분기 수집
+    std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::RandomBranchT>> pendingRandomBranches_;
+
+    // elif/else 체인 추적
+    enum class PrevLineType { NONE, IF, ELIF };
+    PrevLineType prevLineType_ = PrevLineType::NONE;
 
     // 에러 수집 (계속 파싱)
     void addError(int lineNum, const std::string& msg);
@@ -58,6 +66,10 @@ private:
     bool parseSetVarLine(const std::string& content, int lineNum);
     bool parseGlobalVarLine(const std::string& content, int lineNum);
     bool parseConditionLine(const std::string& content, int lineNum);
+    bool parseElifLine(const std::string& content, int lineNum);
+    bool parseElseLine(const std::string& content, int lineNum);
+    bool parseRandomBranchLine(const std::string& content, int lineNum);
+    void flushRandomBlock(int lineNum);
     bool parseCommandLine(const std::string& content, int lineNum);
 
     // 값 파싱

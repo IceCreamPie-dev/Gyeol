@@ -827,3 +827,254 @@ TEST(ParserTest, ConditionSimpleNoRegression) {
     EXPECT_EQ(cond->cond_expr(), nullptr); // 논리 없음 → 기존 경로
     EXPECT_EQ(cond->op(), Operator::Greater);
 }
+
+// --- Elif/Else 체인 ---
+
+TEST(ParserTest, ElifBasicChain) {
+    // if/elif/else → Condition + Condition + Jump
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if x == 1 -> a\n"
+        "    elif x == 2 -> b\n"
+        "    else -> c\n"
+        "\n"
+        "label a:\n"
+        "    \"a\"\n"
+        "label b:\n"
+        "    \"b\"\n"
+        "label c:\n"
+        "    \"c\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* lines = story->nodes()->Get(0)->lines();
+    ASSERT_EQ(lines->size(), 3u);
+
+    // 첫 번째: Condition (if)
+    EXPECT_EQ(lines->Get(0)->data_type(), OpData::Condition);
+    auto* cond0 = lines->Get(0)->data_as_Condition();
+    EXPECT_GE(cond0->true_jump_node_id(), 0);
+    EXPECT_EQ(cond0->false_jump_node_id(), -1); // fall-through
+
+    // 두 번째: Condition (elif)
+    EXPECT_EQ(lines->Get(1)->data_type(), OpData::Condition);
+    auto* cond1 = lines->Get(1)->data_as_Condition();
+    EXPECT_GE(cond1->true_jump_node_id(), 0);
+    EXPECT_EQ(cond1->false_jump_node_id(), -1); // fall-through
+
+    // 세 번째: Jump (else)
+    EXPECT_EQ(lines->Get(2)->data_type(), OpData::Jump);
+}
+
+TEST(ParserTest, ElifWithoutElse) {
+    // if/elif/elif (else 없음) → 3개 Condition
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if x == 1 -> a\n"
+        "    elif x == 2 -> b\n"
+        "    elif x == 3 -> c\n"
+        "    \"default\"\n"
+        "\n"
+        "label a:\n"
+        "    \"a\"\n"
+        "label b:\n"
+        "    \"b\"\n"
+        "label c:\n"
+        "    \"c\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* lines = story->nodes()->Get(0)->lines();
+    ASSERT_EQ(lines->size(), 4u); // 3 conditions + 1 dialogue
+
+    for (flatbuffers::uoffset_t i = 0; i < 3; ++i) {
+        EXPECT_EQ(lines->Get(i)->data_type(), OpData::Condition);
+        EXPECT_EQ(lines->Get(i)->data_as_Condition()->false_jump_node_id(), -1);
+    }
+    // 마지막은 대사
+    EXPECT_EQ(lines->Get(3)->data_type(), OpData::Line);
+}
+
+TEST(ParserTest, ElifWithLogicalOps) {
+    // elif에서 논리 연산자 사용
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if x == 1 -> a\n"
+        "    elif hp > 0 and key == true -> b\n"
+        "    \"default\"\n"
+        "\n"
+        "label a:\n"
+        "    \"a\"\n"
+        "label b:\n"
+        "    \"b\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* cond = story->nodes()->Get(0)->lines()->Get(1)->data_as_Condition();
+    ASSERT_NE(cond, nullptr);
+    ASSERT_NE(cond->cond_expr(), nullptr); // 논리 연산자 → cond_expr
+    bool foundAnd = false;
+    for (flatbuffers::uoffset_t i = 0; i < cond->cond_expr()->tokens()->size(); ++i) {
+        if (cond->cond_expr()->tokens()->Get(i)->op() == ExprOp::And) foundAnd = true;
+    }
+    EXPECT_TRUE(foundAnd);
+}
+
+TEST(ParserErrorTest, ElifAfterInlineElse) {
+    // if에 inline else가 있는데 elif 사용 → 에러
+    std::string path = "test_elif_inline_err.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    if x == 1 -> a else b\n"
+            << "    elif x == 2 -> c\n"
+            << "label a:\n"
+            << "    \"a\"\n"
+            << "label b:\n"
+            << "    \"b\"\n"
+            << "label c:\n"
+            << "    \"c\"\n";
+    }
+    Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+    bool foundError = false;
+    for (const auto& err : parser.getErrors()) {
+        if (err.find("elif") != std::string::npos && err.find("else") != std::string::npos) {
+            foundError = true;
+        }
+    }
+    EXPECT_TRUE(foundError);
+    std::remove(path.c_str());
+}
+
+TEST(ParserErrorTest, ElifWithoutIf) {
+    // elif이 if 없이 등장 → 에러
+    std::string path = "test_elif_noif_err.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    \"hello\"\n"
+            << "    elif x == 1 -> a\n"
+            << "label a:\n"
+            << "    \"a\"\n";
+    }
+    Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+    bool foundError = false;
+    for (const auto& err : parser.getErrors()) {
+        if (err.find("elif") != std::string::npos && err.find("must follow") != std::string::npos) {
+            foundError = true;
+        }
+    }
+    EXPECT_TRUE(foundError);
+    std::remove(path.c_str());
+}
+
+// --- Random 블록 파서 테스트 ---
+
+TEST(ParserTest, RandomBlockBasic) {
+    // 가중치 50/30/20 → Random 명령어 1개, 3개 분기
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    random:\n"
+        "        50 -> path_a\n"
+        "        30 -> path_b\n"
+        "        20 -> path_c\n"
+        "label path_a:\n"
+        "    \"a\"\n"
+        "label path_b:\n"
+        "    \"b\"\n"
+        "label path_c:\n"
+        "    \"c\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* startNode = story->nodes()->Get(0);
+    ASSERT_EQ(startNode->lines()->size(), 1u); // 1 Random instruction
+
+    auto* instr = startNode->lines()->Get(0);
+    EXPECT_EQ(instr->data_type(), OpData::Random);
+    auto* random = instr->data_as_Random();
+    ASSERT_NE(random, nullptr);
+    ASSERT_EQ(random->branches()->size(), 3u);
+    EXPECT_EQ(random->branches()->Get(0)->weight(), 50);
+    EXPECT_EQ(random->branches()->Get(1)->weight(), 30);
+    EXPECT_EQ(random->branches()->Get(2)->weight(), 20);
+}
+
+TEST(ParserTest, RandomBlockEqualWeight) {
+    // -> 만 사용 → 모든 weight=1
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    random:\n"
+        "        -> path_a\n"
+        "        -> path_b\n"
+        "        -> path_c\n"
+        "label path_a:\n"
+        "    \"a\"\n"
+        "label path_b:\n"
+        "    \"b\"\n"
+        "label path_c:\n"
+        "    \"c\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* startNode = story->nodes()->Get(0);
+    ASSERT_EQ(startNode->lines()->size(), 1u);
+
+    auto* random = startNode->lines()->Get(0)->data_as_Random();
+    ASSERT_NE(random, nullptr);
+    ASSERT_EQ(random->branches()->size(), 3u);
+    EXPECT_EQ(random->branches()->Get(0)->weight(), 1);
+    EXPECT_EQ(random->branches()->Get(1)->weight(), 1);
+    EXPECT_EQ(random->branches()->Get(2)->weight(), 1);
+}
+
+TEST(ParserTest, RandomBlockMixedWeight) {
+    // 가중치 혼합: 5, 기본1, 3
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    random:\n"
+        "        5 -> path_a\n"
+        "        -> path_b\n"
+        "        3 -> path_c\n"
+        "label path_a:\n"
+        "    \"a\"\n"
+        "label path_b:\n"
+        "    \"b\"\n"
+        "label path_c:\n"
+        "    \"c\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* startNode = story->nodes()->Get(0);
+    auto* random = startNode->lines()->Get(0)->data_as_Random();
+    ASSERT_NE(random, nullptr);
+    ASSERT_EQ(random->branches()->size(), 3u);
+    EXPECT_EQ(random->branches()->Get(0)->weight(), 5);
+    EXPECT_EQ(random->branches()->Get(1)->weight(), 1);
+    EXPECT_EQ(random->branches()->Get(2)->weight(), 3);
+}
+
+TEST(ParserErrorTest, RandomInvalidTargetError) {
+    // 존재하지 않는 타겟 → 에러
+    std::string path = "test_random_invalid_target.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    random:\n"
+            << "        50 -> nonexistent\n"
+            << "        50 -> also_missing\n";
+    }
+    Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+    // 2개의 잘못된 타겟 에러
+    int errorCount = 0;
+    for (const auto& err : parser.getErrors()) {
+        if (err.find("does not exist") != std::string::npos) {
+            errorCount++;
+        }
+    }
+    EXPECT_GE(errorCount, 2);
+    std::remove(path.c_str());
+}

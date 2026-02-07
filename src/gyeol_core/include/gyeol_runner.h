@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstdint>
 #include <unordered_map>
+#include <random>
 
 namespace Gyeol {
 
@@ -69,6 +70,9 @@ public:
     bool loadState(const std::string& filepath);
     bool hasStory() const { return story_ != nullptr; }
 
+    // RNG seed (deterministic testing)
+    void setSeed(uint32_t seed);
+
 private:
     // forward declarations — 실제 FlatBuffers 타입은 cpp에서 사용
     const void* story_ = nullptr;
@@ -93,6 +97,9 @@ private:
         int32_t target_node_name_id;
     };
     std::vector<PendingChoice> pendingChoices_;
+
+    // RNG for random branches
+    std::mt19937 rng_;
 
     // 헬퍼
     const char* poolStr(int32_t index) const;
