@@ -580,3 +580,183 @@ label start:
     res = r2.step();
     EXPECT_EQ(res.type, StepType::END);
 }
+
+// ==========================================================================
+// Edge Case Tests — Save/Load
+// ==========================================================================
+
+// 리스트 변수 저장/복원
+TEST_F(SaveLoadTest, SaveLoadListVariable) {
+    auto buf = compileScript(R"(
+label start:
+    $ items = ["sword", "shield"]
+    $ items += "potion"
+    narrator "{items}"
+    jump end
+
+label end:
+    narrator "{items}"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(startRunner(r1, buf));
+
+    auto res = r1.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "sword, shield, potion");
+
+    // 저장
+    ASSERT_TRUE(r1.saveState(SAVE_PATH));
+
+    // 새 Runner에 로드
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(SAVE_PATH));
+
+    // 리스트 변수 복원 확인
+    auto v = r2.getVariable("items");
+    EXPECT_EQ(v.type, Variant::LIST);
+    ASSERT_EQ(v.list.size(), 3u);
+    EXPECT_EQ(v.list[0], "sword");
+    EXPECT_EQ(v.list[1], "shield");
+    EXPECT_EQ(v.list[2], "potion");
+
+    // 다음 step이 정상 동작
+    res = r2.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "sword, shield, potion");
+}
+
+// 빈 리스트 변수 저장/복원
+TEST_F(SaveLoadTest, SaveLoadEmptyListVariable) {
+    auto buf = compileScript(R"(
+label start:
+    $ items = []
+    narrator "done"
+    jump end
+
+label end:
+    narrator "end"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(startRunner(r1, buf));
+
+    auto res = r1.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+
+    ASSERT_TRUE(r1.saveState(SAVE_PATH));
+
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(SAVE_PATH));
+
+    auto v = r2.getVariable("items");
+    EXPECT_EQ(v.type, Variant::LIST);
+    EXPECT_EQ(v.list.size(), 0u);
+}
+
+// String 변수 빈 문자열 저장/복원
+TEST_F(SaveLoadTest, SaveLoadEmptyString) {
+    auto buf = compileScript(R"(
+label start:
+    $ name = ""
+    narrator "done"
+    jump end
+
+label end:
+    narrator "end"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(startRunner(r1, buf));
+    r1.step();
+    ASSERT_TRUE(r1.saveState(SAVE_PATH));
+
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(SAVE_PATH));
+
+    auto v = r2.getVariable("name");
+    EXPECT_EQ(v.type, Variant::STRING);
+    EXPECT_EQ(v.s, "");
+}
+
+// 외부에서 설정한 변수도 저장/복원
+TEST_F(SaveLoadTest, SaveLoadExternalVariable) {
+    auto buf = compileScript(R"(
+label start:
+    narrator "hello"
+    jump end
+
+label end:
+    narrator "end"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(startRunner(r1, buf));
+    r1.setVariable("custom", Variant::String("external_value"));
+    r1.setVariable("score", Variant::Int(999));
+
+    r1.step();
+    ASSERT_TRUE(r1.saveState(SAVE_PATH));
+
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(SAVE_PATH));
+
+    EXPECT_EQ(r2.getVariable("custom").s, "external_value");
+    EXPECT_EQ(r2.getVariable("score").i, 999);
+}
+
+// 중첩 call stack + 매개변수 + visit count 복합 저장/복원
+TEST_F(SaveLoadTest, ComplexNestedCallSaveLoad) {
+    auto buf = compileScript(R"(
+label start:
+    $ result = call outer(10)
+    narrator "{result}"
+
+label outer(x):
+    $ result2 = call inner(x * 2)
+    narrator "in outer with {x}"
+    return result2 + x
+
+label inner(y):
+    narrator "in inner with {y}"
+    return y + 1
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(startRunner(r1, buf));
+
+    // "in inner with 20" (inner(20)에서)
+    auto res = r1.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "in inner with 20");
+
+    // 이 시점에서 call stack: start -> outer(x=10) -> inner(y=20)
+    ASSERT_TRUE(r1.saveState(SAVE_PATH));
+
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(SAVE_PATH));
+
+    // inner 종료 → return 21 → outer의 result2=21
+    // "in outer with 10"
+    res = r2.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "in outer with 10");
+
+    // outer 종료 → return 21+10=31 → start의 result=31
+    // "{result}" → "31"
+    res = r2.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "31");
+
+    EXPECT_EQ(r2.getVariable("result").i, 31);
+}

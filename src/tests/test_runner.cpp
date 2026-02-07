@@ -2747,3 +2747,706 @@ label other:
     EXPECT_EQ(r.type, StepType::LINE);
     EXPECT_STREQ(r.line.text, "done");
 }
+
+// ==========================================================================
+// Edge Case Tests — Runner
+// ==========================================================================
+
+TEST(RunnerEdgeCaseTest, DivisionByZeroInt) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ x = 10 / 0
+    narrator "{x}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    // 0으로 나누기 → Int(0) 반환 (크래시 없음)
+    EXPECT_EQ(runner.getVariable("x").type, Variant::INT);
+    EXPECT_EQ(runner.getVariable("x").i, 0);
+}
+
+TEST(RunnerEdgeCaseTest, DivisionByZeroFloat) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ x = 10.0 / 0.0
+    narrator "{x}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    // Float 0 나누기 → Float(0) 반환 (크래시 없음)
+    EXPECT_EQ(runner.getVariable("x").type, Variant::FLOAT);
+    EXPECT_FLOAT_EQ(runner.getVariable("x").f, 0.0f);
+}
+
+TEST(RunnerEdgeCaseTest, ModuloByZero) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ x = 10 % 0
+    narrator "{x}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_EQ(runner.getVariable("x").i, 0);
+}
+
+TEST(RunnerEdgeCaseTest, EmptyNodeFallsThrough) {
+    // 빈 노드로 jump → 즉시 스토리 종료
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    jump empty
+label empty:
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::END);
+    EXPECT_TRUE(runner.isFinished());
+}
+
+TEST(RunnerEdgeCaseTest, ChooseInvalidIndexNegative) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "A" -> a
+        "B" -> b
+label a:
+    "picked A"
+label b:
+    "picked B"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    ASSERT_EQ(r.type, StepType::CHOICES);
+
+    // 잘못된 인덱스로 choose → 무시 (크래시 없음)
+    runner.choose(-1);
+    EXPECT_FALSE(runner.isFinished());
+}
+
+TEST(RunnerEdgeCaseTest, ChooseInvalidIndexTooLarge) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "A" -> a
+        "B" -> b
+label a:
+    "picked A"
+label b:
+    "picked B"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    ASSERT_EQ(r.type, StepType::CHOICES);
+
+    // 범위 초과 인덱스 → 무시 (크래시 없음)
+    runner.choose(99);
+    EXPECT_FALSE(runner.isFinished());
+}
+
+TEST(RunnerEdgeCaseTest, AllChoicesFilteredByCondition) {
+    // 모든 choice 조건이 false인 경우
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ flag1 = false
+    $ flag2 = false
+    menu:
+        "A" -> a if flag1
+        "B" -> b if flag2
+    narrator "after menu"
+label a:
+    "picked A"
+label b:
+    "picked B"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::CHOICES);
+    // 모든 선택지가 필터링됨 → 빈 choices 리스트
+    EXPECT_EQ(r.choices.size(), 0u);
+}
+
+TEST(RunnerEdgeCaseTest, InterpolationUndefinedVariable) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    narrator "Hello {undefined_var}!"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    // 미정의 변수 → 빈 문자열로 치환 (크래시 없음)
+    EXPECT_STREQ(r.line.text, "Hello !");
+}
+
+TEST(RunnerEdgeCaseTest, InterpolationNestedInlineConditions) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ hp = 100
+    $ shield = true
+    narrator "{if hp > 50}{if shield}Tank{else}Fighter{endif}{else}Wounded{endif}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "Tank");
+}
+
+TEST(RunnerEdgeCaseTest, InterpolationNestedConditionFalseBranch) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ hp = 30
+    $ shield = false
+    narrator "{if hp > 50}{if shield}Tank{else}Fighter{endif}{else}Wounded{endif}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "Wounded");
+}
+
+TEST(RunnerEdgeCaseTest, RestartWithMultipleStartCalls) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ counter = 1
+    narrator "{counter}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+
+    // 첫 실행
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "1");
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::END);
+
+    // 재시작 — 상태가 깨끗하게 리셋되어야 함
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    EXPECT_FALSE(runner.isFinished());
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "1");
+}
+
+TEST(RunnerEdgeCaseTest, VisitCountNeverVisitedNode) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ x = visit_count("never")
+    narrator "{x}"
+label never:
+    "never reached"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "0");
+    EXPECT_EQ(runner.getVariable("x").i, 0);
+}
+
+TEST(RunnerEdgeCaseTest, BoolIntComparison) {
+    // Bool과 Int 비교: bool이 우선 → true == 1 비교시 int를 bool로 변환
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ flag = true
+    if flag == 1 -> yes else no
+label yes:
+    narrator "yes"
+label no:
+    narrator "no"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    // Bool vs Int: true == (1 != 0) → true → "yes"
+    EXPECT_STREQ(r.line.text, "yes");
+}
+
+TEST(RunnerEdgeCaseTest, StringComparison) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ name = "hero"
+    if name == "hero" -> yes else no
+label yes:
+    narrator "match"
+label no:
+    narrator "no match"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "match");
+}
+
+TEST(RunnerEdgeCaseTest, StringInequalityComparison) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ name = "villain"
+    if name != "hero" -> yes else no
+label yes:
+    narrator "different"
+label no:
+    narrator "same"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "different");
+}
+
+TEST(RunnerEdgeCaseTest, NegativeNumberExpression) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ x = -5
+    $ y = x + 10
+    narrator "{y}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "5");
+}
+
+TEST(RunnerEdgeCaseTest, FloatToStringInterpolation) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ x = 3.14
+    narrator "{x}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    // float → string 보간 (정확한 형식은 ostringstream 출력에 의존)
+    std::string text = r.line.text;
+    EXPECT_TRUE(text.find("3.14") != std::string::npos);
+}
+
+TEST(RunnerEdgeCaseTest, BoolToStringInterpolation) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ flag = true
+    narrator "{flag}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "true");
+}
+
+TEST(RunnerEdgeCaseTest, DeepCallStackNoOverflow) {
+    // 깊은 call 스택 (10단계) — 크래시 없음
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    call level1
+    narrator "back"
+label level1:
+    call level2
+label level2:
+    call level3
+label level3:
+    call level4
+label level4:
+    call level5
+label level5:
+    narrator "deep"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "deep");
+
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "back");
+
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::END);
+}
+
+TEST(RunnerEdgeCaseTest, GlobalVarInitialization) {
+    auto buf = GyeolTest::compileScript(R"(
+$ score = 100
+$ name = "Player"
+$ alive = true
+label start:
+    narrator "{score} {name} {alive}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "100 Player true");
+}
+
+TEST(RunnerEdgeCaseTest, JumpToNonexistentNode) {
+    // 파서 검증에서 걸리지만, 만약 통과하면 Runner가 안전하게 종료해야 함
+    // 이 테스트에서는 파서가 에러를 반환하는지 확인
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    jump nonexistent
+)");
+    // 파서가 jump target 검증에서 에러 → 빈 버퍼
+    EXPECT_TRUE(buf.empty());
+}
+
+TEST(RunnerEdgeCaseTest, MultipleChoiceGroups) {
+    // 선택지 후 텍스트 후 다시 선택지
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "A" -> after_first
+        "B" -> after_first
+label after_first:
+    narrator "middle"
+    menu:
+        "C" -> end_node
+        "D" -> end_node
+label end_node:
+    narrator "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    ASSERT_EQ(r.type, StepType::CHOICES);
+    ASSERT_EQ(r.choices.size(), 2u);
+    runner.choose(0);
+
+    r = runner.step();
+    EXPECT_STREQ(r.line.text, "middle");
+
+    r = runner.step();
+    ASSERT_EQ(r.type, StepType::CHOICES);
+    ASSERT_EQ(r.choices.size(), 2u);
+    runner.choose(1);
+
+    r = runner.step();
+    EXPECT_STREQ(r.line.text, "done");
+}
+
+TEST(RunnerEdgeCaseTest, CompoundArithmeticExpression) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ x = (2 + 3) * 4
+    narrator "{x}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "20");
+}
+
+TEST(RunnerEdgeCaseTest, OperatorPrecedence) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ x = 2 + 3 * 4
+    narrator "{x}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    // 3*4=12, 2+12=14
+    EXPECT_STREQ(r.line.text, "14");
+}
+
+TEST(RunnerEdgeCaseTest, InlineConditionTruthiness) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ name = "hero"
+    narrator "{if name}has name{else}no name{endif}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "has name");
+}
+
+TEST(RunnerEdgeCaseTest, InlineConditionEmptyStringFalsy) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ name = ""
+    narrator "{if name}has name{else}no name{endif}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "no name");
+}
+
+TEST(RunnerEdgeCaseTest, InlineConditionZeroFalsy) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ count = 0
+    narrator "{if count}has count{else}zero{endif}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "zero");
+}
+
+TEST(RunnerEdgeCaseTest, TextWithoutInterpolation) {
+    // '{' 없는 텍스트 → 빠른 경로 (interpolateText 반환 빈 문자열)
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    narrator "plain text without braces"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "plain text without braces");
+}
+
+TEST(RunnerEdgeCaseTest, ChoiceInterpolation) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ weapon = "sword"
+    menu:
+        "Use {weapon}" -> a
+        "Run away" -> b
+label a:
+    narrator "attacked"
+label b:
+    narrator "fled"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    ASSERT_EQ(r.type, StepType::CHOICES);
+    EXPECT_STREQ(r.choices[0].text, "Use sword");
+    EXPECT_STREQ(r.choices[1].text, "Run away");
+}
+
+TEST(RunnerEdgeCaseTest, MultipleCommandParams) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    @ play_sfx "explosion.wav" 0.8 true
+    narrator "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::COMMAND);
+    EXPECT_STREQ(r.command.type, "play_sfx");
+    ASSERT_EQ(r.command.params.size(), 3u);
+    EXPECT_STREQ(r.command.params[0], "explosion.wav");
+    EXPECT_STREQ(r.command.params[1], "0.8");
+    EXPECT_STREQ(r.command.params[2], "true");
+}
+
+TEST(RunnerEdgeCaseTest, ReturnWithoutCallEndsStory) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    narrator "before return"
+    return
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "before return");
+
+    r = runner.step();
+    EXPECT_EQ(r.type, StepType::END);
+    EXPECT_TRUE(runner.isFinished());
+}
+
+TEST(RunnerEdgeCaseTest, ElifChainExecution) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ x = 2
+    if x == 1 -> one
+    elif x == 2 -> two
+    elif x == 3 -> three
+    else -> other
+label one:
+    narrator "one"
+label two:
+    narrator "two"
+label three:
+    narrator "three"
+label other:
+    narrator "other"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "two");
+}
+
+TEST(RunnerEdgeCaseTest, ElifChainFallthrough) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ x = 99
+    if x == 1 -> one
+    elif x == 2 -> two
+    else -> other
+label one:
+    narrator "one"
+label two:
+    narrator "two"
+label other:
+    narrator "other"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "other");
+}
+
+TEST(RunnerEdgeCaseTest, RandomBranchDeterministic) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    random:
+        100 -> a
+        0 -> b
+label a:
+    narrator "A"
+label b:
+    narrator "B"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    // weight 100 vs 0 → 항상 a
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "A");
+}
+
+TEST(RunnerEdgeCaseTest, ListVariableSetAndGet) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["sword", "shield"]
+    narrator "{items}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "sword, shield");
+
+    auto v = runner.getVariable("items");
+    EXPECT_EQ(v.type, Variant::LIST);
+    ASSERT_EQ(v.list.size(), 2u);
+    EXPECT_EQ(v.list[0], "sword");
+    EXPECT_EQ(v.list[1], "shield");
+}
+
+TEST(RunnerEdgeCaseTest, ListAppendAndRemove) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["apple"]
+    $ items += "banana"
+    $ items -= "apple"
+    narrator "{items}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "banana");
+}
+
+TEST(RunnerEdgeCaseTest, ListAppendDuplicate) {
+    // += 연산은 중복 항목을 추가하지 않음
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["apple"]
+    $ items += "apple"
+    narrator "{items}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "apple");
+
+    auto v = runner.getVariable("items");
+    EXPECT_EQ(v.list.size(), 1u);
+}

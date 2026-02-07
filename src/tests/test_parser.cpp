@@ -2135,3 +2135,310 @@ TEST(ParserTest, VisitCountInArithmeticExpr) {
     EXPECT_EQ(sv->expr()->tokens()->Get(1)->op(), ExprOp::PushVisitCount);
     EXPECT_EQ(sv->expr()->tokens()->Get(2)->op(), ExprOp::Add);
 }
+
+// ==========================================================================
+// Edge Case Tests — Parser
+// ==========================================================================
+
+TEST(ParserEdgeCaseTest, LabelNameWithUnderscore) {
+    auto buf = GyeolTest::compileScript(R"(
+label my_node_1:
+    narrator "hello"
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    EXPECT_STREQ(story->nodes()->Get(0)->name()->c_str(), "my_node_1");
+}
+
+TEST(ParserEdgeCaseTest, LabelNameWithNumbers) {
+    auto buf = GyeolTest::compileScript(R"(
+label node123:
+    narrator "test"
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    EXPECT_STREQ(story->nodes()->Get(0)->name()->c_str(), "node123");
+}
+
+TEST(ParserEdgeCaseTest, EmptyDialogueString) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    narrator ""
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* line = story->nodes()->Get(0)->lines()->Get(0)->data_as_Line();
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->text_id()))->c_str(), "");
+}
+
+TEST(ParserEdgeCaseTest, EscapeSequencesInDialogue) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    narrator \"line1\\nline2\\ttab\\\"quote\\\\\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* line = story->nodes()->Get(0)->lines()->Get(0)->data_as_Line();
+    std::string text = story->string_pool()->Get(
+        static_cast<uint32_t>(line->text_id()))->c_str();
+    EXPECT_EQ(text, "line1\nline2\ttab\"quote\\");
+}
+
+TEST(ParserEdgeCaseTest, MultipleLabelsSameFile) {
+    auto buf = GyeolTest::compileScript(R"(
+label a:
+    narrator "node a"
+label b:
+    narrator "node b"
+label c:
+    narrator "node c"
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    EXPECT_EQ(story->nodes()->size(), 3u);
+    EXPECT_STREQ(story->start_node_name()->c_str(), "a");
+}
+
+TEST(ParserEdgeCaseTest, DuplicateLabelError) {
+    std::string path = "test_dup_label.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n    narrator \"a\"\nlabel start:\n    narrator \"b\"\n";
+    }
+    Gyeol::Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+    auto& errors = parser.getErrors();
+    bool found = false;
+    for (auto& e : errors) {
+        if (e.find("duplicate") != std::string::npos) found = true;
+    }
+    EXPECT_TRUE(found);
+    std::remove(path.c_str());
+}
+
+TEST(ParserEdgeCaseTest, GlobalVarBeforeLabel) {
+    auto buf = GyeolTest::compileScript(R"(
+$ health = 100
+$ name = "Player"
+label start:
+    narrator "{health} {name}"
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    EXPECT_EQ(story->global_vars()->size(), 2u);
+}
+
+TEST(ParserEdgeCaseTest, MultipleTagsOnLine) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    narrator "text" #mood:happy #pose:idle #important
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* line = story->nodes()->Get(0)->lines()->Get(0)->data_as_Line();
+    ASSERT_EQ(line->tags()->size(), 3u);
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->tags()->Get(0)->key_id()))->c_str(), "mood");
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->tags()->Get(0)->value_id()))->c_str(), "happy");
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(line->tags()->Get(2)->key_id()))->c_str(), "important");
+}
+
+TEST(ParserEdgeCaseTest, CommandNoParams) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    @ clear_screen
+    narrator "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* cmd = story->nodes()->Get(0)->lines()->Get(0)->data_as_Command();
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(cmd->type_id()))->c_str(), "clear_screen");
+    // FlatBuffers: 빈 벡터는 nullptr — null 체크 필수
+    EXPECT_TRUE(cmd->params() == nullptr || cmd->params()->size() == 0u);
+}
+
+TEST(ParserEdgeCaseTest, ConditionWithoutElseClause) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ x = 5
+    if x == 5 -> target
+    narrator "fallthrough"
+label target:
+    narrator "jumped"
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* cond = story->nodes()->Get(0)->lines()->Get(1)->data_as_Condition();
+    // false_jump_node_id = -1 (no else)
+    EXPECT_LT(cond->false_jump_node_id(), 0);
+}
+
+TEST(ParserEdgeCaseTest, RandomBlockParsing) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    random:
+        50 -> a
+        30 -> b
+        -> c
+label a:
+    narrator "A"
+label b:
+    narrator "B"
+label c:
+    narrator "C"
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* random = story->nodes()->Get(0)->lines()->Get(0)->data_as_Random();
+    ASSERT_EQ(random->branches()->size(), 3u);
+    EXPECT_EQ(random->branches()->Get(0)->weight(), 50);
+    EXPECT_EQ(random->branches()->Get(1)->weight(), 30);
+    EXPECT_EQ(random->branches()->Get(2)->weight(), 1); // 기본 가중치
+}
+
+TEST(ParserEdgeCaseTest, FunctionParamParsing) {
+    auto buf = GyeolTest::compileScript(R"(
+label greet(name, title):
+    narrator "Hello"
+label start:
+    call greet("World", "Mr")
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* funcNode = story->nodes()->Get(0);
+    ASSERT_EQ(funcNode->param_ids()->size(), 2u);
+}
+
+TEST(ParserEdgeCaseTest, ReturnValueParsing) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ result = call calc
+    narrator "{result}"
+label calc:
+    return 42
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* cwr = story->nodes()->Get(0)->lines()->Get(0)->data_as_CallWithReturn();
+    ASSERT_NE(cwr, nullptr);
+}
+
+TEST(ParserEdgeCaseTest, BareReturnParsing) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    call sub
+    narrator "back"
+label sub:
+    narrator "in sub"
+    return
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* ret = story->nodes()->Get(1)->lines()->Get(1)->data_as_Return();
+    ASSERT_NE(ret, nullptr);
+    // bare return: expr=null, value_type=NONE
+    EXPECT_EQ(ret->expr(), nullptr);
+}
+
+TEST(ParserEdgeCaseTest, DialogueOutsideLabelError) {
+    std::string path = "test_no_label.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "narrator \"orphan line\"\n";
+    }
+    Gyeol::Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+    bool found = false;
+    for (auto& e : parser.getErrors()) {
+        if (e.find("outside") != std::string::npos ||
+            e.find("label") != std::string::npos) found = true;
+    }
+    EXPECT_TRUE(found);
+    std::remove(path.c_str());
+}
+
+TEST(ParserEdgeCaseTest, JumpTargetValidation) {
+    // jump to non-existent label
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    jump does_not_exist
+)");
+    EXPECT_TRUE(buf.empty()); // 에러로 컴파일 실패
+}
+
+TEST(ParserEdgeCaseTest, ChoiceTargetValidation) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "Go" -> nonexistent
+)");
+    EXPECT_TRUE(buf.empty()); // 에러로 컴파일 실패
+}
+
+TEST(ParserEdgeCaseTest, NarrationWithoutCharacter) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    "Just narration"
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* line = story->nodes()->Get(0)->lines()->Get(0)->data_as_Line();
+    EXPECT_EQ(line->character_id(), -1);
+}
+
+TEST(ParserEdgeCaseTest, LineIdGeneration) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    narrator "Hello"
+    narrator "World"
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    // line_ids 존재하고 길이가 string_pool과 같아야 함
+    ASSERT_NE(story->line_ids(), nullptr);
+    EXPECT_EQ(story->line_ids()->size(), story->string_pool()->size());
+}
+
+TEST(ParserEdgeCaseTest, MultipleErrorCollection) {
+    std::string path = "test_multi_err.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    jump bad1\n"
+            << "    jump bad2\n";
+    }
+    Gyeol::Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+    EXPECT_GE(parser.getErrors().size(), 2u);
+    std::remove(path.c_str());
+}
+
+TEST(ParserEdgeCaseTest, ListLiteralParsing) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["apple", "banana", "cherry"]
+    narrator "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* setvar = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    ASSERT_NE(setvar, nullptr);
+    EXPECT_EQ(setvar->value_type(), ValueData::ListValue);
+}
+
+TEST(ParserEdgeCaseTest, EmptyListLiteralParsing) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = []
+    narrator "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* setvar = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    ASSERT_NE(setvar, nullptr);
+    EXPECT_EQ(setvar->value_type(), ValueData::ListValue);
+}
