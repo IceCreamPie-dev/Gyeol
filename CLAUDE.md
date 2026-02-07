@@ -13,6 +13,7 @@ Ren'Py의 연출력 + Ink의 구조적 강점 + Yarn의 유연함을 통합한 C
 - ~~**Step 3:** 텍스트 파서 — .gyeol 스크립트 → .gyb 컴파일 (순수 C++ 파서)~~ (완료)
 - ~~**Step 4:** Godot 연동 — GDExtension, StoryPlayer 노드, Signal 기반 UI 연결~~ (완료)
 - ~~**Step 5:** 개발 도구 — LSP 서버 + CLI 디버거 + VS Code 확장~~ (완료)
+- ~~**Step 6:** List 타입 테스트 강화 + 버그 수정~~ (완료)
 
 ## Build System
 
@@ -147,6 +148,16 @@ demo/
     - Visit API: `getVisitCount(name)`, `hasVisited(name)` — 런타임 방문 횟수 조회
   - Save/Load: `saveState(filepath)` / `loadState(filepath)` — `.gys` FlatBuffers 바이너리
   - 랜덤 분기: `random:` 블록 → 가중치 기반 확률 분기, `std::mt19937` RNG, `setSeed()` 결정적 테스트
+  - List/Set 타입: 문자열 리스트 변수, 중복 방지 추가/제거, 조건 검색
+    - 리터럴: `$ items = ["sword", "shield"]`, `$ tags = [fire, ice]` (bare word 지원)
+    - 추가: `$ items += "potion"` (중복 시 무시, set-add 동작)
+    - 제거: `$ items -= "shield"` (없으면 무시)
+    - 길이: `len(items)` — 표현식/조건/보간에서 사용, 미정의 변수 → 0
+    - 포함: `"sword" in items` — 조건문에서 사용, 논리 연산자 결합 가능
+    - 보간: `"{items}"` → "sword, shield", `"{len(items)}"` → "2"
+    - 인라인 조건: `{if len(items) > 0}has{else}empty{endif}`, `{if "x" in items}yes{endif}`
+    - Truthiness: 비어있지 않은 리스트 = true, 빈 리스트 = false
+    - Save/Load: 리스트 변수 저장/복원 지원 (list_items 필드)
   - Variable API: `getVariable()`, `setVariable()`, `hasVariable()`, `getVariableNames()`
   - Locale API: `loadLocale(csvPath)`, `clearLocale()`, `getLocale()` — CSV 기반 다국어 오버레이
 - **Parser** — Ren'Py 스타일 순수 C++ line-by-line 파서, 외부 의존성 없음
@@ -214,6 +225,13 @@ label 함수(a, b):                   # 함수 선언 (매개변수 바인딩, �
     $ 변수 = 표현식                  # SetVar + 산술 (x + 1, a * 2 + b, (x + y) * 3)
     $ 변수 = visit_count("노드")    # 노드 방문 횟수 (함수 호출, 따옴표/맨문자 허용)
     $ 변수 = visited("노드")        # 노드 방문 여부 (bool)
+    $ 리스트 = ["항목1", "항목2"]    # List 리터럴 (문자열 배열, bare word 가능)
+    $ 리스트 = []                   # 빈 리스트
+    $ 리스트 += "항목"              # 리스트에 추가 (중복 방지, set-add)
+    $ 리스트 -= "항목"              # 리스트에서 제거
+    $ 변수 = len(리스트)            # 리스트 길이 (미정의 → 0)
+    if "항목" in 리스트 -> 참        # 리스트 포함 여부 조건
+    if len(리스트) > 0 -> 참         # 리스트 길이 비교 조건
     if 변수 op 값 -> 참 else 거짓    # Condition (==, !=, >, <, >=, <=)
     if 표현식 op 표현식 -> 참 else 거짓 # Condition + 산술 (hp-10 > 0, x+y == z)
     if 조건 and 조건 -> 참 else 거짓   # 논리 AND (둘 다 참)
@@ -274,11 +292,11 @@ label 함수(a, b):                   # 함수 선언 (매개변수 바인딩, �
 
 ## Testing
 
-Google Test v1.14.0 기반 자동화 테스트 (284 tests):
+Google Test v1.14.0 기반 자동화 테스트 (322 tests):
 
 ```bash
 # 유닛 테스트 실행
-./build/src/tests/GyeolTests          # Core + Parser + Runner (254 tests)
+./build/src/tests/GyeolTests          # Core + Parser + Runner (292 tests)
 ./build/src/tests/GyeolLSPTests       # LSP Analyzer + Server (30 tests)
 
 # CTest로 실행
@@ -287,11 +305,13 @@ cd build && ctest --output-on-failure
 
 테스트 범위:
 - **ParserTest** (83): 문법 요소별 파싱, 에스케이프, String Pool, voice_asset, 태그 시스템, global_vars, jump 검증, 표현식, 조건 표현식, 논리 연산자, elif 체인, random 블록, Line ID, Import (병합/다중파일/global vars/string pool공유/start_node/순서/중첩), Return (리터럴/변수/표현식/문자열/bool/bare), CallWithReturn (파싱/검증), Function Parameters (label params/call args/empty parens/expression args/single param), Visit Count (표현식/조건/맨문자/산술조합)
+- **ParserListTest** (11): 빈 리스트/문자열/bare word 리터럴, +=/-= 연산자, len() 표현식/산술, in 조건 연산자, len() 조건, 전역 변수 리스트, 표현식 내 리스트
 - **ParserErrorTest** (25): 에러 케이스, 에러 복구, 다중 에러 수집, 잘못된 jump/choice/condition/random 타겟, elif/else 검증, Import (순환감지/자기참조/파일없음/중복label/경로오류), Return (label밖/잘못된타겟/잘못된표현식), Function Parameters (중복param/unclosed paren/jump args/empty arg)
 - **RunnerTest** (106): VM 실행 흐름, 선택지, Jump/Call, 변수/조건, Command, 변수 API, 산술 표현식, 문자열 보간, 인라인 조건 텍스트, 태그 노출, 조건 표현식, 논리 연산자, elif 체인, random 분기, 로케일 오버레이/폴백/보간/클리어, Import 통합 (노드 jump/global vars), CallWithReturn (리터럴/변수/표현식/문자열/float/bool), Return (bare/implicit/no-frame), 중첩 call return, 기존 call 호환, Function Parameters (단일/다중 param, 로컬 스코프, 전역 섀도잉, 표현식 인자, return+params, 중첩, 기본값, 하위 호환), Visit Count (기본/미방문/bool/표현식/조건분기/비교/보간/인라인조건/API)
+- **RunnerListTest** (24): 리스트 리터럴 할당, 빈 리스트, +=/중복방지 추가, -= 제거, 없는 항목 제거, truthiness, in 조건(참/거짓), len() SetVar/빈/미정의, len() 조건 분기, 문자열 보간, len 보간, 인라인 조건 len/in, 전역 리스트, API setVariable, 논리연산+in, len 산술, 추가제거 시퀀스, bare word 리스트
 - **DebugAPITest** (21): Breakpoint 관리 (추가/삭제/클리어/조회), Step mode 제어, Location 정보 (노드/PC/타입), Call stack 조회, Node 목록/instruction 수/상세 정보, Instruction 타입별 info (Line/Choice/Jump/Command/SetVar/Condition/Random/Return/CallWithReturn), Step mode 실행 흐름, Breakpoint hit/resume, 하위 호환 (디버그 미사용 시 동일 동작), 다른 노드 breakpoint
 - **StoryTest** (4): .gyb 로드/검증, 잘못된 파일 처리
-- **SaveLoadTest** (15): 라운드트립, 선택지/변수/콜스택 저장복원, 에러 케이스, CallWithReturn 프레임 저장복원, 하위 호환, Function Parameters (섀도 변수 포함 프레임 저장복원, 하위 호환), Visit Count (방문횟수 저장복원, 하위 호환)
+- **SaveLoadTest** (18): 라운드트립, 선택지/변수/콜스택 저장복원, 에러 케이스, CallWithReturn 프레임 저장복원, 하위 호환, Function Parameters (섀도 변수 포함 프레임 저장복원, 하위 호환), Visit Count (방문횟수 저장복원, 하위 호환), List (리스트 변수 저장복원, 빈 리스트, 수정 후 저장복원)
 - **AnalyzerTest** (13): Label 스캔 (이름/줄번호/파라미터), 변수 스캔 (전역/로컬/중복제거), Jump/Call/Choice 참조, 주석/빈 내용 무시, Parser 기반 진단 (유효/무효 스크립트)
 - **LspServerTest** (17): Initialize (capabilities), Shutdown/Exit, DidOpen/DidChange/DidClose 진단 게시, Completion (키워드/라벨/변수/내장함수), Go to Definition (라벨/변수), Hover (키워드/라벨/파라미터), Document Symbols, 알 수 없는 메서드 에러
 

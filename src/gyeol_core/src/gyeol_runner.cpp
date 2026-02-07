@@ -307,10 +307,19 @@ Variant Runner::evaluateExpression(const void* exprPtr) const {
             }
             // --- 리스트 연산자 ---
             case ExprOp::ListContains: {
+                // "needle in list" → RPN: [needle, list, ListContains]
+                // pop 순서: rhs=list (마지막 push), lhs=needle (먼저 push)
                 if (stack.size() < 2) return Variant::Int(0);
-                Variant rhs = stack.back(); stack.pop_back(); // 검색할 문자열
-                Variant lhs = stack.back(); stack.pop_back(); // 리스트
-                if (lhs.type == Variant::LIST) {
+                Variant rhs = stack.back(); stack.pop_back(); // 리스트 (오른쪽 피연산자)
+                Variant lhs = stack.back(); stack.pop_back(); // 검색할 값 (왼쪽 피연산자)
+                // rhs가 리스트인 경우 (정상: "x" in list)
+                if (rhs.type == Variant::LIST) {
+                    std::string needle = (lhs.type == Variant::STRING) ? lhs.s : variantToString(lhs);
+                    bool found = std::find(rhs.list.begin(), rhs.list.end(), needle) != rhs.list.end();
+                    stack.push_back(Variant::Bool(found));
+                }
+                // lhs가 리스트인 경우 (역순 호환: list contains "x")
+                else if (lhs.type == Variant::LIST) {
                     std::string needle = (rhs.type == Variant::STRING) ? rhs.s : variantToString(rhs);
                     bool found = std::find(lhs.list.begin(), lhs.list.end(), needle) != lhs.list.end();
                     stack.push_back(Variant::Bool(found));

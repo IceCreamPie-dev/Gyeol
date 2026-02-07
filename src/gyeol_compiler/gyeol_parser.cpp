@@ -125,11 +125,17 @@ bool Parser::parseValue(const std::string& text, size_t& pos,
         skipSpaces(text, pos);
         while (pos < text.size() && text[pos] != ']') {
             skipSpaces(text, pos);
-            if (pos < text.size() && text[pos] == '"') {
+            if (pos >= text.size() || text[pos] == ']') break;
+            if (text[pos] == '"') {
                 std::string item = parseQuotedString(text, pos);
                 lv->items.push_back(addString(item));
             } else {
-                std::string item = parseWord(text, pos);
+                // bare word: 콤마, 닫는 괄호, 공백에서 정지
+                std::string item;
+                while (pos < text.size() && text[pos] != ',' && text[pos] != ']'
+                       && text[pos] != ' ' && text[pos] != '\t') {
+                    item += text[pos]; pos++;
+                }
                 if (!item.empty()) lv->items.push_back(addString(item));
             }
             skipSpaces(text, pos);
@@ -225,11 +231,17 @@ bool Parser::parseExpression(const std::string& text, size_t& pos,
             skipSpaces(text, pos);
             while (pos < text.size() && text[pos] != ']') {
                 skipSpaces(text, pos);
-                if (pos < text.size() && text[pos] == '"') {
+                if (pos >= text.size() || text[pos] == ']') break;
+                if (text[pos] == '"') {
                     std::string item = parseQuotedString(text, pos);
                     lv->items.push_back(addString(item));
                 } else {
-                    std::string item = parseWord(text, pos);
+                    // bare word: 콤마, 닫는 괄호, 공백에서 정지
+                    std::string item;
+                    while (pos < text.size() && text[pos] != ',' && text[pos] != ']'
+                           && text[pos] != ' ' && text[pos] != '\t') {
+                        item += text[pos]; pos++;
+                    }
                     if (!item.empty()) lv->items.push_back(addString(item));
                 }
                 skipSpaces(text, pos);
@@ -940,11 +952,17 @@ bool Parser::parseFullConditionExpr(const std::string& text, size_t& pos,
             skipSpaces(text, pos);
             while (pos < text.size() && text[pos] != ']') {
                 skipSpaces(text, pos);
-                if (pos < text.size() && text[pos] == '"') {
+                if (pos >= text.size() || text[pos] == ']') break;
+                if (text[pos] == '"') {
                     std::string item = parseQuotedString(text, pos);
                     lv->items.push_back(addString(item));
                 } else {
-                    std::string item = parseWord(text, pos);
+                    // bare word: 콤마, 닫는 괄호, 공백에서 정지
+                    std::string item;
+                    while (pos < text.size() && text[pos] != ',' && text[pos] != ']'
+                           && text[pos] != ' ' && text[pos] != '\t') {
+                        item += text[pos]; pos++;
+                    }
                     if (!item.empty()) lv->items.push_back(addString(item));
                 }
                 skipSpaces(text, pos);
@@ -1295,10 +1313,11 @@ bool Parser::parseConditionLine(const std::string& content, int lineNum) {
         return false;
     }
 
-    // 함수 호출(PushVisitCount/PushVisited) 포함 여부 체크
+    // 함수 호출/리스트 연산 포함 여부 체크
     bool hasFuncCall = false;
     for (auto& tok : fullExpr->tokens) {
-        if (tok->op == ExprOp::PushVisitCount || tok->op == ExprOp::PushVisited) {
+        if (tok->op == ExprOp::PushVisitCount || tok->op == ExprOp::PushVisited
+            || tok->op == ExprOp::ListLength || tok->op == ExprOp::ListContains) {
             hasFuncCall = true;
             break;
         }
@@ -1450,10 +1469,11 @@ bool Parser::parseElifLine(const std::string& content, int lineNum) {
         return false;
     }
 
-    // 함수 호출 포함 여부 체크
+    // 함수 호출/리스트 연산 포함 여부 체크
     bool hasFuncCallElif = false;
     for (auto& tok : fullExpr->tokens) {
-        if (tok->op == ExprOp::PushVisitCount || tok->op == ExprOp::PushVisited) {
+        if (tok->op == ExprOp::PushVisitCount || tok->op == ExprOp::PushVisited
+            || tok->op == ExprOp::ListLength || tok->op == ExprOp::ListContains) {
             hasFuncCallElif = true;
             break;
         }

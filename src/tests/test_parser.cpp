@@ -2135,3 +2135,188 @@ TEST(ParserTest, VisitCountInArithmeticExpr) {
     EXPECT_EQ(sv->expr()->tokens()->Get(1)->op(), ExprOp::PushVisitCount);
     EXPECT_EQ(sv->expr()->tokens()->Get(2)->op(), ExprOp::Add);
 }
+
+// ==========================================================================
+// List 관련 파서 테스트
+// ==========================================================================
+
+TEST(ParserListTest, EmptyListLiteral) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ items = []\n"
+        "    \"done\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    ASSERT_NE(sv, nullptr);
+    ASSERT_EQ(sv->value_type(), ValueData::ListValue);
+    auto* lv = sv->value_as_ListValue();
+    ASSERT_NE(lv, nullptr);
+    // 빈 리스트: items가 nullptr이거나 size == 0
+    if (lv->items()) {
+        EXPECT_EQ(lv->items()->size(), 0u);
+    }
+}
+
+TEST(ParserListTest, ListLiteralWithStrings) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ items = [\"sword\", \"shield\", \"potion\"]\n"
+        "    \"done\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    ASSERT_NE(sv, nullptr);
+    ASSERT_EQ(sv->value_type(), ValueData::ListValue);
+    auto* lv = sv->value_as_ListValue();
+    ASSERT_NE(lv, nullptr);
+    ASSERT_EQ(lv->items()->size(), 3u);
+    // String Pool 참조 확인
+    auto* pool = story->string_pool();
+    EXPECT_STREQ(pool->Get(lv->items()->Get(0))->c_str(), "sword");
+    EXPECT_STREQ(pool->Get(lv->items()->Get(1))->c_str(), "shield");
+    EXPECT_STREQ(pool->Get(lv->items()->Get(2))->c_str(), "potion");
+}
+
+TEST(ParserListTest, ListLiteralWithBareWords) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ tags = [fire, ice, wind]\n"
+        "    \"done\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    ASSERT_EQ(sv->value_type(), ValueData::ListValue);
+    auto* lv = sv->value_as_ListValue();
+    ASSERT_EQ(lv->items()->size(), 3u);
+    auto* pool = story->string_pool();
+    EXPECT_STREQ(pool->Get(lv->items()->Get(0))->c_str(), "fire");
+    EXPECT_STREQ(pool->Get(lv->items()->Get(1))->c_str(), "ice");
+    EXPECT_STREQ(pool->Get(lv->items()->Get(2))->c_str(), "wind");
+}
+
+TEST(ParserListTest, AppendOperator) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ items = []\n"
+        "    $ items += \"sword\"\n"
+        "    \"done\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(1)->data_as_SetVar();
+    ASSERT_NE(sv, nullptr);
+    EXPECT_EQ(sv->assign_op(), AssignOp::Append);
+}
+
+TEST(ParserListTest, RemoveOperator) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ items = [\"sword\"]\n"
+        "    $ items -= \"sword\"\n"
+        "    \"done\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(1)->data_as_SetVar();
+    ASSERT_NE(sv, nullptr);
+    EXPECT_EQ(sv->assign_op(), AssignOp::Remove);
+}
+
+TEST(ParserListTest, LenFunctionInExpression) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ count = len(items)\n"
+        "    \"done\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    ASSERT_NE(sv, nullptr);
+    ASSERT_NE(sv->expr(), nullptr);
+    // 단일 ListLength 토큰
+    ASSERT_EQ(sv->expr()->tokens()->size(), 1u);
+    EXPECT_EQ(sv->expr()->tokens()->Get(0)->op(), ExprOp::ListLength);
+}
+
+TEST(ParserListTest, LenInArithmeticExpr) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ total = len(a) + len(b)\n"
+        "    \"done\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    ASSERT_NE(sv->expr(), nullptr);
+    ASSERT_EQ(sv->expr()->tokens()->size(), 3u);
+    EXPECT_EQ(sv->expr()->tokens()->Get(0)->op(), ExprOp::ListLength);
+    EXPECT_EQ(sv->expr()->tokens()->Get(1)->op(), ExprOp::ListLength);
+    EXPECT_EQ(sv->expr()->tokens()->Get(2)->op(), ExprOp::Add);
+}
+
+TEST(ParserListTest, InOperatorInCondition) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if \"sword\" in items -> has_sword\n"
+        "    \"no sword\"\n"
+        "label has_sword:\n"
+        "    \"found sword\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* cond = story->nodes()->Get(0)->lines()->Get(0)->data_as_Condition();
+    ASSERT_NE(cond, nullptr);
+    ASSERT_NE(cond->cond_expr(), nullptr);
+    // RPN: [PushLiteral("sword"), PushVar(items), ListContains]
+    bool foundContains = false;
+    for (flatbuffers::uoffset_t i = 0; i < cond->cond_expr()->tokens()->size(); ++i) {
+        if (cond->cond_expr()->tokens()->Get(i)->op() == ExprOp::ListContains)
+            foundContains = true;
+    }
+    EXPECT_TRUE(foundContains);
+}
+
+TEST(ParserListTest, LenFunctionInCondition) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    if len(items) > 0 -> has_items\n"
+        "    \"empty\"\n"
+        "label has_items:\n"
+        "    \"has items\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* cond = story->nodes()->Get(0)->lines()->Get(0)->data_as_Condition();
+    ASSERT_NE(cond, nullptr);
+    ASSERT_NE(cond->cond_expr(), nullptr);
+    bool foundLen = false;
+    for (flatbuffers::uoffset_t i = 0; i < cond->cond_expr()->tokens()->size(); ++i) {
+        if (cond->cond_expr()->tokens()->Get(i)->op() == ExprOp::ListLength)
+            foundLen = true;
+    }
+    EXPECT_TRUE(foundLen);
+}
+
+TEST(ParserListTest, GlobalVarList) {
+    auto buf = GyeolTest::compileScript(
+        "$ inventory = [\"key\", \"map\"]\n"
+        "label start:\n"
+        "    \"done\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    ASSERT_GE(story->global_vars()->size(), 1u);
+    auto* gv = story->global_vars()->Get(0);
+    EXPECT_EQ(gv->value_type(), ValueData::ListValue);
+    auto* lv = gv->value_as_ListValue();
+    ASSERT_NE(lv, nullptr);
+    ASSERT_EQ(lv->items()->size(), 2u);
+}
+
+TEST(ParserListTest, ListLiteralInExpression) {
+    // 리스트 리터럴이 표현식 컨텍스트에서 파싱됨
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    $ items = [\"a\", \"b\"]\n"
+        "    \"done\"\n");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    auto* sv = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
+    ASSERT_NE(sv, nullptr);
+    // 단일 리터럴이므로 value 필드에 ListValue로 저장됨
+    EXPECT_EQ(sv->value_type(), ValueData::ListValue);
+}

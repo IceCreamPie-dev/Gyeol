@@ -2747,3 +2747,426 @@ label other:
     EXPECT_EQ(r.type, StepType::LINE);
     EXPECT_STREQ(r.line.text, "done");
 }
+
+// ==========================================================================
+// List 기능 Runner 테스트
+// ==========================================================================
+
+TEST(RunnerListTest, ListLiteralAssignment) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["sword", "shield"]
+    hero "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "done");
+
+    auto v = runner.getVariable("items");
+    EXPECT_EQ(v.type, Variant::LIST);
+    ASSERT_EQ(v.list.size(), 2u);
+    EXPECT_EQ(v.list[0], "sword");
+    EXPECT_EQ(v.list[1], "shield");
+}
+
+TEST(RunnerListTest, EmptyListLiteral) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = []
+    hero "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.step();
+
+    auto v = runner.getVariable("items");
+    EXPECT_EQ(v.type, Variant::LIST);
+    EXPECT_EQ(v.list.size(), 0u);
+}
+
+TEST(RunnerListTest, AppendToList) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = []
+    $ items += "sword"
+    $ items += "shield"
+    hero "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.step();
+
+    auto v = runner.getVariable("items");
+    EXPECT_EQ(v.type, Variant::LIST);
+    ASSERT_EQ(v.list.size(), 2u);
+    EXPECT_EQ(v.list[0], "sword");
+    EXPECT_EQ(v.list[1], "shield");
+}
+
+TEST(RunnerListTest, AppendNoDuplicates) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["sword"]
+    $ items += "sword"
+    $ items += "shield"
+    hero "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.step();
+
+    auto v = runner.getVariable("items");
+    EXPECT_EQ(v.type, Variant::LIST);
+    ASSERT_EQ(v.list.size(), 2u);
+    EXPECT_EQ(v.list[0], "sword");
+    EXPECT_EQ(v.list[1], "shield");
+}
+
+TEST(RunnerListTest, RemoveFromList) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["sword", "shield", "potion"]
+    $ items -= "shield"
+    hero "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.step();
+
+    auto v = runner.getVariable("items");
+    EXPECT_EQ(v.type, Variant::LIST);
+    ASSERT_EQ(v.list.size(), 2u);
+    EXPECT_EQ(v.list[0], "sword");
+    EXPECT_EQ(v.list[1], "potion");
+}
+
+TEST(RunnerListTest, RemoveNonexistentItem) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["sword"]
+    $ items -= "shield"
+    hero "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.step();
+
+    auto v = runner.getVariable("items");
+    EXPECT_EQ(v.type, Variant::LIST);
+    ASSERT_EQ(v.list.size(), 1u);
+    EXPECT_EQ(v.list[0], "sword");
+}
+
+TEST(RunnerListTest, ListTruthiness) {
+    // 비어있지 않은 리스트 → true, 빈 리스트 → false
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["sword"]
+    $ empty = []
+    hero "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.step();
+
+    // API를 통한 truthiness 검증 (리스트 자체는 Variant)
+    auto items = runner.getVariable("items");
+    auto empty = runner.getVariable("empty");
+    EXPECT_FALSE(items.list.empty()); // truthy
+    EXPECT_TRUE(empty.list.empty());  // falsy
+}
+
+TEST(RunnerListTest, ListContainsInCondition) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["sword", "shield"]
+    if "sword" in items -> found
+    hero "not found"
+    jump end
+label found:
+    hero "found sword!"
+label end:
+    hero "end"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "found sword!");
+}
+
+TEST(RunnerListTest, ListNotContainsInCondition) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["shield"]
+    if "sword" in items -> found
+    hero "not found"
+    jump end
+label found:
+    hero "found sword!"
+label end:
+    hero "end"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "not found");
+}
+
+TEST(RunnerListTest, LenFunctionInSetVar) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["a", "b", "c"]
+    $ count = len(items)
+    hero "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.step();
+
+    EXPECT_EQ(runner.getVariable("count").i, 3);
+}
+
+TEST(RunnerListTest, LenOfEmptyList) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = []
+    $ count = len(items)
+    hero "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.step();
+
+    EXPECT_EQ(runner.getVariable("count").i, 0);
+}
+
+TEST(RunnerListTest, LenOfUndefinedVar) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ count = len(nonexistent)
+    hero "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.step();
+
+    EXPECT_EQ(runner.getVariable("count").i, 0);
+}
+
+TEST(RunnerListTest, LenInConditionBranch) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["a", "b"]
+    if len(items) > 0 -> has_items
+    hero "empty"
+    jump end
+label has_items:
+    hero "has items"
+label end:
+    hero "end"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "has items");
+}
+
+TEST(RunnerListTest, ListStringInterpolation) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["sword", "shield"]
+    hero "You have: {items}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "You have: sword, shield");
+}
+
+TEST(RunnerListTest, LenInterpolation) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["a", "b", "c"]
+    hero "Count: {len(items)}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "Count: 3");
+}
+
+TEST(RunnerListTest, InlineConditionWithLen) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["a"]
+    hero "{if len(items) > 0}has items{else}empty{endif}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "has items");
+}
+
+TEST(RunnerListTest, InlineConditionWithLenEmpty) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = []
+    hero "{if len(items) > 0}has items{else}empty{endif}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "empty");
+}
+
+TEST(RunnerListTest, InlineConditionWithIn) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["sword", "shield"]
+    hero "{if \"sword\" in items}armed{else}unarmed{endif}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "armed");
+}
+
+TEST(RunnerListTest, GlobalVarList) {
+    auto buf = GyeolTest::compileScript(R"(
+$ inventory = ["key", "map"]
+label start:
+    $ inventory += "torch"
+    hero "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.step();
+
+    auto v = runner.getVariable("inventory");
+    EXPECT_EQ(v.type, Variant::LIST);
+    ASSERT_EQ(v.list.size(), 3u);
+    EXPECT_EQ(v.list[0], "key");
+    EXPECT_EQ(v.list[1], "map");
+    EXPECT_EQ(v.list[2], "torch");
+}
+
+TEST(RunnerListTest, ListSetViaAPI) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    hero "{items}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    runner.setVariable("items", Variant::List({"x", "y", "z"}));
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "x, y, z");
+}
+
+TEST(RunnerListTest, ListContainsWithLogicalOps) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ items = ["sword", "shield"]
+    if "sword" in items and "shield" in items -> both
+    hero "missing"
+    jump end
+label both:
+    hero "fully armed"
+label end:
+    hero "end"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+
+    auto r = runner.step();
+    EXPECT_STREQ(r.line.text, "fully armed");
+}
+
+TEST(RunnerListTest, LenArithmetic) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ a = ["x", "y"]
+    $ b = ["p", "q", "r"]
+    $ total = len(a) + len(b)
+    hero "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.step();
+
+    EXPECT_EQ(runner.getVariable("total").i, 5);
+}
+
+TEST(RunnerListTest, AppendAndRemoveSequence) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ inv = []
+    $ inv += "sword"
+    $ inv += "shield"
+    $ inv += "potion"
+    $ inv -= "shield"
+    $ inv += "bow"
+    hero "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.step();
+
+    auto v = runner.getVariable("inv");
+    ASSERT_EQ(v.list.size(), 3u);
+    EXPECT_EQ(v.list[0], "sword");
+    EXPECT_EQ(v.list[1], "potion");
+    EXPECT_EQ(v.list[2], "bow");
+}
+
+TEST(RunnerListTest, ListWithBareWords) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    $ tags = [fire, ice, wind]
+    hero "done"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(runner.start(buf.data(), buf.size()));
+    runner.step();
+
+    auto v = runner.getVariable("tags");
+    EXPECT_EQ(v.type, Variant::LIST);
+    ASSERT_EQ(v.list.size(), 3u);
+    EXPECT_EQ(v.list[0], "fire");
+    EXPECT_EQ(v.list[1], "ice");
+    EXPECT_EQ(v.list[2], "wind");
+}

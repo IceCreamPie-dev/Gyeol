@@ -580,3 +580,95 @@ label start:
     res = r2.step();
     EXPECT_EQ(res.type, StepType::END);
 }
+
+// ==========================================================================
+// List Save/Load 테스트
+// ==========================================================================
+
+TEST_F(SaveLoadTest, SaveLoadListVariable) {
+    auto buf = compileScript(R"(
+label start:
+    $ items = ["sword", "shield"]
+    $ items += "potion"
+    narrator "checkpoint"
+    narrator "after"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(startRunner(r1, buf));
+    auto res = r1.step();
+    EXPECT_STREQ(res.line.text, "checkpoint");
+
+    ASSERT_TRUE(r1.saveState(SAVE_PATH));
+
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(SAVE_PATH));
+
+    auto v = r2.getVariable("items");
+    EXPECT_EQ(v.type, Variant::LIST);
+    ASSERT_EQ(v.list.size(), 3u);
+    EXPECT_EQ(v.list[0], "sword");
+    EXPECT_EQ(v.list[1], "shield");
+    EXPECT_EQ(v.list[2], "potion");
+
+    res = r2.step();
+    EXPECT_STREQ(res.line.text, "after");
+}
+
+TEST_F(SaveLoadTest, SaveLoadEmptyList) {
+    auto buf = compileScript(R"(
+label start:
+    $ items = []
+    narrator "checkpoint"
+    narrator "after"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(startRunner(r1, buf));
+    auto res = r1.step();
+    EXPECT_STREQ(res.line.text, "checkpoint");
+
+    ASSERT_TRUE(r1.saveState(SAVE_PATH));
+
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(SAVE_PATH));
+
+    auto v = r2.getVariable("items");
+    EXPECT_EQ(v.type, Variant::LIST);
+    EXPECT_EQ(v.list.size(), 0u);
+}
+
+TEST_F(SaveLoadTest, SaveLoadListAfterModification) {
+    // append/remove 후 저장 → 로드 시 수정된 상태 유지
+    auto buf = compileScript(R"(
+label start:
+    $ inv = ["sword", "shield", "potion"]
+    $ inv -= "shield"
+    $ inv += "bow"
+    narrator "checkpoint"
+    narrator "after"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(startRunner(r1, buf));
+    auto res = r1.step();
+    EXPECT_STREQ(res.line.text, "checkpoint");
+
+    ASSERT_TRUE(r1.saveState(SAVE_PATH));
+
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(SAVE_PATH));
+
+    auto v = r2.getVariable("inv");
+    EXPECT_EQ(v.type, Variant::LIST);
+    ASSERT_EQ(v.list.size(), 3u);
+    EXPECT_EQ(v.list[0], "sword");
+    EXPECT_EQ(v.list[1], "potion");
+    EXPECT_EQ(v.list[2], "bow");
+}
