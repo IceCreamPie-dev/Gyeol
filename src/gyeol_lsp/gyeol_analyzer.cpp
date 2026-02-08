@@ -96,6 +96,12 @@ void Analyzer::scanLine(const std::string& line, int lineNum, bool& seenFirstLab
             info.name = trim(rest);
         }
 
+        // 노드 태그 (#key, #key=value) 제거: 이름에서 '#' 이후 부분 삭제
+        size_t hashPos = info.name.find('#');
+        if (hashPos != std::string::npos) {
+            info.name = trim(info.name.substr(0, hashPos));
+        }
+
         if (!info.name.empty()) {
             labels_.push_back(info);
             seenFirstLabel = true;

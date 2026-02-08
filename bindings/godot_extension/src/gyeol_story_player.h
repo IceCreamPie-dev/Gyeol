@@ -59,6 +59,11 @@ public:
     PackedStringArray get_character_names() const;
     String get_character_display_name(const String &character_id) const;
 
+    // Node Tag API
+    String get_node_tag(const String &node_name, const String &key) const;
+    Dictionary get_node_tags(const String &node_name) const;
+    bool has_node_tag(const String &node_name, const String &key) const;
+
     // RNG seed (deterministic testing)
     void set_seed(int seed);
 };

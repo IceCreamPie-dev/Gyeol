@@ -59,11 +59,20 @@ table Line {
     tags:[Tag];             // 메타데이터 태그 (#key:value)
 }
 
+// [선택지 수식어]
+enum ChoiceModifier : byte {
+    Default = 0,  // 기본: 조건 통과 시 항상 표시
+    Once = 1,     // 한번 선택하면 다시 표시 안 됨
+    Sticky = 2,   // 항상 표시 (의도 명시)
+    Fallback = 3  // 다른 모든 선택지가 숨겨졌을 때만 표시
+}
+
 // [선택지]
 table Choice {
     text_id:int;            // 선택지 텍스트
     target_node_name_id:int; // 선택 시 이동할 노드 이름
     condition_var_id:int = -1; // (옵션) 이 변수가 true여야 보임
+    choice_modifier:ChoiceModifier = Default; // 선택지 수식어
 }
 
 // [흐름]
@@ -184,6 +193,7 @@ table Node {
     name:string (key);      // 노드 이름 (검색용 key)
     lines:[Instruction];    // 실행할 명령들의 리스트
     param_ids:[int];        // 매개변수 이름 String Pool 인덱스 (함수 파라미터)
+    tags:[Tag];             // 노드 메타데이터 태그 (#key=value)
 }
 
 // -------------------------------------------------------------------------
@@ -220,6 +230,7 @@ table SavedCallFrame {
 table SavedPendingChoice {
     text:string;            // 선택지 텍스트
     target_node_name:string; // 이동 대상 노드 이름
+    choice_modifier:ChoiceModifier = Default; // 선택지 수식어 (once/sticky/fallback 복원용)
 }
 
 // 노드 방문 횟수
@@ -239,6 +250,7 @@ table SaveState {
     call_stack:[SavedCallFrame];          // 콜 스택
     pending_choices:[SavedPendingChoice]; // 대기 선택지
     visit_counts:[SavedVisitCount];       // 노드 방문 횟수
+    chosen_once_choices:[string];          // once 선택지 추적 키 목록 ("nodeName:pc")
 }
 
 // -------------------------------------------------------------------------

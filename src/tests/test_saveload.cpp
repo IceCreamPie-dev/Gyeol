@@ -760,3 +760,126 @@ label inner(y):
 
     EXPECT_EQ(r2.getVariable("result").i, 31);
 }
+
+// =============================================================================
+// chosen_once_choices 라운드트립 테스트
+// =============================================================================
+
+TEST_F(SaveLoadTest, ChosenOnceChoicesRoundTrip) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "Once option" -> opt_a #once
+        "Always option" -> opt_b
+
+label opt_a:
+    narrator "A!"
+    jump start
+
+label opt_b:
+    narrator "B!"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    // 첫 번째 실행: once 선택지 선택
+    Runner r1;
+    ASSERT_TRUE(GyeolTest::startRunner(r1, buf));
+    auto res = r1.step(); // CHOICES
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    ASSERT_EQ(res.choices.size(), 2u);
+
+    // "Once option" 선택
+    r1.choose(0);
+    res = r1.step(); // "A!" LINE
+    ASSERT_EQ(res.type, StepType::LINE);
+
+    // jump start → 선택지 다시 표시 (once 사라짐)
+    res = r1.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    ASSERT_EQ(res.choices.size(), 1u); // once 선택지 사라짐
+
+    // 저장
+    std::string savePath = "test_once_save.gys";
+    ASSERT_TRUE(r1.saveState(savePath));
+
+    // 두 번째 러너로 복원
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(savePath));
+
+    // 복원 후에도 once 선택지는 사라진 상태
+    // (현재 pending choices에 1개만 있어야 함)
+    ASSERT_EQ(res.choices.size(), 1u);
+
+    std::remove(savePath.c_str());
+}
+
+TEST_F(SaveLoadTest, ChosenOnceChoicesBackwardCompatible) {
+    // chosen_once_choices 없는 세이브 파일도 정상 로드
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    narrator "Hello"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner r1;
+    ASSERT_TRUE(GyeolTest::startRunner(r1, buf));
+    auto res = r1.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+
+    // step으로 END 도달
+    res = r1.step();
+    ASSERT_EQ(res.type, StepType::END);
+
+    std::string savePath = "test_once_compat.gys";
+    ASSERT_TRUE(r1.saveState(savePath));
+
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(savePath));
+    EXPECT_TRUE(r2.isFinished()); // END 상태 복원됨
+
+    std::remove(savePath.c_str());
+}
+
+TEST_F(SaveLoadTest, PendingChoiceModifierRoundTrip) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "Once opt" -> opt_a #once
+        "Sticky opt" -> opt_b #sticky
+        "Normal opt" -> opt_c
+
+label opt_a:
+    narrator "A"
+
+label opt_b:
+    narrator "B"
+
+label opt_c:
+    narrator "C"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(GyeolTest::startRunner(r1, buf));
+    auto res = r1.step(); // CHOICES
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    ASSERT_EQ(res.choices.size(), 3u);
+
+    // 선택지 대기 상태에서 저장
+    std::string savePath = "test_modifier_pending.gys";
+    ASSERT_TRUE(r1.saveState(savePath));
+
+    // 복원
+    Runner r2;
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(savePath));
+
+    // 복원 후 선택 가능
+    r2.choose(0);
+    res = r2.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "A");
+
+    std::remove(savePath.c_str());
+}

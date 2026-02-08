@@ -610,6 +610,42 @@ struct OpDataUnion {
 bool VerifyOpData(::flatbuffers::Verifier &verifier, const void *obj, OpData type);
 bool VerifyOpDataVector(::flatbuffers::Verifier &verifier, const ::flatbuffers::Vector<::flatbuffers::Offset<void>> *values, const ::flatbuffers::Vector<OpData> *types);
 
+enum class ChoiceModifier : int8_t {
+  Default = 0,
+  Once = 1,
+  Sticky = 2,
+  Fallback = 3,
+  MIN = Default,
+  MAX = Fallback
+};
+
+inline const ChoiceModifier (&EnumValuesChoiceModifier())[4] {
+  static const ChoiceModifier values[] = {
+    ChoiceModifier::Default,
+    ChoiceModifier::Once,
+    ChoiceModifier::Sticky,
+    ChoiceModifier::Fallback
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesChoiceModifier() {
+  static const char * const names[5] = {
+    "Default",
+    "Once",
+    "Sticky",
+    "Fallback",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameChoiceModifier(ChoiceModifier e) {
+  if (::flatbuffers::IsOutRange(e, ChoiceModifier::Default, ChoiceModifier::Fallback)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesChoiceModifier()[index];
+}
+
 enum class ExprOp : int8_t {
   PushLiteral = 0,
   PushVar = 1,
@@ -1183,6 +1219,7 @@ struct ChoiceT : public ::flatbuffers::NativeTable {
   int32_t text_id = 0;
   int32_t target_node_name_id = 0;
   int32_t condition_var_id = -1;
+  ICPDev::Gyeol::Schema::ChoiceModifier choice_modifier = ICPDev::Gyeol::Schema::ChoiceModifier::Default;
 };
 
 struct Choice FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -1192,7 +1229,8 @@ struct Choice FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_TEXT_ID = 4,
     VT_TARGET_NODE_NAME_ID = 6,
-    VT_CONDITION_VAR_ID = 8
+    VT_CONDITION_VAR_ID = 8,
+    VT_CHOICE_MODIFIER = 10
   };
   int32_t text_id() const {
     return GetField<int32_t>(VT_TEXT_ID, 0);
@@ -1203,11 +1241,15 @@ struct Choice FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   int32_t condition_var_id() const {
     return GetField<int32_t>(VT_CONDITION_VAR_ID, -1);
   }
+  ICPDev::Gyeol::Schema::ChoiceModifier choice_modifier() const {
+    return static_cast<ICPDev::Gyeol::Schema::ChoiceModifier>(GetField<int8_t>(VT_CHOICE_MODIFIER, 0));
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<int32_t>(verifier, VT_TEXT_ID, 4) &&
            VerifyField<int32_t>(verifier, VT_TARGET_NODE_NAME_ID, 4) &&
            VerifyField<int32_t>(verifier, VT_CONDITION_VAR_ID, 4) &&
+           VerifyField<int8_t>(verifier, VT_CHOICE_MODIFIER, 1) &&
            verifier.EndTable();
   }
   ChoiceT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1228,6 +1270,9 @@ struct ChoiceBuilder {
   void add_condition_var_id(int32_t condition_var_id) {
     fbb_.AddElement<int32_t>(Choice::VT_CONDITION_VAR_ID, condition_var_id, -1);
   }
+  void add_choice_modifier(ICPDev::Gyeol::Schema::ChoiceModifier choice_modifier) {
+    fbb_.AddElement<int8_t>(Choice::VT_CHOICE_MODIFIER, static_cast<int8_t>(choice_modifier), 0);
+  }
   explicit ChoiceBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1243,11 +1288,13 @@ inline ::flatbuffers::Offset<Choice> CreateChoice(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     int32_t text_id = 0,
     int32_t target_node_name_id = 0,
-    int32_t condition_var_id = -1) {
+    int32_t condition_var_id = -1,
+    ICPDev::Gyeol::Schema::ChoiceModifier choice_modifier = ICPDev::Gyeol::Schema::ChoiceModifier::Default) {
   ChoiceBuilder builder_(_fbb);
   builder_.add_condition_var_id(condition_var_id);
   builder_.add_target_node_name_id(target_node_name_id);
   builder_.add_text_id(text_id);
+  builder_.add_choice_modifier(choice_modifier);
   return builder_.Finish();
 }
 
@@ -2556,6 +2603,7 @@ struct NodeT : public ::flatbuffers::NativeTable {
   std::string name{};
   std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::InstructionT>> lines{};
   std::vector<int32_t> param_ids{};
+  std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::TagT>> tags{};
   NodeT() = default;
   NodeT(const NodeT &o);
   NodeT(NodeT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2569,7 +2617,8 @@ struct Node FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_NAME = 4,
     VT_LINES = 6,
-    VT_PARAM_IDS = 8
+    VT_PARAM_IDS = 8,
+    VT_TAGS = 10
   };
   const ::flatbuffers::String *name() const {
     return GetPointer<const ::flatbuffers::String *>(VT_NAME);
@@ -2592,6 +2641,9 @@ struct Node FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<int32_t> *param_ids() const {
     return GetPointer<const ::flatbuffers::Vector<int32_t> *>(VT_PARAM_IDS);
   }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>> *tags() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>> *>(VT_TAGS);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffsetRequired(verifier, VT_NAME) &&
@@ -2601,6 +2653,9 @@ struct Node FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyVectorOfTables(lines()) &&
            VerifyOffset(verifier, VT_PARAM_IDS) &&
            verifier.VerifyVector(param_ids()) &&
+           VerifyOffset(verifier, VT_TAGS) &&
+           verifier.VerifyVector(tags()) &&
+           verifier.VerifyVectorOfTables(tags()) &&
            verifier.EndTable();
   }
   NodeT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2621,6 +2676,9 @@ struct NodeBuilder {
   void add_param_ids(::flatbuffers::Offset<::flatbuffers::Vector<int32_t>> param_ids) {
     fbb_.AddOffset(Node::VT_PARAM_IDS, param_ids);
   }
+  void add_tags(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>>> tags) {
+    fbb_.AddOffset(Node::VT_TAGS, tags);
+  }
   explicit NodeBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2637,8 +2695,10 @@ inline ::flatbuffers::Offset<Node> CreateNode(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<::flatbuffers::String> name = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Instruction>>> lines = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<int32_t>> param_ids = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<int32_t>> param_ids = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>>> tags = 0) {
   NodeBuilder builder_(_fbb);
+  builder_.add_tags(tags);
   builder_.add_param_ids(param_ids);
   builder_.add_lines(lines);
   builder_.add_name(name);
@@ -2654,15 +2714,18 @@ inline ::flatbuffers::Offset<Node> CreateNodeDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const char *name = nullptr,
     const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Instruction>> *lines = nullptr,
-    const std::vector<int32_t> *param_ids = nullptr) {
+    const std::vector<int32_t> *param_ids = nullptr,
+    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>> *tags = nullptr) {
   auto name__ = name ? _fbb.CreateString(name) : 0;
   auto lines__ = lines ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Instruction>>(*lines) : 0;
   auto param_ids__ = param_ids ? _fbb.CreateVector<int32_t>(*param_ids) : 0;
+  auto tags__ = tags ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>>(*tags) : 0;
   return ICPDev::Gyeol::Schema::CreateNode(
       _fbb,
       name__,
       lines__,
-      param_ids__);
+      param_ids__,
+      tags__);
 }
 
 ::flatbuffers::Offset<Node> CreateNode(::flatbuffers::FlatBufferBuilder &_fbb, const NodeT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3138,6 +3201,7 @@ struct SavedPendingChoiceT : public ::flatbuffers::NativeTable {
   typedef SavedPendingChoice TableType;
   std::string text{};
   std::string target_node_name{};
+  ICPDev::Gyeol::Schema::ChoiceModifier choice_modifier = ICPDev::Gyeol::Schema::ChoiceModifier::Default;
 };
 
 struct SavedPendingChoice FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -3146,7 +3210,8 @@ struct SavedPendingChoice FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
   struct Traits;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_TEXT = 4,
-    VT_TARGET_NODE_NAME = 6
+    VT_TARGET_NODE_NAME = 6,
+    VT_CHOICE_MODIFIER = 8
   };
   const ::flatbuffers::String *text() const {
     return GetPointer<const ::flatbuffers::String *>(VT_TEXT);
@@ -3154,12 +3219,16 @@ struct SavedPendingChoice FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
   const ::flatbuffers::String *target_node_name() const {
     return GetPointer<const ::flatbuffers::String *>(VT_TARGET_NODE_NAME);
   }
+  ICPDev::Gyeol::Schema::ChoiceModifier choice_modifier() const {
+    return static_cast<ICPDev::Gyeol::Schema::ChoiceModifier>(GetField<int8_t>(VT_CHOICE_MODIFIER, 0));
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffset(verifier, VT_TEXT) &&
            verifier.VerifyString(text()) &&
            VerifyOffset(verifier, VT_TARGET_NODE_NAME) &&
            verifier.VerifyString(target_node_name()) &&
+           VerifyField<int8_t>(verifier, VT_CHOICE_MODIFIER, 1) &&
            verifier.EndTable();
   }
   SavedPendingChoiceT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -3177,6 +3246,9 @@ struct SavedPendingChoiceBuilder {
   void add_target_node_name(::flatbuffers::Offset<::flatbuffers::String> target_node_name) {
     fbb_.AddOffset(SavedPendingChoice::VT_TARGET_NODE_NAME, target_node_name);
   }
+  void add_choice_modifier(ICPDev::Gyeol::Schema::ChoiceModifier choice_modifier) {
+    fbb_.AddElement<int8_t>(SavedPendingChoice::VT_CHOICE_MODIFIER, static_cast<int8_t>(choice_modifier), 0);
+  }
   explicit SavedPendingChoiceBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -3191,10 +3263,12 @@ struct SavedPendingChoiceBuilder {
 inline ::flatbuffers::Offset<SavedPendingChoice> CreateSavedPendingChoice(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<::flatbuffers::String> text = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> target_node_name = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> target_node_name = 0,
+    ICPDev::Gyeol::Schema::ChoiceModifier choice_modifier = ICPDev::Gyeol::Schema::ChoiceModifier::Default) {
   SavedPendingChoiceBuilder builder_(_fbb);
   builder_.add_target_node_name(target_node_name);
   builder_.add_text(text);
+  builder_.add_choice_modifier(choice_modifier);
   return builder_.Finish();
 }
 
@@ -3206,13 +3280,15 @@ struct SavedPendingChoice::Traits {
 inline ::flatbuffers::Offset<SavedPendingChoice> CreateSavedPendingChoiceDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const char *text = nullptr,
-    const char *target_node_name = nullptr) {
+    const char *target_node_name = nullptr,
+    ICPDev::Gyeol::Schema::ChoiceModifier choice_modifier = ICPDev::Gyeol::Schema::ChoiceModifier::Default) {
   auto text__ = text ? _fbb.CreateString(text) : 0;
   auto target_node_name__ = target_node_name ? _fbb.CreateString(target_node_name) : 0;
   return ICPDev::Gyeol::Schema::CreateSavedPendingChoice(
       _fbb,
       text__,
-      target_node_name__);
+      target_node_name__,
+      choice_modifier);
 }
 
 ::flatbuffers::Offset<SavedPendingChoice> CreateSavedPendingChoice(::flatbuffers::FlatBufferBuilder &_fbb, const SavedPendingChoiceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3309,6 +3385,7 @@ struct SaveStateT : public ::flatbuffers::NativeTable {
   std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::SavedCallFrameT>> call_stack{};
   std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::SavedPendingChoiceT>> pending_choices{};
   std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::SavedVisitCountT>> visit_counts{};
+  std::vector<std::string> chosen_once_choices{};
   SaveStateT() = default;
   SaveStateT(const SaveStateT &o);
   SaveStateT(SaveStateT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -3328,7 +3405,8 @@ struct SaveState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_VARIABLES = 14,
     VT_CALL_STACK = 16,
     VT_PENDING_CHOICES = 18,
-    VT_VISIT_COUNTS = 20
+    VT_VISIT_COUNTS = 20,
+    VT_CHOSEN_ONCE_CHOICES = 22
   };
   const ::flatbuffers::String *version() const {
     return GetPointer<const ::flatbuffers::String *>(VT_VERSION);
@@ -3357,6 +3435,9 @@ struct SaveState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVisitCount>> *visit_counts() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVisitCount>> *>(VT_VISIT_COUNTS);
   }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *chosen_once_choices() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_CHOSEN_ONCE_CHOICES);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffset(verifier, VT_VERSION) &&
@@ -3379,6 +3460,9 @@ struct SaveState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_VISIT_COUNTS) &&
            verifier.VerifyVector(visit_counts()) &&
            verifier.VerifyVectorOfTables(visit_counts()) &&
+           VerifyOffset(verifier, VT_CHOSEN_ONCE_CHOICES) &&
+           verifier.VerifyVector(chosen_once_choices()) &&
+           verifier.VerifyVectorOfStrings(chosen_once_choices()) &&
            verifier.EndTable();
   }
   SaveStateT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -3417,6 +3501,9 @@ struct SaveStateBuilder {
   void add_visit_counts(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVisitCount>>> visit_counts) {
     fbb_.AddOffset(SaveState::VT_VISIT_COUNTS, visit_counts);
   }
+  void add_chosen_once_choices(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> chosen_once_choices) {
+    fbb_.AddOffset(SaveState::VT_CHOSEN_ONCE_CHOICES, chosen_once_choices);
+  }
   explicit SaveStateBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -3438,8 +3525,10 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveState(
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVar>>> variables = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedCallFrame>>> call_stack = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>>> pending_choices = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVisitCount>>> visit_counts = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVisitCount>>> visit_counts = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> chosen_once_choices = 0) {
   SaveStateBuilder builder_(_fbb);
+  builder_.add_chosen_once_choices(chosen_once_choices);
   builder_.add_visit_counts(visit_counts);
   builder_.add_pending_choices(pending_choices);
   builder_.add_call_stack(call_stack);
@@ -3467,7 +3556,8 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveStateDirect(
     const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVar>> *variables = nullptr,
     const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedCallFrame>> *call_stack = nullptr,
     const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>> *pending_choices = nullptr,
-    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVisitCount>> *visit_counts = nullptr) {
+    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVisitCount>> *visit_counts = nullptr,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *chosen_once_choices = nullptr) {
   auto version__ = version ? _fbb.CreateString(version) : 0;
   auto story_version__ = story_version ? _fbb.CreateString(story_version) : 0;
   auto current_node_name__ = current_node_name ? _fbb.CreateString(current_node_name) : 0;
@@ -3475,6 +3565,7 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveStateDirect(
   auto call_stack__ = call_stack ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedCallFrame>>(*call_stack) : 0;
   auto pending_choices__ = pending_choices ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>>(*pending_choices) : 0;
   auto visit_counts__ = visit_counts ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVisitCount>>(*visit_counts) : 0;
+  auto chosen_once_choices__ = chosen_once_choices ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*chosen_once_choices) : 0;
   return ICPDev::Gyeol::Schema::CreateSaveState(
       _fbb,
       version__,
@@ -3485,7 +3576,8 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveStateDirect(
       variables__,
       call_stack__,
       pending_choices__,
-      visit_counts__);
+      visit_counts__,
+      chosen_once_choices__);
 }
 
 ::flatbuffers::Offset<SaveState> CreateSaveState(::flatbuffers::FlatBufferBuilder &_fbb, const SaveStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3879,6 +3971,7 @@ inline void Choice::UnPackTo(ChoiceT *_o, const ::flatbuffers::resolver_function
   { auto _e = text_id(); _o->text_id = _e; }
   { auto _e = target_node_name_id(); _o->target_node_name_id = _e; }
   { auto _e = condition_var_id(); _o->condition_var_id = _e; }
+  { auto _e = choice_modifier(); _o->choice_modifier = _e; }
 }
 
 inline ::flatbuffers::Offset<Choice> Choice::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ChoiceT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3892,11 +3985,13 @@ inline ::flatbuffers::Offset<Choice> CreateChoice(::flatbuffers::FlatBufferBuild
   auto _text_id = _o->text_id;
   auto _target_node_name_id = _o->target_node_name_id;
   auto _condition_var_id = _o->condition_var_id;
+  auto _choice_modifier = _o->choice_modifier;
   return ICPDev::Gyeol::Schema::CreateChoice(
       _fbb,
       _text_id,
       _target_node_name_id,
-      _condition_var_id);
+      _condition_var_id,
+      _choice_modifier);
 }
 
 inline JumpT::JumpT(const JumpT &o)
@@ -4400,12 +4495,15 @@ inline NodeT::NodeT(const NodeT &o)
         param_ids(o.param_ids) {
   lines.reserve(o.lines.size());
   for (const auto &lines_ : o.lines) { lines.emplace_back((lines_) ? new ICPDev::Gyeol::Schema::InstructionT(*lines_) : nullptr); }
+  tags.reserve(o.tags.size());
+  for (const auto &tags_ : o.tags) { tags.emplace_back((tags_) ? new ICPDev::Gyeol::Schema::TagT(*tags_) : nullptr); }
 }
 
 inline NodeT &NodeT::operator=(NodeT o) FLATBUFFERS_NOEXCEPT {
   std::swap(name, o.name);
   std::swap(lines, o.lines);
   std::swap(param_ids, o.param_ids);
+  std::swap(tags, o.tags);
   return *this;
 }
 
@@ -4421,6 +4519,7 @@ inline void Node::UnPackTo(NodeT *_o, const ::flatbuffers::resolver_function_t *
   { auto _e = name(); if (_e) _o->name = _e->str(); }
   { auto _e = lines(); if (_e) { _o->lines.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->lines[_i]) { _e->Get(_i)->UnPackTo(_o->lines[_i].get(), _resolver); } else { _o->lines[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::InstructionT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->lines.resize(0); } }
   { auto _e = param_ids(); if (_e) { _o->param_ids.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->param_ids[_i] = _e->Get(_i); } } else { _o->param_ids.resize(0); } }
+  { auto _e = tags(); if (_e) { _o->tags.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->tags[_i]) { _e->Get(_i)->UnPackTo(_o->tags[_i].get(), _resolver); } else { _o->tags[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::TagT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->tags.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<Node> Node::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const NodeT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -4434,11 +4533,13 @@ inline ::flatbuffers::Offset<Node> CreateNode(::flatbuffers::FlatBufferBuilder &
   auto _name = _fbb.CreateString(_o->name);
   auto _lines = _o->lines.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Instruction>> (_o->lines.size(), [](size_t i, _VectorArgs *__va) { return CreateInstruction(*__va->__fbb, __va->__o->lines[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _param_ids = _o->param_ids.size() ? _fbb.CreateVector(_o->param_ids) : 0;
+  auto _tags = _o->tags.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>> (_o->tags.size(), [](size_t i, _VectorArgs *__va) { return CreateTag(*__va->__fbb, __va->__o->tags[i].get(), __va->__rehasher); }, &_va ) : 0;
   return ICPDev::Gyeol::Schema::CreateNode(
       _fbb,
       _name,
       _lines,
-      _param_ids);
+      _param_ids,
+      _tags);
 }
 
 inline SavedVarT *SavedVar::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -4587,6 +4688,7 @@ inline void SavedPendingChoice::UnPackTo(SavedPendingChoiceT *_o, const ::flatbu
   (void)_resolver;
   { auto _e = text(); if (_e) _o->text = _e->str(); }
   { auto _e = target_node_name(); if (_e) _o->target_node_name = _e->str(); }
+  { auto _e = choice_modifier(); _o->choice_modifier = _e; }
 }
 
 inline ::flatbuffers::Offset<SavedPendingChoice> SavedPendingChoice::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SavedPendingChoiceT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -4599,10 +4701,12 @@ inline ::flatbuffers::Offset<SavedPendingChoice> CreateSavedPendingChoice(::flat
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SavedPendingChoiceT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _text = _o->text.empty() ? 0 : _fbb.CreateString(_o->text);
   auto _target_node_name = _o->target_node_name.empty() ? 0 : _fbb.CreateString(_o->target_node_name);
+  auto _choice_modifier = _o->choice_modifier;
   return ICPDev::Gyeol::Schema::CreateSavedPendingChoice(
       _fbb,
       _text,
-      _target_node_name);
+      _target_node_name,
+      _choice_modifier);
 }
 
 inline SavedVisitCountT *SavedVisitCount::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -4639,7 +4743,8 @@ inline SaveStateT::SaveStateT(const SaveStateT &o)
         story_version(o.story_version),
         current_node_name(o.current_node_name),
         pc(o.pc),
-        finished(o.finished) {
+        finished(o.finished),
+        chosen_once_choices(o.chosen_once_choices) {
   variables.reserve(o.variables.size());
   for (const auto &variables_ : o.variables) { variables.emplace_back((variables_) ? new ICPDev::Gyeol::Schema::SavedVarT(*variables_) : nullptr); }
   call_stack.reserve(o.call_stack.size());
@@ -4660,6 +4765,7 @@ inline SaveStateT &SaveStateT::operator=(SaveStateT o) FLATBUFFERS_NOEXCEPT {
   std::swap(call_stack, o.call_stack);
   std::swap(pending_choices, o.pending_choices);
   std::swap(visit_counts, o.visit_counts);
+  std::swap(chosen_once_choices, o.chosen_once_choices);
   return *this;
 }
 
@@ -4681,6 +4787,7 @@ inline void SaveState::UnPackTo(SaveStateT *_o, const ::flatbuffers::resolver_fu
   { auto _e = call_stack(); if (_e) { _o->call_stack.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->call_stack[_i]) { _e->Get(_i)->UnPackTo(_o->call_stack[_i].get(), _resolver); } else { _o->call_stack[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::SavedCallFrameT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->call_stack.resize(0); } }
   { auto _e = pending_choices(); if (_e) { _o->pending_choices.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->pending_choices[_i]) { _e->Get(_i)->UnPackTo(_o->pending_choices[_i].get(), _resolver); } else { _o->pending_choices[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::SavedPendingChoiceT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->pending_choices.resize(0); } }
   { auto _e = visit_counts(); if (_e) { _o->visit_counts.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->visit_counts[_i]) { _e->Get(_i)->UnPackTo(_o->visit_counts[_i].get(), _resolver); } else { _o->visit_counts[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::SavedVisitCountT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->visit_counts.resize(0); } }
+  { auto _e = chosen_once_choices(); if (_e) { _o->chosen_once_choices.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->chosen_once_choices[_i] = _e->Get(_i)->str(); } } else { _o->chosen_once_choices.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<SaveState> SaveState::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SaveStateT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -4700,6 +4807,7 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveState(::flatbuffers::FlatBuffe
   auto _call_stack = _o->call_stack.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedCallFrame>> (_o->call_stack.size(), [](size_t i, _VectorArgs *__va) { return CreateSavedCallFrame(*__va->__fbb, __va->__o->call_stack[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _pending_choices = _o->pending_choices.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>> (_o->pending_choices.size(), [](size_t i, _VectorArgs *__va) { return CreateSavedPendingChoice(*__va->__fbb, __va->__o->pending_choices[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _visit_counts = _o->visit_counts.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVisitCount>> (_o->visit_counts.size(), [](size_t i, _VectorArgs *__va) { return CreateSavedVisitCount(*__va->__fbb, __va->__o->visit_counts[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _chosen_once_choices = _o->chosen_once_choices.size() ? _fbb.CreateVectorOfStrings(_o->chosen_once_choices) : 0;
   return ICPDev::Gyeol::Schema::CreateSaveState(
       _fbb,
       _version,
@@ -4710,7 +4818,8 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveState(::flatbuffers::FlatBuffe
       _variables,
       _call_stack,
       _pending_choices,
-      _visit_counts);
+      _visit_counts,
+      _chosen_once_choices);
 }
 
 inline StoryT::StoryT(const StoryT &o)

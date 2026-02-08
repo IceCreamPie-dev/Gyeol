@@ -3579,3 +3579,311 @@ label start:
     EXPECT_EQ(runner.getCharacterProperty("anyone", "name"), "");
     EXPECT_EQ(runner.getCharacterDisplayName("anyone"), "anyone");
 }
+
+// =============================================================================
+// 노드 메타데이터 태그 테스트
+// =============================================================================
+
+TEST(RunnerNodeTagTest, BasicNodeTag) {
+    auto buf = GyeolTest::compileScript(R"(
+label shop #repeatable:
+    narrator "Welcome!"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    EXPECT_TRUE(runner.hasNodeTag("shop", "repeatable"));
+    EXPECT_EQ(runner.getNodeTag("shop", "repeatable"), "");
+}
+
+TEST(RunnerNodeTagTest, KeyValueNodeTag) {
+    auto buf = GyeolTest::compileScript(R"(
+label boss #difficulty=hard:
+    narrator "Prepare!"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    EXPECT_TRUE(runner.hasNodeTag("boss", "difficulty"));
+    EXPECT_EQ(runner.getNodeTag("boss", "difficulty"), "hard");
+}
+
+TEST(RunnerNodeTagTest, MultipleNodeTags) {
+    auto buf = GyeolTest::compileScript(R"(
+label shop #repeatable #category=shop:
+    narrator "Welcome!"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto tags = runner.getNodeTags("shop");
+    EXPECT_EQ(tags.size(), 2u);
+    EXPECT_TRUE(runner.hasNodeTag("shop", "repeatable"));
+    EXPECT_TRUE(runner.hasNodeTag("shop", "category"));
+    EXPECT_EQ(runner.getNodeTag("shop", "category"), "shop");
+}
+
+TEST(RunnerNodeTagTest, NoTagsNode) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    narrator "Hello"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    EXPECT_FALSE(runner.hasNodeTag("start", "anything"));
+    EXPECT_EQ(runner.getNodeTag("start", "anything"), "");
+    EXPECT_EQ(runner.getNodeTags("start").size(), 0u);
+}
+
+TEST(RunnerNodeTagTest, NonExistentNode) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    narrator "Hello"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    EXPECT_FALSE(runner.hasNodeTag("nonexistent", "key"));
+    EXPECT_EQ(runner.getNodeTag("nonexistent", "key"), "");
+    EXPECT_EQ(runner.getNodeTags("nonexistent").size(), 0u);
+}
+
+TEST(RunnerNodeTagTest, TagWithParams) {
+    auto buf = GyeolTest::compileScript(R"(
+label helper(a, b) #pure:
+    return a + b
+
+label start:
+    $ result = call helper(1, 2)
+    narrator "{result}"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    EXPECT_TRUE(runner.hasNodeTag("helper", "pure"));
+    EXPECT_FALSE(runner.hasNodeTag("start", "pure"));
+}
+
+// =============================================================================
+// 선택지 수식어 테스트
+// =============================================================================
+
+TEST(RunnerChoiceModifierTest, OnceChoiceDisappearsAfterSelection) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "Visit once" -> once_target #once
+        "Always here" -> always_target
+
+label once_target:
+    narrator "once!"
+    jump start
+
+label always_target:
+    narrator "always!"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    // 첫 번째: 두 선택지 모두 보임
+    auto res = runner.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    ASSERT_EQ(res.choices.size(), 2u);
+
+    // "Visit once" 선택 (index 0)
+    runner.choose(0);
+    // "once!" 출력 후 start로 돌아옴
+    res = runner.step(); // "once!" LINE
+    ASSERT_EQ(res.type, StepType::LINE);
+
+    // jump start → step → 이번에는 once 선택지가 사라짐
+    res = runner.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    ASSERT_EQ(res.choices.size(), 1u);
+    EXPECT_STREQ(res.choices[0].text, "Always here");
+}
+
+TEST(RunnerChoiceModifierTest, OnceChoiceNotSelectedStillVisible) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "Visit once" -> once_target #once
+        "Always here" -> always_target
+
+label once_target:
+    narrator "once!"
+    jump start
+
+label always_target:
+    narrator "always!"
+    jump start
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    // 첫 번째: 두 선택지 모두 보임
+    auto res = runner.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    ASSERT_EQ(res.choices.size(), 2u);
+
+    // "Always here" 선택 (index 1)
+    runner.choose(1);
+    res = runner.step(); // "always!" LINE
+    ASSERT_EQ(res.type, StepType::LINE);
+
+    // jump start → step → once 선택지는 선택 안 했으므로 여전히 보임
+    res = runner.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    ASSERT_EQ(res.choices.size(), 2u);
+}
+
+TEST(RunnerChoiceModifierTest, FallbackOnlyShownWhenOthersHidden) {
+    auto buf = GyeolTest::compileScript(R"(
+$ show_special = true
+label start:
+    menu:
+        "Special" -> special if show_special
+        "Default fallback" -> fallback #fallback
+
+label special:
+    narrator "special!"
+
+label fallback:
+    narrator "fallback!"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    // show_special = true → Special만 보임 (fallback 숨김)
+    auto res = runner.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    ASSERT_EQ(res.choices.size(), 1u);
+    EXPECT_STREQ(res.choices[0].text, "Special");
+}
+
+TEST(RunnerChoiceModifierTest, FallbackShownWhenAllOthersHidden) {
+    auto buf = GyeolTest::compileScript(R"(
+$ show_special = false
+label start:
+    menu:
+        "Special" -> special if show_special
+        "Default fallback" -> fallback #fallback
+
+label special:
+    narrator "special!"
+
+label fallback:
+    narrator "fallback!"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    // show_special = false → Special 숨김 → fallback 표시
+    auto res = runner.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    ASSERT_EQ(res.choices.size(), 1u);
+    EXPECT_STREQ(res.choices[0].text, "Default fallback");
+}
+
+TEST(RunnerChoiceModifierTest, StickyAlwaysVisible) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "Sticky choice" -> target #sticky
+        "Normal choice" -> target
+
+label target:
+    narrator "done!"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto res = runner.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    ASSERT_EQ(res.choices.size(), 2u);
+    EXPECT_STREQ(res.choices[0].text, "Sticky choice");
+}
+
+TEST(RunnerChoiceModifierTest, OnceWithFallback) {
+    // Once 선택지 두 개 + fallback: once 모두 사용 후 fallback만 남음
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "Option A" -> opt_a #once
+        "Option B" -> opt_b #once
+        "No more options" -> done #fallback
+
+label opt_a:
+    narrator "A!"
+    jump start
+
+label opt_b:
+    narrator "B!"
+    jump start
+
+label done:
+    narrator "done!"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    // Round 1: 3가 보이지만 fallback은 normal이 있으므로 숨김 → 2개
+    auto res = runner.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    ASSERT_EQ(res.choices.size(), 2u);
+
+    // Option A 선택
+    runner.choose(0);
+    res = runner.step(); // "A!" LINE
+    ASSERT_EQ(res.type, StepType::LINE);
+
+    // Round 2: Option A 사라짐 → Option B만 남음 (normal이 있어 fallback 숨김)
+    res = runner.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    ASSERT_EQ(res.choices.size(), 1u);
+    EXPECT_STREQ(res.choices[0].text, "Option B");
+
+    // Option B 선택
+    runner.choose(0);
+    res = runner.step(); // "B!" LINE
+    ASSERT_EQ(res.type, StepType::LINE);
+
+    // Round 3: 모든 once 사라짐 → fallback만 남음
+    res = runner.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    ASSERT_EQ(res.choices.size(), 1u);
+    EXPECT_STREQ(res.choices[0].text, "No more options");
+}
+
+TEST(RunnerChoiceModifierTest, DefaultModifierBackwardCompatible) {
+    // 기존 선택지는 Default modifier → 변함 없음
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "Choice A" -> target
+        "Choice B" -> target
+
+label target:
+    narrator "done!"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto res = runner.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    ASSERT_EQ(res.choices.size(), 2u);
+}

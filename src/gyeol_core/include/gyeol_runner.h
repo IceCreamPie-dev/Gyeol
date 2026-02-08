@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstdint>
 #include <unordered_map>
+#include <unordered_set>
 #include <random>
 #include <set>
 
@@ -92,6 +93,11 @@ public:
     std::vector<std::string> getCharacterNames() const;
     std::string getCharacterDisplayName(const std::string& characterId) const;
 
+    // Node tag API (노드 메타데이터 태그 조회)
+    std::string getNodeTag(const std::string& nodeName, const std::string& key) const;
+    std::vector<std::pair<std::string, std::string>> getNodeTags(const std::string& nodeName) const;
+    bool hasNodeTag(const std::string& nodeName, const std::string& key) const;
+
     // --- Debug API ---
     struct DebugLocation {
         std::string nodeName;
@@ -159,8 +165,13 @@ private:
     struct PendingChoice {
         int32_t text_id;
         int32_t target_node_name_id;
+        int8_t choice_modifier = 0; // 0=Default, 1=Once, 2=Sticky, 3=Fallback
+        std::string once_key;       // "nodeName:pc" key for once tracking
     };
     std::vector<PendingChoice> pendingChoices_;
+
+    // Once 선택지 추적 (한번 선택 후 재표시 안 됨)
+    std::unordered_set<std::string> chosenOnceChoices_;
 
     // Pending return value (set by explicit 'return expr', consumed after call stack pop)
     bool hasPendingReturn_ = false;
@@ -178,6 +189,9 @@ private:
 
     // 캐릭터 정의 캐시: characterId → [(key, value), ...]
     std::unordered_map<std::string, std::vector<std::pair<std::string, std::string>>> characterProps_;
+
+    // 노드 메타데이터 태그 캐시: nodeName → [(key, value), ...]
+    std::unordered_map<std::string, std::vector<std::pair<std::string, std::string>>> nodeTags_;
 
     // Debug state
     std::set<std::pair<std::string, uint32_t>> breakpoints_;

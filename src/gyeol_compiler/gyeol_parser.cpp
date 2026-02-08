@@ -616,10 +616,10 @@ bool Parser::parseLabelLine(const std::string& content, int lineNum) {
     size_t pos = 5; // skip "label"
     skipSpaces(content, pos);
 
-    // 수동 스캔: 공백, '(', ':' 에서 정지
+    // 수동 스캔: 공백, '(', ':', '#' 에서 정지
     size_t nameStart = pos;
     while (pos < content.size() && content[pos] != ' ' && content[pos] != '\t'
-           && content[pos] != '(' && content[pos] != ':') {
+           && content[pos] != '(' && content[pos] != ':' && content[pos] != '#') {
         pos++;
     }
     std::string name = content.substr(nameStart, pos - nameStart);
@@ -641,6 +641,35 @@ bool Parser::parseLabelLine(const std::string& content, int lineNum) {
         if (!parseParamList(content, pos, paramNames, lineNum)) {
             return false;
         }
+    }
+
+    // 노드 메타데이터 태그 파싱 (콜론 앞, #key 또는 #key=value)
+    std::vector<std::pair<std::string, std::string>> nodeTags;
+    skipSpaces(content, pos);
+    while (pos < content.size() && content[pos] == '#') {
+        pos++; // skip '#'
+        // key 스캔: 공백, '#', ':', '=' 에서 정지
+        size_t keyStart = pos;
+        while (pos < content.size() && content[pos] != ' ' && content[pos] != '\t'
+               && content[pos] != '#' && content[pos] != ':' && content[pos] != '=') {
+            pos++;
+        }
+        std::string key = content.substr(keyStart, pos - keyStart);
+        std::string value;
+        // '=' 뒤에 value가 있으면 파싱
+        if (pos < content.size() && content[pos] == '=') {
+            pos++; // skip '='
+            size_t valStart = pos;
+            while (pos < content.size() && content[pos] != ' ' && content[pos] != '\t'
+                   && content[pos] != '#' && content[pos] != ':') {
+                pos++;
+            }
+            value = content.substr(valStart, pos - valStart);
+        }
+        if (!key.empty()) {
+            nodeTags.emplace_back(key, value);
+        }
+        skipSpaces(content, pos);
     }
 
     // ':' 건너뛰기 (별도로 있는 경우)
@@ -665,6 +694,14 @@ bool Parser::parseLabelLine(const std::string& content, int lineNum) {
     // 매개변수 ID 저장
     for (const auto& pn : paramNames) {
         node->param_ids.push_back(addString(pn));
+    }
+
+    // 노드 태그 저장
+    for (const auto& tag : nodeTags) {
+        auto t = std::make_unique<TagT>();
+        t->key_id = addString(tag.first);
+        t->value_id = tag.second.empty() ? addString("") : addString(tag.second);
+        node->tags.push_back(std::move(t));
     }
 
     story_.nodes.push_back(std::move(node));
@@ -792,14 +829,34 @@ bool Parser::parseMenuChoiceLine(const std::string& content, int lineNum) {
     }
     choice->target_node_name_id = addString(target);
 
-    // 선택적: "if 변수명"
+    // 선택적: "if 변수명" 및 "#once/#sticky/#fallback"
+    // 두 가지가 섞여 나올 수 있음: "-> node if var #once" 또는 "-> node #once" 또는 "-> node if var"
     skipSpaces(content, pos);
-    if (pos < content.size()) {
-        std::string keyword = parseWord(content, pos);
-        if (keyword == "if") {
-            std::string varName = parseWord(content, pos);
-            if (!varName.empty()) {
-                choice->condition_var_id = addString(varName);
+    while (pos < content.size()) {
+        if (content[pos] == '#') {
+            // 수식어 태그 파싱
+            pos++; // skip '#'
+            std::string modifier = parseWord(content, pos);
+            if (modifier == "once") {
+                choice->choice_modifier = ICPDev::Gyeol::Schema::ChoiceModifier::Once;
+            } else if (modifier == "sticky") {
+                choice->choice_modifier = ICPDev::Gyeol::Schema::ChoiceModifier::Sticky;
+            } else if (modifier == "fallback") {
+                choice->choice_modifier = ICPDev::Gyeol::Schema::ChoiceModifier::Fallback;
+            } else {
+                addWarning(lineNum, "unknown choice modifier: #" + modifier);
+            }
+            skipSpaces(content, pos);
+        } else {
+            std::string keyword = parseWord(content, pos);
+            if (keyword == "if") {
+                std::string varName = parseWord(content, pos);
+                if (!varName.empty()) {
+                    choice->condition_var_id = addString(varName);
+                }
+                skipSpaces(content, pos);
+            } else {
+                break; // 알 수 없는 토큰은 무시하고 종료
             }
         }
     }

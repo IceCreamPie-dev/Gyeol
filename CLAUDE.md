@@ -66,12 +66,12 @@ src/
     gyeol_parser.cpp     # Line-by-line 파서 구현
     gyeol_comp_analyzer.h    # 컴파일러 분석기/최적화 API
     gyeol_comp_analyzer.cpp  # 분석/최적화 구현 (도달성, 미사용 변수, 데드코드, 상수 폴딩)
-  tests/                 # Google Test 유닛 테스트 (309 tests)
+  tests/                 # Google Test 유닛 테스트 (365 tests)
     test_helpers.h       # 테스트 유틸리티 (compileScript, startRunner, compileMultiFileScript)
-    test_parser.cpp      # Parser 테스트 (77 cases + 7 character + 10 analyzer)
-    test_runner.cpp      # Runner VM 테스트 (96 cases + 4 character)
+    test_parser.cpp      # Parser 테스트 (77 cases + 7 character + 10 analyzer + 5 node tag + 5 choice modifier)
+    test_runner.cpp      # Runner VM 테스트 (96 cases + 4 character + 6 node tag + 8 choice modifier)
     test_story.cpp       # Story loader 테스트 (4 cases)
-    test_saveload.cpp    # Save/Load 라운드트립 테스트 (13 cases)
+    test_saveload.cpp    # Save/Load 라운드트립 테스트 (13 cases + 3 once/modifier + 4 list/string/external)
   gyeol_lsp/             # Language Server Protocol 서버
     lsp_main.cpp         # JSON-RPC stdin/stdout 이벤트 루프
     lsp_server.h/cpp     # LSP 프로토콜 핸들러 (completion, definition, hover, symbol)
@@ -149,6 +149,13 @@ demo/
     - Visit API: `getVisitCount(name)`, `hasVisited(name)` — 런타임 방문 횟수 조회
   - Save/Load: `saveState(filepath)` / `loadState(filepath)` — `.gys` FlatBuffers 바이너리
   - 랜덤 분기: `random:` 블록 → 가중치 기반 확률 분기, `std::mt19937` RNG, `setSeed()` 결정적 테스트
+  - Choice Modifiers: `#once`, `#sticky`, `#fallback` 선택지 수식어
+    - Default: 조건 통과 시 항상 표시 (기존 동작)
+    - Once: 한번 선택 후 다시 표시 안 됨 (`chosenOnceChoices_` set으로 "nodeName:pc" 키 추적)
+    - Sticky: 항상 표시 (Default와 동일, 의도 명시)
+    - Fallback: 같은 메뉴에서 다른 모든 비-fallback 선택지가 숨겨졌을 때만 표시
+    - 조건과 조합 가능: `"text" -> node if var #once`, `"text" -> node #once if var`
+  - Node Tag API: `getNodeTag(name, key)`, `getNodeTags(name)`, `hasNodeTag(name, key)` — 노드 메타데이터 조회
   - Variable API: `getVariable()`, `setVariable()`, `hasVariable()`, `getVariableNames()`
   - Character API: `getCharacterProperty(id, key)`, `getCharacterNames()`, `getCharacterDisplayName(id)` — 캐릭터 메타데이터 조회
   - Locale API: `loadLocale(csvPath)`, `clearLocale()`, `getLocale()` — CSV 기반 다국어 오버레이
@@ -164,6 +171,8 @@ demo/
   - voice_asset_id: 대사 뒤 `#voice:파일명` 태그로 보이스 에셋 연결 (하위 호환)
   - elif 체인: `if`/`elif`/`else` → 순차 Condition + Jump 변환 (스키마/런너 변경 없음)
   - 캐릭터 정의 블록: `character id:` + 속성 → `CharacterDef` (하위 호환, 미정의 캐릭터 경고)
+  - 노드 메타데이터 태그: `label name #key #key=value:` → `Node.tags:[Tag]` (콜론 앞, `=` 구분)
+  - 선택지 수식어: `"text" -> node #once/#sticky/#fallback` → `Choice.choice_modifier` (조건과 조합 가능)
   - 경고 시스템: `getWarnings()`, `hasWarnings()` — 에러와 분리된 경고 수집
 - **Compiler CLI** — `GyeolCompiler <input> [-o output] [--export-strings csv] [--analyze [file]] [-O]`
   - `--analyze [file]`: 분석 리포트 출력 (도달성, 미사용 변수, 데드코드, 상수 폴딩 가능)
@@ -200,6 +209,7 @@ demo/
   - `get_visit_count(node_name)` / `has_visited(node_name)` — 노드 방문 횟수 조회
   - `get_variable_names()` — 모든 변수 이름 반환 (PackedStringArray)
   - `get_character_property(id, key)` / `get_character_names()` / `get_character_display_name(id)` — 캐릭터 메타데이터
+  - `get_node_tag(name, key)` / `get_node_tags(name)` / `has_node_tag(name, key)` — 노드 메타데이터 태그
   - `set_seed(seed)` — RNG 시드 설정 (결정적 테스트용)
 
 ## .gyeol 스크립트 문법
@@ -215,7 +225,11 @@ character 캐릭터ID:                   # 캐릭터 정의 블록 (label 앞에
 $ 전역변수 = 값                     # Global variable (label 앞에 선언)
 
 label 노드이름:                     # 노드 선언 (메인 파일의 첫 label = start_node)
+label 노드 #repeatable:             # 노드 + 메타데이터 태그 (boolean flag)
+label 노드 #difficulty=hard:        # 노드 + key=value 태그
+label 노드 #tag1 #tag2=val:         # 노드 + 복수 태그
 label 함수(a, b):                   # 함수 선언 (매개변수 바인딩, 로컬 스코프)
+label 함수(a, b) #pure:             # 함수 + 메타데이터 태그
     캐릭터 "대사"                   # Line (캐릭터 대사)
     캐릭터 "Hello {name}!"          # Line + 문자열 보간 ({변수} → 런타임 치환)
     캐릭터 "{if hp > 50}Strong{else}Weak{endif} {name}" # 인라인 조건 텍스트
@@ -224,8 +238,12 @@ label 함수(a, b):                   # 함수 선언 (매개변수 바인딩, �
     캐릭터 "대사" #important          # 값 없는 태그도 지원
     "나레이션 텍스트"                # Line (character_id = -1)
     menu:                          # 선택지 블록
-        "선택지 텍스트" -> 노드      # Choice
+        "선택지 텍스트" -> 노드      # Choice (Default)
         "선택지" -> 노드 if 변수     # 조건부 Choice
+        "한번만" -> 노드 #once       # Once: 선택 후 다시 표시 안 됨
+        "항상" -> 노드 #sticky       # Sticky: 항상 표시 (의도 명시)
+        "기본" -> 노드 #fallback     # Fallback: 다른 선택지 모두 숨겨졌을 때만
+        "조건+수식어" -> 노드 if 변수 #once  # 조건 + 수식어 조합
     jump 노드이름                   # Jump (is_call=false)
     call 노드이름                   # Jump (is_call=true, 서브루틴)
     call 함수(인자1, 인자2)          # 함수 호출 (매개변수 바인딩, 표현식 인자)
@@ -261,11 +279,12 @@ label 함수(a, b):                   # 함수 선언 (매개변수 바인딩, �
 |------|---------|
 | `Story` | Root object — version, string_pool, line_ids, global_vars, nodes, start_node_name, characters |
 | `CharacterDef` | 캐릭터 정의 — name_id (String Pool), properties:[Tag] (메타데이터) |
-| `Node` | 스토리 단위 (= Ren'Py Label, Ink Knot) — name + instructions + param_ids |
+| `Node` | 스토리 단위 (= Ren'Py Label, Ink Knot) — name + instructions + param_ids + tags |
 | `Instruction` | OpData union wrapper |
 | `Tag` | 메타데이터 태그 — key_id, value_id (String Pool Index) |
 | `Line` | 대사 — character_id, text_id, voice_asset_id, tags:[Tag] |
-| `Choice` | 선택지 — text_id, target_node, optional condition |
+| `ChoiceModifier` | 선택지 수식어 enum — Default, Once, Sticky, Fallback |
+| `Choice` | 선택지 — text_id, target_node, optional condition, choice_modifier |
 | `Jump` | 흐름 제어 — target_node, is_call flag, arg_exprs |
 | `Command` | 엔진 명령 (bg, sfx 등) — type_id, params[] |
 | `SetVar` | 변수 설정 — var_name_id, ValueData (리터럴), Expression (산술) |
@@ -275,11 +294,11 @@ label 함수(a, b):                   # 함수 선언 (매개변수 바인딩, �
 | `Random` | 랜덤 분기 — branches[] (가중치 기반) |
 | `Return` | 서브루틴 반환값 — expr (Expression), value (ValueData) |
 | `CallWithReturn` | 반환값을 변수에 저장하는 call — target_node_name_id, return_var_name_id, arg_exprs |
-| `SaveState` | 세이브 루트 — version, node, pc, finished, variables, call_stack, pending_choices, visit_counts |
+| `SaveState` | 세이브 루트 — version, node, pc, finished, variables, call_stack, pending_choices, visit_counts, chosen_once_choices |
 | `SavedVar` | 저장된 변수 — name, ValueData, string_value |
 | `SavedShadowedVar` | 섀도된 변수 — name, ValueData, string_value, existed |
 | `SavedCallFrame` | 콜 스택 프레임 — node_name, pc, return_var_name, shadowed_vars, param_names |
-| `SavedPendingChoice` | 대기 선택지 — text, target_node_name |
+| `SavedPendingChoice` | 대기 선택지 — text, target_node_name, choice_modifier |
 | `SavedVisitCount` | 노드 방문 횟수 — node_name, count |
 
 ## Compiler Warnings
@@ -298,11 +317,11 @@ label 함수(a, b):                   # 함수 선언 (매개변수 바인딩, �
 
 ## Testing
 
-Google Test v1.14.0 기반 자동화 테스트 (339 tests):
+Google Test v1.14.0 기반 자동화 테스트 (395 tests):
 
 ```bash
 # 유닛 테스트 실행
-./build/src/tests/GyeolTests          # Core + Parser + Runner (309 tests)
+./build/src/tests/GyeolTests          # Core + Parser + Runner (365 tests)
 ./build/src/tests/GyeolLSPTests       # LSP Analyzer + Server (30 tests)
 
 # CTest로 실행
@@ -312,12 +331,16 @@ cd build && ctest --output-on-failure
 테스트 범위:
 - **ParserTest** (83): 문법 요소별 파싱, 에스케이프, String Pool, voice_asset, 태그 시스템, global_vars, jump 검증, 표현식, 조건 표현식, 논리 연산자, elif 체인, random 블록, Line ID, Import (병합/다중파일/global vars/string pool공유/start_node/순서/중첩), Return (리터럴/변수/표현식/문자열/bool/bare), CallWithReturn (파싱/검증), Function Parameters (label params/call args/empty parens/expression args/single param), Visit Count (표현식/조건/맨문자/산술조합)
 - **ParserCharacterTest** (7): 캐릭터 정의 블록 (기본/다중/속성없음/하위호환/중복에러/미정의경고/global_vars조합)
+- **ParserNodeTagTest** (5): 노드 메타데이터 태그 파싱 (boolean flag/key=value/복수태그/params+태그/하위호환)
+- **ParserChoiceModifierTest** (5): 선택지 수식어 파싱 (once/sticky/fallback/조건+수식어/수식어순서)
 - **ParserErrorTest** (25): 에러 케이스, 에러 복구, 다중 에러 수집, 잘못된 jump/choice/condition/random 타겟, elif/else 검증, Import (순환감지/자기참조/파일없음/중복label/경로오류), Return (label밖/잘못된타겟/잘못된표현식), Function Parameters (중복param/unclosed paren/jump args/empty arg)
 - **RunnerTest** (106): VM 실행 흐름, 선택지, Jump/Call, 변수/조건, Command, 변수 API, 산술 표현식, 문자열 보간, 인라인 조건 텍스트, 태그 노출, 조건 표현식, 논리 연산자, elif 체인, random 분기, 로케일 오버레이/폴백/보간/클리어, Import 통합 (노드 jump/global vars), CallWithReturn (리터럴/변수/표현식/문자열/float/bool), Return (bare/implicit/no-frame), 중첩 call return, 기존 call 호환, Function Parameters (단일/다중 param, 로컬 스코프, 전역 섀도잉, 표현식 인자, return+params, 중첩, 기본값, 하위 호환), Visit Count (기본/미방문/bool/표현식/조건분기/비교/보간/인라인조건/API)
 - **RunnerCharacterTest** (4): 캐릭터 런타임 API (속성조회/이름목록/표시이름/미정의시빈결과)
+- **RunnerNodeTagTest** (6): 노드 태그 런타임 API (기본/key=value/복수/미존재노드/태그없는노드/params+태그)
+- **RunnerChoiceModifierTest** (8): 선택지 수식어 런타임 동작 (once사라짐/미선택시유지/fallback숨김/fallback표시/sticky/once+fallback/기본하위호환)
 - **DebugAPITest** (21): Breakpoint 관리 (추가/삭제/클리어/조회), Step mode 제어, Location 정보 (노드/PC/타입), Call stack 조회, Node 목록/instruction 수/상세 정보, Instruction 타입별 info (Line/Choice/Jump/Command/SetVar/Condition/Random/Return/CallWithReturn), Step mode 실행 흐름, Breakpoint hit/resume, 하위 호환 (디버그 미사용 시 동일 동작), 다른 노드 breakpoint
 - **StoryTest** (4): .gyb 로드/검증, 잘못된 파일 처리
-- **SaveLoadTest** (20): 라운드트립, 선택지/변수/콜스택 저장복원, 에러 케이스, CallWithReturn 프레임 저장복원, 하위 호환, Function Parameters (섀도 변수 포함 프레임 저장복원, 하위 호환), Visit Count (방문횟수 저장복원, 하위 호환), List 변수 저장복원
+- **SaveLoadTest** (23): 라운드트립, 선택지/변수/콜스택 저장복원, 에러 케이스, CallWithReturn 프레임 저장복원, 하위 호환, Function Parameters (섀도 변수 포함 프레임 저장복원, 하위 호환), Visit Count (방문횟수 저장복원, 하위 호환), List 변수 저장복원, chosen_once_choices 라운드트립, 선택지 수식어 pending 복원
 - **CompilerAnalyzerTest** (10): 도달 가능 노드 (전체도달/미도달), 미사용 변수 (탐지/미탐지), 데드 인스트럭션, 상수 폴딩 (탐지/최적화), 리포트 출력, Choice 도달성, 캐릭터 수
 - **AnalyzerTest** (13): Label 스캔 (이름/줄번호/파라미터), 변수 스캔 (전역/로컬/중복제거), Jump/Call/Choice 참조, 주석/빈 내용 무시, Parser 기반 진단 (유효/무효 스크립트)
 - **LspServerTest** (17): Initialize (capabilities), Shutdown/Exit, DidOpen/DidChange/DidClose 진단 게시, Completion (키워드/라벨/변수/내장함수), Go to Definition (라벨/변수), Hover (키워드/라벨/파라미터), Document Symbols, 알 수 없는 메서드 에러

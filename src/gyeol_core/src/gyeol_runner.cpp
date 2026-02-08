@@ -682,9 +682,27 @@ bool Runner::start(const uint8_t* buffer, size_t size) {
         }
     }
 
+    // 노드 메타데이터 태그 캐시
+    nodeTags_.clear();
+    if (story->nodes()) {
+        for (flatbuffers::uoffset_t ni = 0; ni < story->nodes()->size(); ++ni) {
+            auto* node = story->nodes()->Get(ni);
+            if (node->tags() && node->tags()->size() > 0) {
+                std::string nodeName = node->name() ? node->name()->c_str() : "";
+                std::vector<std::pair<std::string, std::string>> tags;
+                for (flatbuffers::uoffset_t ti = 0; ti < node->tags()->size(); ++ti) {
+                    auto* tag = node->tags()->Get(ti);
+                    tags.emplace_back(poolStr(tag->key_id()), poolStr(tag->value_id()));
+                }
+                nodeTags_[nodeName] = std::move(tags);
+            }
+        }
+    }
+
     // start_node로 이동
     callStack_.clear();
     pendingChoices_.clear();
+    chosenOnceChoices_.clear();
     visitCounts_.clear();
     hasPendingReturn_ = false;
     rng_.seed(std::random_device{}());
@@ -788,45 +806,78 @@ StepResult Runner::step() {
             }
 
             case OpData::Choice: {
-                // Choice를 연속으로 수집
+                // Choice를 연속으로 수집 (수식어 + 조건 필터링)
                 auto* choice = instr->data_as_Choice();
                 pendingChoices_.clear();
+                std::string curNodeName = node->name() ? node->name()->c_str() : "";
 
-                // condition_var_id 체크 (조건부 선택지)
-                bool visible = true;
-                if (choice->condition_var_id() >= 0) {
-                    std::string condVar = poolStr(choice->condition_var_id());
-                    auto it = variables_.find(condVar);
-                    if (it != variables_.end()) {
-                        visible = (it->second.type == Variant::BOOL) ? it->second.b : (it->second.i != 0);
-                    } else {
-                        visible = false;
-                    }
-                }
-                if (visible) {
-                    pendingChoices_.push_back({choice->text_id(), choice->target_node_name_id()});
-                }
+                // 모든 연속 Choice를 먼저 수집 (raw)
+                struct RawChoice {
+                    int32_t text_id;
+                    int32_t target_node_name_id;
+                    int32_t condition_var_id;
+                    int8_t choice_modifier;
+                    uint32_t instrPc; // instruction의 PC (once_key용)
+                };
+                std::vector<RawChoice> rawChoices;
+                rawChoices.push_back({choice->text_id(), choice->target_node_name_id(),
+                                      choice->condition_var_id(),
+                                      static_cast<int8_t>(choice->choice_modifier()),
+                                      pc_ - 1});
 
-                // 다음 instruction도 Choice면 계속 수집
                 while (node->lines() && pc_ < node->lines()->size()) {
                     auto* next = node->lines()->Get(pc_);
                     if (next->data_type() != OpData::Choice) break;
-                    pc_++;
-
                     auto* nextChoice = next->data_as_Choice();
-                    bool nextVisible = true;
-                    if (nextChoice->condition_var_id() >= 0) {
-                        std::string condVar = poolStr(nextChoice->condition_var_id());
+                    rawChoices.push_back({nextChoice->text_id(), nextChoice->target_node_name_id(),
+                                          nextChoice->condition_var_id(),
+                                          static_cast<int8_t>(nextChoice->choice_modifier()),
+                                          pc_});
+                    pc_++;
+                }
+
+                // 조건 + once + modifier 필터링
+                std::vector<PendingChoice> normalChoices;  // Default/Sticky/Once (visible)
+                std::vector<PendingChoice> fallbackChoices; // Fallback (visible)
+
+                for (const auto& rc : rawChoices) {
+                    // 1) condition_var_id 체크
+                    bool condVisible = true;
+                    if (rc.condition_var_id >= 0) {
+                        std::string condVar = poolStr(rc.condition_var_id);
                         auto it = variables_.find(condVar);
                         if (it != variables_.end()) {
-                            nextVisible = (it->second.type == Variant::BOOL) ? it->second.b : (it->second.i != 0);
+                            condVisible = (it->second.type == Variant::BOOL) ? it->second.b : (it->second.i != 0);
                         } else {
-                            nextVisible = false;
+                            condVisible = false;
                         }
                     }
-                    if (nextVisible) {
-                        pendingChoices_.push_back({nextChoice->text_id(), nextChoice->target_node_name_id()});
+                    if (!condVisible) continue;
+
+                    // 2) once 체크: 이미 선택한 once 선택지는 숨김
+                    std::string onceKey = curNodeName + ":" + std::to_string(rc.instrPc);
+                    if (rc.choice_modifier == 1 /* Once */) {
+                        if (chosenOnceChoices_.count(onceKey) > 0) continue;
                     }
+
+                    PendingChoice pc;
+                    pc.text_id = rc.text_id;
+                    pc.target_node_name_id = rc.target_node_name_id;
+                    pc.choice_modifier = rc.choice_modifier;
+                    pc.once_key = onceKey;
+
+                    if (rc.choice_modifier == 3 /* Fallback */) {
+                        fallbackChoices.push_back(std::move(pc));
+                    } else {
+                        normalChoices.push_back(std::move(pc));
+                    }
+                }
+
+                // Fallback: normal이 모두 비었을 때만 fallback 사용
+                if (normalChoices.empty()) {
+                    pendingChoices_ = std::move(fallbackChoices);
+                } else {
+                    pendingChoices_ = std::move(normalChoices);
                 }
 
                 // 결과 반환
@@ -1088,7 +1139,13 @@ void Runner::choose(int index) {
         return;
     }
 
-    jumpToNodeById(pendingChoices_[index].target_node_name_id);
+    // Once 선택지 추적: 선택된 once 선택지의 키를 기록
+    auto& chosen = pendingChoices_[index];
+    if (chosen.choice_modifier == 1 /* Once */ && !chosen.once_key.empty()) {
+        chosenOnceChoices_.insert(chosen.once_key);
+    }
+
+    jumpToNodeById(chosen.target_node_name_id);
     pendingChoices_.clear();
 }
 
@@ -1161,6 +1218,31 @@ std::vector<std::string> Runner::getCharacterNames() const {
 std::string Runner::getCharacterDisplayName(const std::string& characterId) const {
     std::string name = getCharacterProperty(characterId, "name");
     return name.empty() ? characterId : name;
+}
+
+// --- Node Tag API ---
+std::string Runner::getNodeTag(const std::string& nodeName, const std::string& key) const {
+    auto it = nodeTags_.find(nodeName);
+    if (it == nodeTags_.end()) return "";
+    for (const auto& tag : it->second) {
+        if (tag.first == key) return tag.second;
+    }
+    return "";
+}
+
+std::vector<std::pair<std::string, std::string>> Runner::getNodeTags(const std::string& nodeName) const {
+    auto it = nodeTags_.find(nodeName);
+    if (it == nodeTags_.end()) return {};
+    return it->second;
+}
+
+bool Runner::hasNodeTag(const std::string& nodeName, const std::string& key) const {
+    auto it = nodeTags_.find(nodeName);
+    if (it == nodeTags_.end()) return false;
+    for (const auto& tag : it->second) {
+        if (tag.first == key) return true;
+    }
+    return false;
 }
 
 // --- Save/Load 헬퍼 ---
@@ -1324,7 +1406,13 @@ bool Runner::saveState(const std::string& filepath) const {
         auto spc = std::make_unique<SavedPendingChoiceT>();
         spc->text = poolStr(pc.text_id);
         spc->target_node_name = poolStr(pc.target_node_name_id);
+        spc->choice_modifier = static_cast<ChoiceModifier>(pc.choice_modifier);
         state.pending_choices.push_back(std::move(spc));
+    }
+
+    // Chosen once choices 저장
+    for (const auto& key : chosenOnceChoices_) {
+        state.chosen_once_choices.push_back(key);
     }
 
     // Visit counts 저장
@@ -1492,7 +1580,23 @@ bool Runner::loadState(const std::string& filepath) {
             int32_t targetId = pc->target_node_name()
                 ? findStringInPool(pc->target_node_name()->c_str()) : -1;
             if (textId >= 0 && targetId >= 0) {
-                pendingChoices_.push_back({textId, targetId});
+                PendingChoice pending;
+                pending.text_id = textId;
+                pending.target_node_name_id = targetId;
+                pending.choice_modifier = static_cast<int8_t>(pc->choice_modifier());
+                // once_key는 세이브에서 직접 복원할 필요 없음 (chosenOnceChoices_에서 관리)
+                pendingChoices_.push_back(std::move(pending));
+            }
+        }
+    }
+
+    // Chosen once choices 복원
+    chosenOnceChoices_.clear();
+    auto* onceKeys = saveState->chosen_once_choices();
+    if (onceKeys) {
+        for (flatbuffers::uoffset_t i = 0; i < onceKeys->size(); ++i) {
+            if (onceKeys->Get(i)) {
+                chosenOnceChoices_.insert(onceKeys->Get(i)->c_str());
             }
         }
     }
@@ -1736,7 +1840,11 @@ std::string Runner::getInstructionInfo(const std::string& nodeName, uint32_t pc)
             auto* choice = instr->data_as_Choice();
             std::string txt = poolStr(choice->text_id());
             std::string target = poolStr(choice->target_node_name_id());
-            return "Choice: \"" + txt + "\" -> " + target;
+            std::string info = "Choice: \"" + txt + "\" -> " + target;
+            if (choice->choice_modifier() == ChoiceModifier::Once) info += " #once";
+            else if (choice->choice_modifier() == ChoiceModifier::Sticky) info += " #sticky";
+            else if (choice->choice_modifier() == ChoiceModifier::Fallback) info += " #fallback";
+            return info;
         }
         case OpData::Jump: {
             auto* jump = instr->data_as_Jump();

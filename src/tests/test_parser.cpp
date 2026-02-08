@@ -2893,3 +2893,197 @@ TEST(AnalyzerTest, CharacterCount) {
     EXPECT_EQ(report.characterCount, 2);
     std::remove(path.c_str());
 }
+
+// =============================================================================
+// 노드 메타데이터 태그 파싱 테스트
+// =============================================================================
+
+TEST(ParserNodeTagTest, BasicBooleanTag) {
+    auto buf = GyeolTest::compileScript(R"(
+label shop #repeatable:
+    narrator "Welcome!"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = flatbuffers::GetRoot<ICPDev::Gyeol::Schema::Story>(buf.data());
+    auto* node = story->nodes()->Get(0);
+    EXPECT_STREQ(node->name()->c_str(), "shop");
+    ASSERT_NE(node->tags(), nullptr);
+    ASSERT_EQ(node->tags()->size(), 1u);
+    auto* tag = node->tags()->Get(0);
+    std::string key = story->string_pool()->Get(tag->key_id())->c_str();
+    std::string val = story->string_pool()->Get(tag->value_id())->c_str();
+    EXPECT_EQ(key, "repeatable");
+    EXPECT_EQ(val, "");
+}
+
+TEST(ParserNodeTagTest, KeyValueTag) {
+    auto buf = GyeolTest::compileScript(R"(
+label boss_fight #difficulty=hard:
+    narrator "Prepare!"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = flatbuffers::GetRoot<ICPDev::Gyeol::Schema::Story>(buf.data());
+    auto* node = story->nodes()->Get(0);
+    ASSERT_NE(node->tags(), nullptr);
+    ASSERT_EQ(node->tags()->size(), 1u);
+    auto* tag = node->tags()->Get(0);
+    std::string key = story->string_pool()->Get(tag->key_id())->c_str();
+    std::string val = story->string_pool()->Get(tag->value_id())->c_str();
+    EXPECT_EQ(key, "difficulty");
+    EXPECT_EQ(val, "hard");
+}
+
+TEST(ParserNodeTagTest, MultipleTags) {
+    auto buf = GyeolTest::compileScript(R"(
+label shop #repeatable #category=shop:
+    narrator "Welcome!"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = flatbuffers::GetRoot<ICPDev::Gyeol::Schema::Story>(buf.data());
+    auto* node = story->nodes()->Get(0);
+    ASSERT_NE(node->tags(), nullptr);
+    ASSERT_EQ(node->tags()->size(), 2u);
+
+    std::string k0 = story->string_pool()->Get(node->tags()->Get(0)->key_id())->c_str();
+    std::string v0 = story->string_pool()->Get(node->tags()->Get(0)->value_id())->c_str();
+    std::string k1 = story->string_pool()->Get(node->tags()->Get(1)->key_id())->c_str();
+    std::string v1 = story->string_pool()->Get(node->tags()->Get(1)->value_id())->c_str();
+    EXPECT_EQ(k0, "repeatable");
+    EXPECT_EQ(v0, "");
+    EXPECT_EQ(k1, "category");
+    EXPECT_EQ(v1, "shop");
+}
+
+TEST(ParserNodeTagTest, TagWithParams) {
+    auto buf = GyeolTest::compileScript(R"(
+label helper(a, b) #pure:
+    return a + b
+)");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = flatbuffers::GetRoot<ICPDev::Gyeol::Schema::Story>(buf.data());
+    auto* node = story->nodes()->Get(0);
+    EXPECT_STREQ(node->name()->c_str(), "helper");
+    ASSERT_EQ(node->param_ids()->size(), 2u);
+    ASSERT_NE(node->tags(), nullptr);
+    ASSERT_EQ(node->tags()->size(), 1u);
+    std::string key = story->string_pool()->Get(node->tags()->Get(0)->key_id())->c_str();
+    EXPECT_EQ(key, "pure");
+}
+
+TEST(ParserNodeTagTest, NoTagsBackwardCompatible) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    narrator "Hello"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = flatbuffers::GetRoot<ICPDev::Gyeol::Schema::Story>(buf.data());
+    auto* node = story->nodes()->Get(0);
+    // tags 없으면 nullptr 또는 size 0
+    if (node->tags()) {
+        EXPECT_EQ(node->tags()->size(), 0u);
+    }
+}
+
+// =============================================================================
+// 선택지 수식어 파싱 테스트
+// =============================================================================
+
+TEST(ParserChoiceModifierTest, OnceModifier) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "Visit once" -> node_a #once
+        "Always" -> node_b
+
+label node_a:
+    narrator "A"
+
+label node_b:
+    narrator "B"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = flatbuffers::GetRoot<ICPDev::Gyeol::Schema::Story>(buf.data());
+    auto* node = story->nodes()->Get(0);
+    auto* instr0 = node->lines()->Get(0);
+    auto* choice0 = instr0->data_as_Choice();
+    EXPECT_EQ(choice0->choice_modifier(), ICPDev::Gyeol::Schema::ChoiceModifier::Once);
+
+    auto* instr1 = node->lines()->Get(1);
+    auto* choice1 = instr1->data_as_Choice();
+    EXPECT_EQ(choice1->choice_modifier(), ICPDev::Gyeol::Schema::ChoiceModifier::Default);
+}
+
+TEST(ParserChoiceModifierTest, StickyModifier) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "Sticky choice" -> node_a #sticky
+
+label node_a:
+    narrator "A"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = flatbuffers::GetRoot<ICPDev::Gyeol::Schema::Story>(buf.data());
+    auto* choice = story->nodes()->Get(0)->lines()->Get(0)->data_as_Choice();
+    EXPECT_EQ(choice->choice_modifier(), ICPDev::Gyeol::Schema::ChoiceModifier::Sticky);
+}
+
+TEST(ParserChoiceModifierTest, FallbackModifier) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "Fallback" -> node_a #fallback
+
+label node_a:
+    narrator "A"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = flatbuffers::GetRoot<ICPDev::Gyeol::Schema::Story>(buf.data());
+    auto* choice = story->nodes()->Get(0)->lines()->Get(0)->data_as_Choice();
+    EXPECT_EQ(choice->choice_modifier(), ICPDev::Gyeol::Schema::ChoiceModifier::Fallback);
+}
+
+TEST(ParserChoiceModifierTest, ModifierWithCondition) {
+    auto buf = GyeolTest::compileScript(R"(
+$ has_key = true
+label start:
+    menu:
+        "Special" -> node_a if has_key #once
+
+label node_a:
+    narrator "A"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = flatbuffers::GetRoot<ICPDev::Gyeol::Schema::Story>(buf.data());
+    auto* choice = story->nodes()->Get(0)->lines()->Get(0)->data_as_Choice();
+    EXPECT_EQ(choice->choice_modifier(), ICPDev::Gyeol::Schema::ChoiceModifier::Once);
+    EXPECT_GE(choice->condition_var_id(), 0); // has condition
+}
+
+TEST(ParserChoiceModifierTest, ModifierBeforeCondition) {
+    // #once if var — modifier before condition should also work
+    auto buf = GyeolTest::compileScript(R"(
+$ has_key = true
+label start:
+    menu:
+        "Special" -> node_a #once if has_key
+
+label node_a:
+    narrator "A"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = flatbuffers::GetRoot<ICPDev::Gyeol::Schema::Story>(buf.data());
+    auto* choice = story->nodes()->Get(0)->lines()->Get(0)->data_as_Choice();
+    EXPECT_EQ(choice->choice_modifier(), ICPDev::Gyeol::Schema::ChoiceModifier::Once);
+    EXPECT_GE(choice->condition_var_id(), 0);
+}

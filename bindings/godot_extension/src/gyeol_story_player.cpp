@@ -33,6 +33,9 @@ void StoryPlayer::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_character_names"), &StoryPlayer::get_character_names);
     ClassDB::bind_method(D_METHOD("get_character_display_name", "character_id"), &StoryPlayer::get_character_display_name);
     ClassDB::bind_method(D_METHOD("set_seed", "seed"), &StoryPlayer::set_seed);
+    ClassDB::bind_method(D_METHOD("get_node_tag", "node_name", "key"), &StoryPlayer::get_node_tag);
+    ClassDB::bind_method(D_METHOD("get_node_tags", "node_name"), &StoryPlayer::get_node_tags);
+    ClassDB::bind_method(D_METHOD("has_node_tag", "node_name", "key"), &StoryPlayer::has_node_tag);
 
     // Signals
     ADD_SIGNAL(MethodInfo("dialogue_line",
@@ -328,6 +331,30 @@ PackedStringArray StoryPlayer::get_character_names() const {
 String StoryPlayer::get_character_display_name(const String &character_id) const {
     std::string result = runner_.getCharacterDisplayName(character_id.utf8().get_data());
     return String::utf8(result.c_str());
+}
+
+String StoryPlayer::get_node_tag(const String &node_name, const String &key) const {
+    std::string result = runner_.getNodeTag(
+        node_name.utf8().get_data(),
+        key.utf8().get_data());
+    return String::utf8(result.c_str());
+}
+
+Dictionary StoryPlayer::get_node_tags(const String &node_name) const {
+    Dictionary tags;
+    auto tagList = runner_.getNodeTags(node_name.utf8().get_data());
+    for (const auto& tag : tagList) {
+        String key = String::utf8(tag.first.c_str());
+        String value = String::utf8(tag.second.c_str());
+        tags[key] = value;
+    }
+    return tags;
+}
+
+bool StoryPlayer::has_node_tag(const String &node_name, const String &key) const {
+    return runner_.hasNodeTag(
+        node_name.utf8().get_data(),
+        key.utf8().get_data());
 }
 
 void StoryPlayer::set_seed(int seed) {
