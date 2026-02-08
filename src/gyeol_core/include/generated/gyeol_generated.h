@@ -89,6 +89,10 @@ struct CallWithReturn;
 struct CallWithReturnBuilder;
 struct CallWithReturnT;
 
+struct CharacterDef;
+struct CharacterDefBuilder;
+struct CharacterDefT;
+
 struct Instruction;
 struct InstructionBuilder;
 struct InstructionT;
@@ -2328,6 +2332,92 @@ inline ::flatbuffers::Offset<CallWithReturn> CreateCallWithReturnDirect(
 
 ::flatbuffers::Offset<CallWithReturn> CreateCallWithReturn(::flatbuffers::FlatBufferBuilder &_fbb, const CallWithReturnT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct CharacterDefT : public ::flatbuffers::NativeTable {
+  typedef CharacterDef TableType;
+  int32_t name_id = 0;
+  std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::TagT>> properties{};
+  CharacterDefT() = default;
+  CharacterDefT(const CharacterDefT &o);
+  CharacterDefT(CharacterDefT&&) FLATBUFFERS_NOEXCEPT = default;
+  CharacterDefT &operator=(CharacterDefT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct CharacterDef FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef CharacterDefT NativeTableType;
+  typedef CharacterDefBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_NAME_ID = 4,
+    VT_PROPERTIES = 6
+  };
+  int32_t name_id() const {
+    return GetField<int32_t>(VT_NAME_ID, 0);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>> *properties() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>> *>(VT_PROPERTIES);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int32_t>(verifier, VT_NAME_ID, 4) &&
+           VerifyOffset(verifier, VT_PROPERTIES) &&
+           verifier.VerifyVector(properties()) &&
+           verifier.VerifyVectorOfTables(properties()) &&
+           verifier.EndTable();
+  }
+  CharacterDefT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(CharacterDefT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<CharacterDef> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CharacterDefT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct CharacterDefBuilder {
+  typedef CharacterDef Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_name_id(int32_t name_id) {
+    fbb_.AddElement<int32_t>(CharacterDef::VT_NAME_ID, name_id, 0);
+  }
+  void add_properties(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>>> properties) {
+    fbb_.AddOffset(CharacterDef::VT_PROPERTIES, properties);
+  }
+  explicit CharacterDefBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<CharacterDef> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<CharacterDef>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<CharacterDef> CreateCharacterDef(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    int32_t name_id = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>>> properties = 0) {
+  CharacterDefBuilder builder_(_fbb);
+  builder_.add_properties(properties);
+  builder_.add_name_id(name_id);
+  return builder_.Finish();
+}
+
+struct CharacterDef::Traits {
+  using type = CharacterDef;
+  static auto constexpr Create = CreateCharacterDef;
+};
+
+inline ::flatbuffers::Offset<CharacterDef> CreateCharacterDefDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    int32_t name_id = 0,
+    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>> *properties = nullptr) {
+  auto properties__ = properties ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>>(*properties) : 0;
+  return ICPDev::Gyeol::Schema::CreateCharacterDef(
+      _fbb,
+      name_id,
+      properties__);
+}
+
+::flatbuffers::Offset<CharacterDef> CreateCharacterDef(::flatbuffers::FlatBufferBuilder &_fbb, const CharacterDefT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct InstructionT : public ::flatbuffers::NativeTable {
   typedef Instruction TableType;
   ICPDev::Gyeol::Schema::OpDataUnion data{};
@@ -3408,6 +3498,7 @@ struct StoryT : public ::flatbuffers::NativeTable {
   std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::SetVarT>> global_vars{};
   std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::NodeT>> nodes{};
   std::string start_node_name{};
+  std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::CharacterDefT>> characters{};
   StoryT() = default;
   StoryT(const StoryT &o);
   StoryT(StoryT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -3424,7 +3515,8 @@ struct Story FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_LINE_IDS = 8,
     VT_GLOBAL_VARS = 10,
     VT_NODES = 12,
-    VT_START_NODE_NAME = 14
+    VT_START_NODE_NAME = 14,
+    VT_CHARACTERS = 16
   };
   const ::flatbuffers::String *version() const {
     return GetPointer<const ::flatbuffers::String *>(VT_VERSION);
@@ -3444,6 +3536,9 @@ struct Story FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *start_node_name() const {
     return GetPointer<const ::flatbuffers::String *>(VT_START_NODE_NAME);
   }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::CharacterDef>> *characters() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::CharacterDef>> *>(VT_CHARACTERS);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffset(verifier, VT_VERSION) &&
@@ -3462,6 +3557,9 @@ struct Story FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyVectorOfTables(nodes()) &&
            VerifyOffset(verifier, VT_START_NODE_NAME) &&
            verifier.VerifyString(start_node_name()) &&
+           VerifyOffset(verifier, VT_CHARACTERS) &&
+           verifier.VerifyVector(characters()) &&
+           verifier.VerifyVectorOfTables(characters()) &&
            verifier.EndTable();
   }
   StoryT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -3491,6 +3589,9 @@ struct StoryBuilder {
   void add_start_node_name(::flatbuffers::Offset<::flatbuffers::String> start_node_name) {
     fbb_.AddOffset(Story::VT_START_NODE_NAME, start_node_name);
   }
+  void add_characters(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::CharacterDef>>> characters) {
+    fbb_.AddOffset(Story::VT_CHARACTERS, characters);
+  }
   explicit StoryBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -3509,8 +3610,10 @@ inline ::flatbuffers::Offset<Story> CreateStory(
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> line_ids = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SetVar>>> global_vars = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Node>>> nodes = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> start_node_name = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> start_node_name = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::CharacterDef>>> characters = 0) {
   StoryBuilder builder_(_fbb);
+  builder_.add_characters(characters);
   builder_.add_start_node_name(start_node_name);
   builder_.add_nodes(nodes);
   builder_.add_global_vars(global_vars);
@@ -3532,13 +3635,15 @@ inline ::flatbuffers::Offset<Story> CreateStoryDirect(
     const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *line_ids = nullptr,
     const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SetVar>> *global_vars = nullptr,
     std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Node>> *nodes = nullptr,
-    const char *start_node_name = nullptr) {
+    const char *start_node_name = nullptr,
+    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::CharacterDef>> *characters = nullptr) {
   auto version__ = version ? _fbb.CreateString(version) : 0;
   auto string_pool__ = string_pool ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*string_pool) : 0;
   auto line_ids__ = line_ids ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*line_ids) : 0;
   auto global_vars__ = global_vars ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SetVar>>(*global_vars) : 0;
   auto nodes__ = nodes ? _fbb.CreateVectorOfSortedTables<ICPDev::Gyeol::Schema::Node>(nodes) : 0;
   auto start_node_name__ = start_node_name ? _fbb.CreateString(start_node_name) : 0;
+  auto characters__ = characters ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::CharacterDef>>(*characters) : 0;
   return ICPDev::Gyeol::Schema::CreateStory(
       _fbb,
       version__,
@@ -3546,7 +3651,8 @@ inline ::flatbuffers::Offset<Story> CreateStoryDirect(
       line_ids__,
       global_vars__,
       nodes__,
-      start_node_name__);
+      start_node_name__,
+      characters__);
 }
 
 ::flatbuffers::Offset<Story> CreateStory(::flatbuffers::FlatBufferBuilder &_fbb, const StoryT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -4219,6 +4325,47 @@ inline ::flatbuffers::Offset<CallWithReturn> CreateCallWithReturn(::flatbuffers:
       _arg_exprs);
 }
 
+inline CharacterDefT::CharacterDefT(const CharacterDefT &o)
+      : name_id(o.name_id) {
+  properties.reserve(o.properties.size());
+  for (const auto &properties_ : o.properties) { properties.emplace_back((properties_) ? new ICPDev::Gyeol::Schema::TagT(*properties_) : nullptr); }
+}
+
+inline CharacterDefT &CharacterDefT::operator=(CharacterDefT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(name_id, o.name_id);
+  std::swap(properties, o.properties);
+  return *this;
+}
+
+inline CharacterDefT *CharacterDef::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<CharacterDefT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void CharacterDef::UnPackTo(CharacterDefT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = name_id(); _o->name_id = _e; }
+  { auto _e = properties(); if (_e) { _o->properties.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->properties[_i]) { _e->Get(_i)->UnPackTo(_o->properties[_i].get(), _resolver); } else { _o->properties[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::TagT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->properties.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<CharacterDef> CharacterDef::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CharacterDefT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateCharacterDef(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<CharacterDef> CreateCharacterDef(::flatbuffers::FlatBufferBuilder &_fbb, const CharacterDefT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const CharacterDefT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _name_id = _o->name_id;
+  auto _properties = _o->properties.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Tag>> (_o->properties.size(), [](size_t i, _VectorArgs *__va) { return CreateTag(*__va->__fbb, __va->__o->properties[i].get(), __va->__rehasher); }, &_va ) : 0;
+  return ICPDev::Gyeol::Schema::CreateCharacterDef(
+      _fbb,
+      _name_id,
+      _properties);
+}
+
 inline InstructionT *Instruction::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<InstructionT>();
   UnPackTo(_o.get(), _resolver);
@@ -4575,6 +4722,8 @@ inline StoryT::StoryT(const StoryT &o)
   for (const auto &global_vars_ : o.global_vars) { global_vars.emplace_back((global_vars_) ? new ICPDev::Gyeol::Schema::SetVarT(*global_vars_) : nullptr); }
   nodes.reserve(o.nodes.size());
   for (const auto &nodes_ : o.nodes) { nodes.emplace_back((nodes_) ? new ICPDev::Gyeol::Schema::NodeT(*nodes_) : nullptr); }
+  characters.reserve(o.characters.size());
+  for (const auto &characters_ : o.characters) { characters.emplace_back((characters_) ? new ICPDev::Gyeol::Schema::CharacterDefT(*characters_) : nullptr); }
 }
 
 inline StoryT &StoryT::operator=(StoryT o) FLATBUFFERS_NOEXCEPT {
@@ -4584,6 +4733,7 @@ inline StoryT &StoryT::operator=(StoryT o) FLATBUFFERS_NOEXCEPT {
   std::swap(global_vars, o.global_vars);
   std::swap(nodes, o.nodes);
   std::swap(start_node_name, o.start_node_name);
+  std::swap(characters, o.characters);
   return *this;
 }
 
@@ -4602,6 +4752,7 @@ inline void Story::UnPackTo(StoryT *_o, const ::flatbuffers::resolver_function_t
   { auto _e = global_vars(); if (_e) { _o->global_vars.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->global_vars[_i]) { _e->Get(_i)->UnPackTo(_o->global_vars[_i].get(), _resolver); } else { _o->global_vars[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::SetVarT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->global_vars.resize(0); } }
   { auto _e = nodes(); if (_e) { _o->nodes.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->nodes[_i]) { _e->Get(_i)->UnPackTo(_o->nodes[_i].get(), _resolver); } else { _o->nodes[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::NodeT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->nodes.resize(0); } }
   { auto _e = start_node_name(); if (_e) _o->start_node_name = _e->str(); }
+  { auto _e = characters(); if (_e) { _o->characters.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->characters[_i]) { _e->Get(_i)->UnPackTo(_o->characters[_i].get(), _resolver); } else { _o->characters[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::CharacterDefT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->characters.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<Story> Story::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const StoryT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -4618,6 +4769,7 @@ inline ::flatbuffers::Offset<Story> CreateStory(::flatbuffers::FlatBufferBuilder
   auto _global_vars = _o->global_vars.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SetVar>> (_o->global_vars.size(), [](size_t i, _VectorArgs *__va) { return CreateSetVar(*__va->__fbb, __va->__o->global_vars[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _nodes = _o->nodes.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::Node>> (_o->nodes.size(), [](size_t i, _VectorArgs *__va) { return CreateNode(*__va->__fbb, __va->__o->nodes[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _start_node_name = _o->start_node_name.empty() ? 0 : _fbb.CreateString(_o->start_node_name);
+  auto _characters = _o->characters.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::CharacterDef>> (_o->characters.size(), [](size_t i, _VectorArgs *__va) { return CreateCharacterDef(*__va->__fbb, __va->__o->characters[i].get(), __va->__rehasher); }, &_va ) : 0;
   return ICPDev::Gyeol::Schema::CreateStory(
       _fbb,
       _version,
@@ -4625,7 +4777,8 @@ inline ::flatbuffers::Offset<Story> CreateStory(::flatbuffers::FlatBufferBuilder
       _line_ids,
       _global_vars,
       _nodes,
-      _start_node_name);
+      _start_node_name,
+      _characters);
 }
 
 inline bool VerifyValueData(::flatbuffers::Verifier &verifier, const void *obj, ValueData type) {

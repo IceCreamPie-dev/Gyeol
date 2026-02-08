@@ -23,13 +23,22 @@ public:
     const std::vector<std::string>& getErrors() const { return errors_; }
     bool hasErrors() const { return !errors_.empty(); }
 
+    // 경고 (에러와 분리 — 컴파일은 성공하지만 잠재적 문제)
+    const std::vector<std::string>& getWarnings() const { return warnings_; }
+    bool hasWarnings() const { return !warnings_.empty(); }
+
     // 번역 대상 문자열 CSV 추출
     bool exportStrings(const std::string& outputPath) const;
+
+    // StoryT 접근 (analyzer 등 외부 도구용)
+    const ICPDev::Gyeol::Schema::StoryT& getStory() const { return story_; }
+    ICPDev::Gyeol::Schema::StoryT& getStoryMutable() { return story_; }
 
 private:
     ICPDev::Gyeol::Schema::StoryT story_;
     std::string error_;
     std::vector<std::string> errors_;
+    std::vector<std::string> warnings_;
     std::string filename_;
 
     // String Pool 관리 (중복 제거)
@@ -45,7 +54,14 @@ private:
     ICPDev::Gyeol::Schema::NodeT* currentNode_ = nullptr;
     bool inMenu_ = false;
     bool inRandom_ = false;
+    bool inCharacterBlock_ = false;
     bool seenFirstLabel_ = false; // global_vars 처리용
+
+    // 캐릭터 정의 블록
+    std::string currentCharacterId_;
+    std::unique_ptr<ICPDev::Gyeol::Schema::CharacterDefT> currentCharacter_;
+    std::unordered_set<std::string> definedCharacters_;
+    std::unordered_set<std::string> usedCharacters_;
 
     // random: 블록 분기 수집
     std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::RandomBranchT>> pendingRandomBranches_;
@@ -58,6 +74,8 @@ private:
     void addError(int lineNum, const std::string& msg);
     // 치명적 에러 (파싱 중단)
     void setError(int lineNum, const std::string& msg);
+    // 경고 수집 (컴파일은 진행)
+    void addWarning(int lineNum, const std::string& msg);
 
     // 파싱 헬퍼
     static size_t countIndent(const std::string& line);
@@ -80,6 +98,12 @@ private:
     void flushRandomBlock(int lineNum);
     bool parseCommandLine(const std::string& content, int lineNum);
     bool parseReturnLine(const std::string& content, int lineNum);
+
+    // 캐릭터 정의 블록
+    bool parseCharacterLine(const std::string& content, int lineNum);
+    bool parseCharacterProperty(const std::string& content, int lineNum);
+    void flushCharacterBlock();
+    void validateCharacters();
 
     // 매개변수/인자 파싱 헬퍼
     bool parseParamList(const std::string& content, size_t& pos,

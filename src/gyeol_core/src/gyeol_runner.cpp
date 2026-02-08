@@ -664,6 +664,24 @@ bool Runner::start(const uint8_t* buffer, size_t size) {
         }
     }
 
+    // 캐릭터 정의 캐시
+    characterProps_.clear();
+    if (story->characters()) {
+        auto* pool = asPool(pool_);
+        for (flatbuffers::uoffset_t ci = 0; ci < story->characters()->size(); ++ci) {
+            auto* charDef = story->characters()->Get(ci);
+            std::string charId = poolStr(charDef->name_id());
+            std::vector<std::pair<std::string, std::string>> props;
+            if (charDef->properties()) {
+                for (flatbuffers::uoffset_t pi = 0; pi < charDef->properties()->size(); ++pi) {
+                    auto* tag = charDef->properties()->Get(pi);
+                    props.emplace_back(poolStr(tag->key_id()), poolStr(tag->value_id()));
+                }
+            }
+            characterProps_[charId] = std::move(props);
+        }
+    }
+
     // start_node로 이동
     callStack_.clear();
     pendingChoices_.clear();
@@ -1119,6 +1137,30 @@ int32_t Runner::getVisitCount(const std::string& nodeName) const {
 bool Runner::hasVisited(const std::string& nodeName) const {
     auto it = visitCounts_.find(nodeName);
     return (it != visitCounts_.end() && it->second > 0);
+}
+
+// --- Character API ---
+std::string Runner::getCharacterProperty(const std::string& characterId, const std::string& key) const {
+    auto it = characterProps_.find(characterId);
+    if (it == characterProps_.end()) return "";
+    for (const auto& prop : it->second) {
+        if (prop.first == key) return prop.second;
+    }
+    return "";
+}
+
+std::vector<std::string> Runner::getCharacterNames() const {
+    std::vector<std::string> names;
+    names.reserve(characterProps_.size());
+    for (const auto& pair : characterProps_) {
+        names.push_back(pair.first);
+    }
+    return names;
+}
+
+std::string Runner::getCharacterDisplayName(const std::string& characterId) const {
+    std::string name = getCharacterProperty(characterId, "name");
+    return name.empty() ? characterId : name;
 }
 
 // --- Save/Load 헬퍼 ---

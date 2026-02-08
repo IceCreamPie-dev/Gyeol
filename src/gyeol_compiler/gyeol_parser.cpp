@@ -55,6 +55,119 @@ void Parser::setError(int lineNum, const std::string& msg) {
     addError(lineNum, msg);
 }
 
+void Parser::addWarning(int lineNum, const std::string& msg) {
+    std::string formatted = filename_ + ":" + std::to_string(lineNum) + ": " + msg;
+    warnings_.push_back(formatted);
+}
+
+// --- 캐릭터 정의 블록 ---
+bool Parser::parseCharacterLine(const std::string& content, int lineNum) {
+    // content: "character hero:"
+    size_t pos = 9; // skip "character"
+    skipSpaces(content, pos);
+
+    std::string charId = parseWord(content, pos);
+    if (charId.empty()) {
+        addError(lineNum, "character requires a name");
+        return false;
+    }
+
+    // 이름 끝의 ':' 처리
+    bool hasColon = false;
+    if (!charId.empty() && charId.back() == ':') {
+        charId.pop_back();
+        hasColon = true;
+    }
+
+    if (!hasColon) {
+        skipSpaces(content, pos);
+        if (pos >= content.size() || content[pos] != ':') {
+            addError(lineNum, "character definition requires ':' after name");
+            return false;
+        }
+    }
+
+    flushCharacterBlock(); // 이전 캐릭터 블록 완성 (definedCharacters_ 업데이트)
+
+    // 중복 캐릭터 검사
+    if (definedCharacters_.count(charId)) {
+        addError(lineNum, "duplicate character definition: '" + charId + "'");
+        return false;
+    }
+
+    currentCharacterId_ = charId;
+    currentCharacter_ = std::make_unique<CharacterDefT>();
+    currentCharacter_->name_id = addString(charId);
+    inCharacterBlock_ = true;
+
+    return true;
+}
+
+bool Parser::parseCharacterProperty(const std::string& content, int lineNum) {
+    if (!currentCharacter_) {
+        addError(lineNum, "character property outside character block");
+        return false;
+    }
+
+    // content: "key: \"value\"" or "key: value"
+    size_t pos = 0;
+    std::string key = parseWord(content, pos);
+    if (key.empty()) {
+        addError(lineNum, "expected property name in character block");
+        return false;
+    }
+
+    // key 끝의 ':' 처리
+    if (!key.empty() && key.back() == ':') {
+        key.pop_back();
+    } else {
+        skipSpaces(content, pos);
+        if (pos >= content.size() || content[pos] != ':') {
+            addError(lineNum, "expected ':' after property name '" + key + "'");
+            return false;
+        }
+        pos++; // skip ':'
+    }
+
+    skipSpaces(content, pos);
+
+    std::string value;
+    if (pos < content.size() && content[pos] == '"') {
+        value = parseQuotedString(content, pos);
+    } else {
+        // 인용 안 된 값: 나머지 전체
+        value = trim(content.substr(pos));
+    }
+
+    auto tag = std::make_unique<TagT>();
+    tag->key_id = addString(key);
+    tag->value_id = addString(value);
+    currentCharacter_->properties.push_back(std::move(tag));
+
+    return true;
+}
+
+void Parser::flushCharacterBlock() {
+    if (currentCharacter_ && !currentCharacterId_.empty()) {
+        definedCharacters_.insert(currentCharacterId_);
+        story_.characters.push_back(std::move(currentCharacter_));
+    }
+    currentCharacter_.reset();
+    currentCharacterId_.clear();
+    inCharacterBlock_ = false;
+}
+
+void Parser::validateCharacters() {
+    // 캐릭터 정의가 없으면 검증 스킵 (하위 호환)
+    if (definedCharacters_.empty()) return;
+
+    for (const auto& charName : usedCharacters_) {
+        if (definedCharacters_.find(charName) == definedCharacters_.end()) {
+            addWarning(0, "undefined character '" + charName + "' (not declared with 'character')");
+        }
+    }
+}
+
 size_t Parser::countIndent(const std::string& line) {
     size_t count = 0;
     for (char c : line) {
@@ -591,6 +704,7 @@ bool Parser::parseDialogueLine(const std::string& content, int lineNum) {
         // 캐릭터 대사: character "대사"
         std::string character = parseWord(content, pos);
         line->character_id = addString(character);
+        usedCharacters_.insert(character);
 
         skipSpaces(content, pos);
         if (pos >= content.size() || content[pos] != '"') {
@@ -1909,15 +2023,21 @@ bool Parser::parse(const std::string& filepath) {
     currentNode_ = nullptr;
     inMenu_ = false;
     inRandom_ = false;
+    inCharacterBlock_ = false;
     seenFirstLabel_ = false;
     prevLineType_ = PrevLineType::NONE;
     error_.clear();
     errors_.clear();
+    warnings_.clear();
     instrLineMap_.clear();
     pendingRandomBranches_.clear();
     importedFiles_.clear();
     isMainFile_ = true;
     startNodeSet_ = false;
+    currentCharacterId_.clear();
+    currentCharacter_.reset();
+    definedCharacters_.clear();
+    usedCharacters_.clear();
 
     // 절대 경로 등록 (순환 import 감지용)
     auto absPath = std::filesystem::absolute(filepath);
@@ -1925,6 +2045,9 @@ bool Parser::parse(const std::string& filepath) {
 
     // 메인 파일 파싱
     parseFile(filepath);
+
+    // 마지막 캐릭터 블록 완성
+    flushCharacterBlock();
 
     // "No labels found" 체크 (전체 병합 결과)
     if (!hasErrors() && story_.nodes.empty()) {
@@ -1936,6 +2059,11 @@ bool Parser::parse(const std::string& filepath) {
     // Jump target 검증 패스 (모든 파일의 노드 대상)
     if (!hasErrors()) {
         validateJumpTargets();
+    }
+
+    // 캐릭터 참조 검증 (경고)
+    if (!hasErrors()) {
+        validateCharacters();
     }
 
     return !hasErrors();
@@ -2023,7 +2151,16 @@ bool Parser::parseFile(const std::string& filepath) {
                 continue;
             }
 
+            // character definition: character hero:
+            if (!seenFirstLabel_ && trimmed.size() >= 9 &&
+                trimmed.substr(0, 9) == "character" &&
+                (trimmed.size() == 9 || trimmed[9] == ' ')) {
+                parseCharacterLine(trimmed, lineNum);
+                continue;
+            }
+
             if (trimmed.substr(0, 5) == "label") {
+                flushCharacterBlock(); // 캐릭터 블록 완성
                 if (inRandom_) { flushRandomBlock(lineNum); inRandom_ = false; }
                 inMenu_ = false;
                 prevLineType_ = PrevLineType::NONE;
@@ -2033,17 +2170,24 @@ bool Parser::parseFile(const std::string& filepath) {
 
             // global variable: label 앞에 $ 변수 = 값
             if (!seenFirstLabel_ && trimmed[0] == '$') {
+                flushCharacterBlock(); // 캐릭터 블록 완성
                 parseGlobalVarLine(trimmed, lineNum);
                 continue;
             }
 
             // 들여쓰기 0에서 다른 것은 에러
-            addError(lineNum, "unexpected content at column 0 (expected 'label', 'import', or global '$')");
+            addError(lineNum, "unexpected content at column 0 (expected 'label', 'character', 'import', or global '$')");
             continue; // 에러 복구
         }
 
-        // --- 들여쓰기 레벨 4+: label 내부 ---
+        // --- 들여쓰기 레벨 4+: label 내부 또는 character 속성 ---
         if (indent >= 4 && indent < 8) {
+            // 캐릭터 블록 내부 속성
+            if (inCharacterBlock_) {
+                parseCharacterProperty(trimmed, lineNum);
+                continue;
+            }
+
             if (inRandom_) { flushRandomBlock(lineNum); }
             inRandom_ = false;
             inMenu_ = false; // menu 블록 종료

@@ -163,6 +163,16 @@ table CallWithReturn {
 }
 
 // -------------------------------------------------------------------------
+// 캐릭터 정의
+// -------------------------------------------------------------------------
+
+// [캐릭터 정의] (메타데이터: 표시 이름, 색상, 음성 등)
+table CharacterDef {
+    name_id:int;          // 캐릭터 식별자 (String Pool Index, "hero")
+    properties:[Tag];     // key-value 속성 (Tag 재사용: name, color, voice 등)
+}
+
+// -------------------------------------------------------------------------
 // 구조
 // -------------------------------------------------------------------------
 table Instruction {
@@ -237,7 +247,7 @@ table SaveState {
 
 table Story {
     version:string;
-    
+
     // [String Pool] 모든 텍스트는 여기에 모여있고, 위에서는 index로 참조함
     string_pool:[string];
 
@@ -246,12 +256,15 @@ table Story {
 
     // [Initial Variables] 초기 변수 세팅
     global_vars:[SetVar];
-    
+
     // [Content] 실제 스토리 노드들
     nodes:[Node];
-    
+
     // [Entry Point] 시작 노드 이름
     start_node_name:string;
+
+    // [Characters] 캐릭터 정의 목록 (하위 호환: 없으면 기존 동작)
+    characters:[CharacterDef];
 }
 
 root_type Story;

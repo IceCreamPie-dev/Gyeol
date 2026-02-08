@@ -1,8 +1,10 @@
 #include <gtest/gtest.h>
 #include "test_helpers.h"
 #include "gyeol_parser.h"
+#include "gyeol_comp_analyzer.h"
 #include "gyeol_generated.h"
 #include <fstream>
+#include <sstream>
 #include <cstdio>
 
 using namespace Gyeol;
@@ -2441,4 +2443,453 @@ label start:
     auto* setvar = story->nodes()->Get(0)->lines()->Get(0)->data_as_SetVar();
     ASSERT_NE(setvar, nullptr);
     EXPECT_EQ(setvar->value_type(), ValueData::ListValue);
+}
+
+// ============================================================
+// --- 캐릭터 정의 블록 테스트 ---
+// ============================================================
+
+TEST(ParserCharacterTest, BasicCharacterDefinition) {
+    std::string path = "test_char_basic.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "character hero:\n"
+            << "    name: \"영웅\"\n"
+            << "    color: \"#FF0000\"\n"
+            << "\n"
+            << "label start:\n"
+            << "    hero \"Hello!\"\n";
+    }
+
+    Gyeol::Parser parser;
+    ASSERT_TRUE(parser.parse(path));
+    const auto& story = parser.getStory();
+
+    // 캐릭터 정의가 1개 있어야 함
+    ASSERT_EQ(story.characters.size(), 1u);
+    EXPECT_EQ(story.characters[0]->properties.size(), 2u);
+
+    // 속성 확인 (name, color)
+    bool hasName = false, hasColor = false;
+    for (const auto& prop : story.characters[0]->properties) {
+        std::string key = story.string_pool[prop->key_id];
+        std::string val = story.string_pool[prop->value_id];
+        if (key == "name" && val == "영웅") hasName = true;
+        if (key == "color" && val == "#FF0000") hasColor = true;
+    }
+    EXPECT_TRUE(hasName);
+    EXPECT_TRUE(hasColor);
+
+    // 경고 없어야 함 (hero 정의됨 + 사용됨)
+    EXPECT_FALSE(parser.hasWarnings());
+
+    std::remove(path.c_str());
+}
+
+TEST(ParserCharacterTest, MultipleCharacters) {
+    std::string path = "test_char_multi.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "character hero:\n"
+            << "    name: \"영웅\"\n"
+            << "\n"
+            << "character villain:\n"
+            << "    name: \"악당\"\n"
+            << "    color: \"#000000\"\n"
+            << "\n"
+            << "label start:\n"
+            << "    hero \"Hi\"\n"
+            << "    villain \"Ha!\"\n";
+    }
+
+    Gyeol::Parser parser;
+    ASSERT_TRUE(parser.parse(path));
+    const auto& story = parser.getStory();
+
+    ASSERT_EQ(story.characters.size(), 2u);
+
+    // 두 캐릭터 이름 확인
+    std::string name0 = story.string_pool[story.characters[0]->name_id];
+    std::string name1 = story.string_pool[story.characters[1]->name_id];
+    EXPECT_TRUE((name0 == "hero" && name1 == "villain") ||
+                (name0 == "villain" && name1 == "hero"));
+
+    EXPECT_FALSE(parser.hasWarnings());
+    std::remove(path.c_str());
+}
+
+TEST(ParserCharacterTest, CharacterNoProperties) {
+    std::string path = "test_char_noprop.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "character narrator:\n"
+            << "\n"
+            << "label start:\n"
+            << "    narrator \"Hello\"\n";
+    }
+
+    Gyeol::Parser parser;
+    ASSERT_TRUE(parser.parse(path));
+    const auto& story = parser.getStory();
+
+    ASSERT_EQ(story.characters.size(), 1u);
+    EXPECT_EQ(story.characters[0]->properties.size(), 0u);
+    std::remove(path.c_str());
+}
+
+TEST(ParserCharacterTest, BackwardCompatibility) {
+    // character 정의 없이도 기존처럼 동작
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    hero "Hello!"
+)");
+    ASSERT_FALSE(buf.empty());
+    auto* story = GetStory(buf.data());
+    EXPECT_EQ(story->nodes()->size(), 1u);
+    // characters 없거나 비어있음
+    EXPECT_TRUE(story->characters() == nullptr || story->characters()->size() == 0u);
+}
+
+TEST(ParserCharacterTest, DuplicateCharacterName) {
+    std::string path = "test_char_dup.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "character hero:\n"
+            << "    name: \"영웅\"\n"
+            << "\n"
+            << "character hero:\n"
+            << "    name: \"영웅2\"\n"
+            << "\n"
+            << "label start:\n"
+            << "    hero \"Hi\"\n";
+    }
+
+    Gyeol::Parser parser;
+    EXPECT_FALSE(parser.parse(path));
+    // 에러 메시지에 "duplicate" 포함
+    bool found = false;
+    for (const auto& err : parser.getErrors()) {
+        if (err.find("duplicate") != std::string::npos ||
+            err.find("Duplicate") != std::string::npos) {
+            found = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found);
+    std::remove(path.c_str());
+}
+
+TEST(ParserCharacterTest, UndefinedCharacterWarning) {
+    std::string path = "test_char_undef.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "character hero:\n"
+            << "    name: \"영웅\"\n"
+            << "\n"
+            << "label start:\n"
+            << "    hero \"Hi\"\n"
+            << "    unknown_char \"Who?\"\n";
+    }
+
+    Gyeol::Parser parser;
+    ASSERT_TRUE(parser.parse(path));  // 경고이므로 파싱은 성공
+
+    ASSERT_TRUE(parser.hasWarnings());
+    bool found = false;
+    for (const auto& warn : parser.getWarnings()) {
+        if (warn.find("unknown_char") != std::string::npos) {
+            found = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found);
+    std::remove(path.c_str());
+}
+
+TEST(ParserCharacterTest, CharacterWithGlobalVars) {
+    std::string path = "test_char_global.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "character hero:\n"
+            << "    name: \"영웅\"\n"
+            << "\n"
+            << "$ hp = 100\n"
+            << "\n"
+            << "label start:\n"
+            << "    hero \"My HP is {hp}\"\n";
+    }
+
+    Gyeol::Parser parser;
+    ASSERT_TRUE(parser.parse(path));
+    const auto& story = parser.getStory();
+
+    ASSERT_EQ(story.characters.size(), 1u);
+    EXPECT_EQ(story.global_vars.size(), 1u);
+    EXPECT_FALSE(parser.hasWarnings());
+    std::remove(path.c_str());
+}
+
+// ============================================================
+// --- 컴파일러 분석기 테스트 ---
+// ============================================================
+
+TEST(AnalyzerTest, AllNodesReachable) {
+    std::string path = "test_ana_reach.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    narrator \"hello\"\n"
+            << "    jump next\n"
+            << "label next:\n"
+            << "    narrator \"world\"\n";
+    }
+
+    Gyeol::Parser parser;
+    ASSERT_TRUE(parser.parse(path));
+
+    Gyeol::CompilerAnalyzer analyzer;
+    auto report = analyzer.analyze(parser.getStory());
+
+    EXPECT_EQ(report.totalNodes, 2);
+    EXPECT_EQ(report.reachableNodes, 2);
+
+    // UNREACHABLE_NODE 이슈 없어야 함
+    for (const auto& issue : report.issues) {
+        EXPECT_NE(issue.kind, Gyeol::AnalysisIssue::UNREACHABLE_NODE);
+    }
+    std::remove(path.c_str());
+}
+
+TEST(AnalyzerTest, UnreachableNode) {
+    std::string path = "test_ana_unreach.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    narrator \"hello\"\n"
+            << "label orphan:\n"
+            << "    narrator \"never reached\"\n";
+    }
+
+    Gyeol::Parser parser;
+    ASSERT_TRUE(parser.parse(path));
+
+    Gyeol::CompilerAnalyzer analyzer;
+    auto report = analyzer.analyze(parser.getStory());
+
+    EXPECT_EQ(report.totalNodes, 2);
+    EXPECT_EQ(report.reachableNodes, 1);
+
+    bool foundOrphan = false;
+    for (const auto& issue : report.issues) {
+        if (issue.kind == Gyeol::AnalysisIssue::UNREACHABLE_NODE &&
+            issue.detail.find("orphan") != std::string::npos) {
+            foundOrphan = true;
+        }
+    }
+    EXPECT_TRUE(foundOrphan);
+    std::remove(path.c_str());
+}
+
+TEST(AnalyzerTest, UnusedVariable) {
+    std::string path = "test_ana_unused.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    $ unused_var = 42\n"
+            << "    narrator \"hello\"\n";
+    }
+
+    Gyeol::Parser parser;
+    ASSERT_TRUE(parser.parse(path));
+
+    Gyeol::CompilerAnalyzer analyzer;
+    auto report = analyzer.analyze(parser.getStory());
+
+    bool foundUnused = false;
+    for (const auto& issue : report.issues) {
+        if (issue.kind == Gyeol::AnalysisIssue::UNUSED_VARIABLE &&
+            issue.detail.find("unused_var") != std::string::npos) {
+            foundUnused = true;
+        }
+    }
+    EXPECT_TRUE(foundUnused);
+    std::remove(path.c_str());
+}
+
+TEST(AnalyzerTest, UsedVariableNotReported) {
+    std::string path = "test_ana_used.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    $ hp = 100\n"
+            << "    narrator \"HP is {hp}\"\n";
+    }
+
+    Gyeol::Parser parser;
+    ASSERT_TRUE(parser.parse(path));
+
+    Gyeol::CompilerAnalyzer analyzer;
+    auto report = analyzer.analyze(parser.getStory());
+
+    for (const auto& issue : report.issues) {
+        if (issue.kind == Gyeol::AnalysisIssue::UNUSED_VARIABLE) {
+            EXPECT_TRUE(issue.detail.find("hp") == std::string::npos)
+                << "hp should not be flagged as unused";
+        }
+    }
+    std::remove(path.c_str());
+}
+
+TEST(AnalyzerTest, DeadInstructionAfterJump) {
+    std::string path = "test_ana_dead.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    narrator \"before\"\n"
+            << "    jump end\n"
+            << "    narrator \"dead code\"\n"
+            << "label end:\n"
+            << "    narrator \"end\"\n";
+    }
+
+    Gyeol::Parser parser;
+    ASSERT_TRUE(parser.parse(path));
+
+    Gyeol::CompilerAnalyzer analyzer;
+    auto report = analyzer.analyze(parser.getStory());
+
+    bool foundDead = false;
+    for (const auto& issue : report.issues) {
+        if (issue.kind == Gyeol::AnalysisIssue::DEAD_INSTRUCTION) {
+            foundDead = true;
+        }
+    }
+    EXPECT_TRUE(foundDead);
+    std::remove(path.c_str());
+}
+
+TEST(AnalyzerTest, ConstantFoldable) {
+    std::string path = "test_ana_const.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    $ result = 5 + 3\n"
+            << "    narrator \"done\"\n";
+    }
+
+    Gyeol::Parser parser;
+    ASSERT_TRUE(parser.parse(path));
+
+    Gyeol::CompilerAnalyzer analyzer;
+    auto report = analyzer.analyze(parser.getStory());
+
+    bool foundConst = false;
+    for (const auto& issue : report.issues) {
+        if (issue.kind == Gyeol::AnalysisIssue::CONSTANT_FOLDABLE) {
+            foundConst = true;
+        }
+    }
+    EXPECT_TRUE(foundConst);
+    std::remove(path.c_str());
+}
+
+TEST(AnalyzerTest, OptimizeConstantFolding) {
+    std::string path = "test_ana_optim.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    $ x = 5 + 3\n"
+            << "    narrator \"done\"\n";
+    }
+
+    Gyeol::Parser parser;
+    ASSERT_TRUE(parser.parse(path));
+
+    Gyeol::CompilerAnalyzer analyzer;
+    int optimizations = analyzer.optimize(parser.getStoryMutable());
+    EXPECT_GE(optimizations, 1);
+
+    // 최적화 후 SetVar의 expr가 nullptr이고 value가 Int(8)이어야 함
+    const auto& story = parser.getStory();
+    const auto& setvar = story.nodes[0]->lines[0]->data.AsSetVar();
+    EXPECT_EQ(setvar->expr.get(), nullptr);
+    EXPECT_EQ(setvar->value.type, ValueData::IntValue);
+    EXPECT_EQ(setvar->value.AsIntValue()->val, 8);
+    std::remove(path.c_str());
+}
+
+TEST(AnalyzerTest, ReportOutput) {
+    std::string path = "test_ana_report.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    narrator \"hello\"\n";
+    }
+
+    Gyeol::Parser parser;
+    ASSERT_TRUE(parser.parse(path));
+
+    Gyeol::CompilerAnalyzer analyzer;
+    auto report = analyzer.analyze(parser.getStory());
+
+    std::ostringstream oss;
+    Gyeol::CompilerAnalyzer::printReport(report, oss);
+    std::string output = oss.str();
+
+    // 리포트에 기본 메트릭이 포함되어야 함
+    EXPECT_TRUE(output.find("Node") != std::string::npos ||
+                output.find("node") != std::string::npos);
+    EXPECT_FALSE(output.empty());
+    std::remove(path.c_str());
+}
+
+TEST(AnalyzerTest, ChoiceReachability) {
+    std::string path = "test_ana_choice.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "label start:\n"
+            << "    menu:\n"
+            << "        \"Go A\" -> a\n"
+            << "        \"Go B\" -> b\n"
+            << "label a:\n"
+            << "    narrator \"A\"\n"
+            << "label b:\n"
+            << "    narrator \"B\"\n";
+    }
+
+    Gyeol::Parser parser;
+    ASSERT_TRUE(parser.parse(path));
+
+    Gyeol::CompilerAnalyzer analyzer;
+    auto report = analyzer.analyze(parser.getStory());
+
+    // 모든 노드 도달 가능 (choice 통해)
+    EXPECT_EQ(report.totalNodes, 3);
+    EXPECT_EQ(report.reachableNodes, 3);
+    std::remove(path.c_str());
+}
+
+TEST(AnalyzerTest, CharacterCount) {
+    std::string path = "test_ana_charcount.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "character hero:\n"
+            << "    name: \"영웅\"\n"
+            << "\n"
+            << "character villain:\n"
+            << "    name: \"악당\"\n"
+            << "\n"
+            << "label start:\n"
+            << "    hero \"Hi\"\n"
+            << "    villain \"Ha!\"\n";
+    }
+
+    Gyeol::Parser parser;
+    ASSERT_TRUE(parser.parse(path));
+
+    Gyeol::CompilerAnalyzer analyzer;
+    auto report = analyzer.analyze(parser.getStory());
+
+    EXPECT_EQ(report.characterCount, 2);
+    std::remove(path.c_str());
 }

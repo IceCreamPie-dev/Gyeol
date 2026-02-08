@@ -3450,3 +3450,132 @@ label start:
     auto v = runner.getVariable("items");
     EXPECT_EQ(v.list.size(), 1u);
 }
+
+// ============================================================
+// --- 캐릭터 API 런타임 테스트 ---
+// ============================================================
+
+TEST(RunnerCharacterTest, GetCharacterProperty) {
+    std::string path = "test_rchar_prop.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "character hero:\n"
+            << "    name: \"영웅\"\n"
+            << "    color: \"#FF0000\"\n"
+            << "\n"
+            << "label start:\n"
+            << "    hero \"Hello!\"\n";
+    }
+
+    auto buf = GyeolTest::compileScript("");
+    // 직접 파일로 컴파일
+    {
+        Gyeol::Parser parser;
+        ASSERT_TRUE(parser.parse(path));
+        ASSERT_TRUE(parser.compile("test_rchar_prop.gyb"));
+    }
+
+    Gyeol::Story story;
+    ASSERT_TRUE(story.loadFromFile("test_rchar_prop.gyb"));
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(story.getBuffer(), story.getBufferSize()));
+
+    EXPECT_EQ(runner.getCharacterProperty("hero", "name"), "영웅");
+    EXPECT_EQ(runner.getCharacterProperty("hero", "color"), "#FF0000");
+    EXPECT_EQ(runner.getCharacterProperty("hero", "missing"), "");
+    EXPECT_EQ(runner.getCharacterProperty("nonexistent", "name"), "");
+
+    std::remove(path.c_str());
+    std::remove("test_rchar_prop.gyb");
+}
+
+TEST(RunnerCharacterTest, GetCharacterNames) {
+    std::string path = "test_rchar_names.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "character hero:\n"
+            << "    name: \"영웅\"\n"
+            << "\n"
+            << "character villain:\n"
+            << "    name: \"악당\"\n"
+            << "\n"
+            << "label start:\n"
+            << "    hero \"Hi\"\n"
+            << "    villain \"Ha!\"\n";
+    }
+
+    {
+        Gyeol::Parser parser;
+        ASSERT_TRUE(parser.parse(path));
+        ASSERT_TRUE(parser.compile("test_rchar_names.gyb"));
+    }
+
+    Gyeol::Story story;
+    ASSERT_TRUE(story.loadFromFile("test_rchar_names.gyb"));
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(story.getBuffer(), story.getBufferSize()));
+
+    auto names = runner.getCharacterNames();
+    ASSERT_EQ(names.size(), 2u);
+
+    // 순서는 보장 안 되므로 set으로 비교
+    std::set<std::string> nameSet(names.begin(), names.end());
+    EXPECT_TRUE(nameSet.count("hero") > 0);
+    EXPECT_TRUE(nameSet.count("villain") > 0);
+
+    std::remove(path.c_str());
+    std::remove("test_rchar_names.gyb");
+}
+
+TEST(RunnerCharacterTest, GetCharacterDisplayName) {
+    std::string path = "test_rchar_disp.gyeol";
+    {
+        std::ofstream ofs(path);
+        ofs << "character hero:\n"
+            << "    name: \"영웅\"\n"
+            << "\n"
+            << "character sidekick:\n"
+            << "\n"
+            << "label start:\n"
+            << "    hero \"Hi\"\n"
+            << "    sidekick \"Hey\"\n";
+    }
+
+    {
+        Gyeol::Parser parser;
+        ASSERT_TRUE(parser.parse(path));
+        ASSERT_TRUE(parser.compile("test_rchar_disp.gyb"));
+    }
+
+    Gyeol::Story story;
+    ASSERT_TRUE(story.loadFromFile("test_rchar_disp.gyb"));
+
+    Runner runner;
+    ASSERT_TRUE(runner.start(story.getBuffer(), story.getBufferSize()));
+
+    // name 속성 있으면 그 값, 없으면 ID 그대로
+    EXPECT_EQ(runner.getCharacterDisplayName("hero"), "영웅");
+    EXPECT_EQ(runner.getCharacterDisplayName("sidekick"), "sidekick");
+    EXPECT_EQ(runner.getCharacterDisplayName("nonexistent"), "nonexistent");
+
+    std::remove(path.c_str());
+    std::remove("test_rchar_disp.gyb");
+}
+
+TEST(RunnerCharacterTest, NoCharacterDefinitions) {
+    // 캐릭터 정의 없는 기존 스토리 → 빈 결과
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    narrator "hello"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto names = runner.getCharacterNames();
+    EXPECT_EQ(names.size(), 0u);
+    EXPECT_EQ(runner.getCharacterProperty("anyone", "name"), "");
+    EXPECT_EQ(runner.getCharacterDisplayName("anyone"), "anyone");
+}

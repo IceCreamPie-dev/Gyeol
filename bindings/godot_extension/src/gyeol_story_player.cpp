@@ -29,6 +29,9 @@ void StoryPlayer::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_visit_count", "node_name"), &StoryPlayer::get_visit_count);
     ClassDB::bind_method(D_METHOD("has_visited", "node_name"), &StoryPlayer::has_visited);
     ClassDB::bind_method(D_METHOD("get_variable_names"), &StoryPlayer::get_variable_names);
+    ClassDB::bind_method(D_METHOD("get_character_property", "character_id", "key"), &StoryPlayer::get_character_property);
+    ClassDB::bind_method(D_METHOD("get_character_names"), &StoryPlayer::get_character_names);
+    ClassDB::bind_method(D_METHOD("get_character_display_name", "character_id"), &StoryPlayer::get_character_display_name);
     ClassDB::bind_method(D_METHOD("set_seed", "seed"), &StoryPlayer::set_seed);
 
     // Signals
@@ -305,6 +308,26 @@ PackedStringArray StoryPlayer::get_variable_names() const {
         result.append(String::utf8(name.c_str()));
     }
     return result;
+}
+
+String StoryPlayer::get_character_property(const String &character_id, const String &key) const {
+    std::string result = runner_.getCharacterProperty(
+        character_id.utf8().get_data(),
+        key.utf8().get_data());
+    return String::utf8(result.c_str());
+}
+
+PackedStringArray StoryPlayer::get_character_names() const {
+    PackedStringArray result;
+    for (const auto &name : runner_.getCharacterNames()) {
+        result.append(String::utf8(name.c_str()));
+    }
+    return result;
+}
+
+String StoryPlayer::get_character_display_name(const String &character_id) const {
+    std::string result = runner_.getCharacterDisplayName(character_id.utf8().get_data());
+    return String::utf8(result.c_str());
 }
 
 void StoryPlayer::set_seed(int seed) {

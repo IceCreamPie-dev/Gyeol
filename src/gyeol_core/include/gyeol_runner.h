@@ -87,6 +87,11 @@ public:
     int32_t getVisitCount(const std::string& nodeName) const;
     bool hasVisited(const std::string& nodeName) const;
 
+    // Character API (캐릭터 정의 조회)
+    std::string getCharacterProperty(const std::string& characterId, const std::string& key) const;
+    std::vector<std::string> getCharacterNames() const;
+    std::string getCharacterDisplayName(const std::string& characterId) const;
+
     // --- Debug API ---
     struct DebugLocation {
         std::string nodeName;
@@ -170,6 +175,9 @@ private:
 
     // 노드 방문 횟수
     std::unordered_map<std::string, uint32_t> visitCounts_;
+
+    // 캐릭터 정의 캐시: characterId → [(key, value), ...]
+    std::unordered_map<std::string, std::vector<std::pair<std::string, std::string>>> characterProps_;
 
     // Debug state
     std::set<std::pair<std::string, uint32_t>> breakpoints_;

@@ -5,6 +5,8 @@ set(GENERATED_DIR "${CMAKE_SOURCE_DIR}/src/gyeol_core/include/generated")
 add_library(GyeolParser
     gyeol_parser.h
     gyeol_parser.cpp
+    gyeol_comp_analyzer.h
+    gyeol_comp_analyzer.cpp
 )
 
 target_include_directories(GyeolParser PUBLIC

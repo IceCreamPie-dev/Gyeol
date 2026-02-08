@@ -54,6 +54,11 @@ public:
     // Variable names
     PackedStringArray get_variable_names() const;
 
+    // Character API
+    String get_character_property(const String &character_id, const String &key) const;
+    PackedStringArray get_character_names() const;
+    String get_character_display_name(const String &character_id) const;
+
     // RNG seed (deterministic testing)
     void set_seed(int seed);
 };

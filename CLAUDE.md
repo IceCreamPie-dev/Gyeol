@@ -61,13 +61,15 @@ src/
       gyeol_runner.cpp   # Runner VM 구현 (step, choose, 변수, 조건, 콜스택)
       test_main.cpp      # 콘솔 인터랙티브 플레이어
   gyeol_compiler/        # Compiler: .gyeol 텍스트 → .gyb 바이너리
-    compiler_main.cpp    # CLI 엔트리포인트
+    compiler_main.cpp    # CLI 엔트리포인트 (--analyze, -O 플래그)
     gyeol_parser.h       # Parser 클래스 API
     gyeol_parser.cpp     # Line-by-line 파서 구현
-  tests/                 # Google Test 유닛 테스트 (233 tests)
+    gyeol_comp_analyzer.h    # 컴파일러 분석기/최적화 API
+    gyeol_comp_analyzer.cpp  # 분석/최적화 구현 (도달성, 미사용 변수, 데드코드, 상수 폴딩)
+  tests/                 # Google Test 유닛 테스트 (309 tests)
     test_helpers.h       # 테스트 유틸리티 (compileScript, startRunner, compileMultiFileScript)
-    test_parser.cpp      # Parser 테스트 (77 cases)
-    test_runner.cpp      # Runner VM 테스트 (96 cases)
+    test_parser.cpp      # Parser 테스트 (77 cases + 7 character + 10 analyzer)
+    test_runner.cpp      # Runner VM 테스트 (96 cases + 4 character)
     test_story.cpp       # Story loader 테스트 (4 cases)
     test_saveload.cpp    # Save/Load 라운드트립 테스트 (13 cases)
   gyeol_lsp/             # Language Server Protocol 서버
@@ -148,6 +150,7 @@ demo/
   - Save/Load: `saveState(filepath)` / `loadState(filepath)` — `.gys` FlatBuffers 바이너리
   - 랜덤 분기: `random:` 블록 → 가중치 기반 확률 분기, `std::mt19937` RNG, `setSeed()` 결정적 테스트
   - Variable API: `getVariable()`, `setVariable()`, `hasVariable()`, `getVariableNames()`
+  - Character API: `getCharacterProperty(id, key)`, `getCharacterNames()`, `getCharacterDisplayName(id)` — 캐릭터 메타데이터 조회
   - Locale API: `loadLocale(csvPath)`, `clearLocale()`, `getLocale()` — CSV 기반 다국어 오버레이
 - **Parser** — Ren'Py 스타일 순수 C++ line-by-line 파서, 외부 의존성 없음
   - 멀티 파일 Import: `import "common.gyeol"` → 여러 파일을 하나의 .gyb로 병합 컴파일
@@ -160,7 +163,20 @@ demo/
   - 태그 시스템: 대사 뒤 복수 `#key:value` 태그 → `Line.tags:[Tag]` 배열 저장, `#voice:` 하위 호환
   - voice_asset_id: 대사 뒤 `#voice:파일명` 태그로 보이스 에셋 연결 (하위 호환)
   - elif 체인: `if`/`elif`/`else` → 순차 Condition + Jump 변환 (스키마/런너 변경 없음)
-- **Compiler CLI** — `GyeolCompiler <input> [-o output] [--export-strings csv]`, `-h`/`--help`, `--version`, 다중 에러 출력
+  - 캐릭터 정의 블록: `character id:` + 속성 → `CharacterDef` (하위 호환, 미정의 캐릭터 경고)
+  - 경고 시스템: `getWarnings()`, `hasWarnings()` — 에러와 분리된 경고 수집
+- **Compiler CLI** — `GyeolCompiler <input> [-o output] [--export-strings csv] [--analyze [file]] [-O]`
+  - `--analyze [file]`: 분석 리포트 출력 (도달성, 미사용 변수, 데드코드, 상수 폴딩 가능)
+  - `-O`: 최적화 적용 (상수 폴딩, 데드 인스트럭션 제거)
+  - 경고 출력: Parser 경고 (미정의 캐릭터 등)
+- **CompilerAnalyzer** — 정적 분석 + 최적화 패스 (parse 후 compile 전)
+  - 도달 가능 노드 분석 (BFS): start_node → Jump/Choice/Condition/Random/CallWithReturn 추적
+  - 미사용 변수 탐지: write-only 변수 (SetVar/global_vars vs Expression/보간 참조)
+  - 데드 인스트럭션 탐지: 무조건 Jump/Return 뒤 코드
+  - 상수 폴딩: int 리터럴+산술만 구성된 SetVar Expression → 리터럴 치환
+  - `analyze(StoryT)` → `AnalysisReport` (메트릭 + 이슈 목록)
+  - `optimize(StoryT)` → 최적화 적용 횟수 (상수 폴딩 + 데드코드 제거)
+  - `printReport()` → 포맷된 리포트 출력
 - **LSP Server** — JSON-RPC over stdin/stdout, VS Code 연동
   - Diagnostics: Parser 에러 → 실시간 진단 (textDocument/publishDiagnostics)
   - Completion: 키워드, label, 변수, 내장 함수 자동완성
@@ -183,12 +199,19 @@ demo/
   - `load_locale(path)` / `clear_locale()` / `get_locale()` — 다국어 로케일 오버레이
   - `get_visit_count(node_name)` / `has_visited(node_name)` — 노드 방문 횟수 조회
   - `get_variable_names()` — 모든 변수 이름 반환 (PackedStringArray)
+  - `get_character_property(id, key)` / `get_character_names()` / `get_character_display_name(id)` — 캐릭터 메타데이터
   - `set_seed(seed)` — RNG 시드 설정 (결정적 테스트용)
 
 ## .gyeol 스크립트 문법
 
 ```
 import "common.gyeol"               # Import (다른 .gyeol 파일 병합, 순환 감지)
+
+character 캐릭터ID:                   # 캐릭터 정의 블록 (label 앞에 선언)
+    name: "표시 이름"                # key: "value" 속성 (Tag 재사용)
+    color: "#FF0000"                # 임의 속성 지원
+    voice: "hero_voice"             # voice, color, name 등 자유 정의
+
 $ 전역변수 = 값                     # Global variable (label 앞에 선언)
 
 label 노드이름:                     # 노드 선언 (메인 파일의 첫 label = start_node)
@@ -236,7 +259,8 @@ label 함수(a, b):                   # 함수 선언 (매개변수 바인딩, �
 
 | Type | Purpose |
 |------|---------|
-| `Story` | Root object — version, string_pool, line_ids, global_vars, nodes, start_node_name |
+| `Story` | Root object — version, string_pool, line_ids, global_vars, nodes, start_node_name, characters |
+| `CharacterDef` | 캐릭터 정의 — name_id (String Pool), properties:[Tag] (메타데이터) |
 | `Node` | 스토리 단위 (= Ren'Py Label, Ink Knot) — name + instructions + param_ids |
 | `Instruction` | OpData union wrapper |
 | `Tag` | 메타데이터 태그 — key_id, value_id (String Pool Index) |
@@ -274,11 +298,11 @@ label 함수(a, b):                   # 함수 선언 (매개변수 바인딩, �
 
 ## Testing
 
-Google Test v1.14.0 기반 자동화 테스트 (284 tests):
+Google Test v1.14.0 기반 자동화 테스트 (339 tests):
 
 ```bash
 # 유닛 테스트 실행
-./build/src/tests/GyeolTests          # Core + Parser + Runner (254 tests)
+./build/src/tests/GyeolTests          # Core + Parser + Runner (309 tests)
 ./build/src/tests/GyeolLSPTests       # LSP Analyzer + Server (30 tests)
 
 # CTest로 실행
@@ -287,11 +311,14 @@ cd build && ctest --output-on-failure
 
 테스트 범위:
 - **ParserTest** (83): 문법 요소별 파싱, 에스케이프, String Pool, voice_asset, 태그 시스템, global_vars, jump 검증, 표현식, 조건 표현식, 논리 연산자, elif 체인, random 블록, Line ID, Import (병합/다중파일/global vars/string pool공유/start_node/순서/중첩), Return (리터럴/변수/표현식/문자열/bool/bare), CallWithReturn (파싱/검증), Function Parameters (label params/call args/empty parens/expression args/single param), Visit Count (표현식/조건/맨문자/산술조합)
+- **ParserCharacterTest** (7): 캐릭터 정의 블록 (기본/다중/속성없음/하위호환/중복에러/미정의경고/global_vars조합)
 - **ParserErrorTest** (25): 에러 케이스, 에러 복구, 다중 에러 수집, 잘못된 jump/choice/condition/random 타겟, elif/else 검증, Import (순환감지/자기참조/파일없음/중복label/경로오류), Return (label밖/잘못된타겟/잘못된표현식), Function Parameters (중복param/unclosed paren/jump args/empty arg)
 - **RunnerTest** (106): VM 실행 흐름, 선택지, Jump/Call, 변수/조건, Command, 변수 API, 산술 표현식, 문자열 보간, 인라인 조건 텍스트, 태그 노출, 조건 표현식, 논리 연산자, elif 체인, random 분기, 로케일 오버레이/폴백/보간/클리어, Import 통합 (노드 jump/global vars), CallWithReturn (리터럴/변수/표현식/문자열/float/bool), Return (bare/implicit/no-frame), 중첩 call return, 기존 call 호환, Function Parameters (단일/다중 param, 로컬 스코프, 전역 섀도잉, 표현식 인자, return+params, 중첩, 기본값, 하위 호환), Visit Count (기본/미방문/bool/표현식/조건분기/비교/보간/인라인조건/API)
+- **RunnerCharacterTest** (4): 캐릭터 런타임 API (속성조회/이름목록/표시이름/미정의시빈결과)
 - **DebugAPITest** (21): Breakpoint 관리 (추가/삭제/클리어/조회), Step mode 제어, Location 정보 (노드/PC/타입), Call stack 조회, Node 목록/instruction 수/상세 정보, Instruction 타입별 info (Line/Choice/Jump/Command/SetVar/Condition/Random/Return/CallWithReturn), Step mode 실행 흐름, Breakpoint hit/resume, 하위 호환 (디버그 미사용 시 동일 동작), 다른 노드 breakpoint
 - **StoryTest** (4): .gyb 로드/검증, 잘못된 파일 처리
-- **SaveLoadTest** (15): 라운드트립, 선택지/변수/콜스택 저장복원, 에러 케이스, CallWithReturn 프레임 저장복원, 하위 호환, Function Parameters (섀도 변수 포함 프레임 저장복원, 하위 호환), Visit Count (방문횟수 저장복원, 하위 호환)
+- **SaveLoadTest** (20): 라운드트립, 선택지/변수/콜스택 저장복원, 에러 케이스, CallWithReturn 프레임 저장복원, 하위 호환, Function Parameters (섀도 변수 포함 프레임 저장복원, 하위 호환), Visit Count (방문횟수 저장복원, 하위 호환), List 변수 저장복원
+- **CompilerAnalyzerTest** (10): 도달 가능 노드 (전체도달/미도달), 미사용 변수 (탐지/미탐지), 데드 인스트럭션, 상수 폴딩 (탐지/최적화), 리포트 출력, Choice 도달성, 캐릭터 수
 - **AnalyzerTest** (13): Label 스캔 (이름/줄번호/파라미터), 변수 스캔 (전역/로컬/중복제거), Jump/Call/Choice 참조, 주석/빈 내용 무시, Parser 기반 진단 (유효/무효 스크립트)
 - **LspServerTest** (17): Initialize (capabilities), Shutdown/Exit, DidOpen/DidChange/DidClose 진단 게시, Completion (키워드/라벨/변수/내장함수), Go to Definition (라벨/변수), Hover (키워드/라벨/파라미터), Document Symbols, 알 수 없는 메서드 에러
 
@@ -300,6 +327,9 @@ cd build && ctest --output-on-failure
 ./build/src/gyeol_compiler/GyeolCompiler.exe test.gyeol           # .gyeol → story.gyb
 ./build/src/gyeol_compiler/GyeolCompiler.exe test.gyeol -o out.gyb # 출력 파일명 지정
 ./build/src/gyeol_compiler/GyeolCompiler.exe test.gyeol --export-strings strings.csv  # 번역 CSV 추출
+./build/src/gyeol_compiler/GyeolCompiler.exe test.gyeol --analyze  # 분석 리포트 (stdout)
+./build/src/gyeol_compiler/GyeolCompiler.exe test.gyeol --analyze report.txt  # 분석 리포트 (파일)
+./build/src/gyeol_compiler/GyeolCompiler.exe test.gyeol -O -o optimized.gyb   # 최적화 적용
 ./build/src/gyeol_core/GyeolTest.exe story.gyb                     # 콘솔에서 플레이
 ```
 
