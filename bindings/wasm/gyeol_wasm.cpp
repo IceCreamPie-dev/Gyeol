@@ -211,6 +211,78 @@ public:
     // RNG seed
     void setSeed(unsigned int seed) { runner_.setSeed(seed); }
 
+    // --- Graph Data API (비주얼 에디터용) ---
+
+    // 현재 노드 이름 반환
+    std::string getCurrentNodeName() const { return runner_.getCurrentNodeName(); }
+
+    // 특정 노드에서 시작
+    bool startFromNode(const std::string& nodeName) {
+        if (compiledBuffer_.empty()) return false;
+        runnerBuffer_ = compiledBuffer_;
+        return runner_.startAtNode(runnerBuffer_.data(), runnerBuffer_.size(), nodeName);
+    }
+
+    // 전체 그래프 데이터 반환
+    val getGraphData() {
+        auto data = runner_.getGraphData();
+        val result = val::object();
+        result.set("startNode", data.startNode);
+
+        // nodes
+        val nodes = val::array();
+        for (const auto& gn : data.nodes) {
+            val node = val::object();
+            node.set("name", gn.name);
+            node.set("instructionCount", gn.instructionCount);
+
+            val params = val::array();
+            for (const auto& p : gn.params) params.call<void>("push", p);
+            node.set("params", params);
+
+            val tags = val::array();
+            for (const auto& t : gn.tags) {
+                val tag = val::object();
+                tag.set("key", t.first);
+                tag.set("value", t.second);
+                tags.call<void>("push", tag);
+            }
+            node.set("tags", tags);
+
+            // summary
+            val summary = val::object();
+            summary.set("lineCount", gn.summary.lineCount);
+            summary.set("choiceCount", gn.summary.choiceCount);
+            summary.set("hasJump", gn.summary.hasJump);
+            summary.set("hasCondition", gn.summary.hasCondition);
+            summary.set("hasRandom", gn.summary.hasRandom);
+            summary.set("hasCommand", gn.summary.hasCommand);
+            summary.set("firstLine", gn.summary.firstLine);
+
+            val chars = val::array();
+            for (const auto& c : gn.summary.characters) chars.call<void>("push", c);
+            summary.set("characters", chars);
+
+            node.set("summary", summary);
+            nodes.call<void>("push", node);
+        }
+        result.set("nodes", nodes);
+
+        // edges
+        val edges = val::array();
+        for (const auto& ge : data.edges) {
+            val edge = val::object();
+            edge.set("from", ge.from);
+            edge.set("to", ge.to);
+            edge.set("type", ge.type);
+            edge.set("label", ge.label);
+            edges.call<void>("push", edge);
+        }
+        result.set("edges", edges);
+
+        return result;
+    }
+
 private:
     Runner runner_;
     std::vector<uint8_t> compiledBuffer_;  // 마지막 컴파일 결과
@@ -251,5 +323,9 @@ EMSCRIPTEN_BINDINGS(gyeol) {
         .function("hasNodeTag", &GyeolEngine::hasNodeTag)
         // RNG
         .function("setSeed", &GyeolEngine::setSeed)
+        // Graph (비주얼 에디터)
+        .function("getCurrentNodeName", &GyeolEngine::getCurrentNodeName)
+        .function("startFromNode", &GyeolEngine::startFromNode)
+        .function("getGraphData", &GyeolEngine::getGraphData)
         ;
 }

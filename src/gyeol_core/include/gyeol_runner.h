@@ -61,6 +61,7 @@ struct StepResult {
 class Runner {
 public:
     bool start(const uint8_t* buffer, size_t size);
+    bool startAtNode(const uint8_t* buffer, size_t size, const std::string& nodeName);
     StepResult step();
     void choose(int index);
     bool isFinished() const;
@@ -97,6 +98,41 @@ public:
     std::string getNodeTag(const std::string& nodeName, const std::string& key) const;
     std::vector<std::pair<std::string, std::string>> getNodeTags(const std::string& nodeName) const;
     bool hasNodeTag(const std::string& nodeName, const std::string& key) const;
+
+    // --- Graph Data API (비주얼 에디터용) ---
+    struct GraphNodeSummary {
+        int lineCount = 0;
+        int choiceCount = 0;
+        bool hasJump = false;
+        bool hasCondition = false;
+        bool hasRandom = false;
+        bool hasCommand = false;
+        std::vector<std::string> characters;
+        std::string firstLine;
+    };
+
+    struct GraphNode {
+        std::string name;
+        int instructionCount = 0;
+        std::vector<std::string> params;
+        std::vector<std::pair<std::string, std::string>> tags;
+        GraphNodeSummary summary;
+    };
+
+    struct GraphEdge {
+        std::string from;
+        std::string to;
+        std::string type;   // "jump", "call", "choice", "condition_true", "condition_false", "random", "call_return"
+        std::string label;
+    };
+
+    struct GraphData {
+        std::string startNode;
+        std::vector<GraphNode> nodes;
+        std::vector<GraphEdge> edges;
+    };
+
+    GraphData getGraphData() const;
 
     // --- Debug API ---
     struct DebugLocation {

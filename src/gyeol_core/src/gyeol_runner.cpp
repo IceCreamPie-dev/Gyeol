@@ -718,6 +718,15 @@ bool Runner::start(const uint8_t* buffer, size_t size) {
     return !finished_;
 }
 
+bool Runner::startAtNode(const uint8_t* buffer, size_t size, const std::string& nodeName) {
+    if (!start(buffer, size)) return false;
+    // start()가 이미 start_node로 이동 + visitCount++
+    // 지정된 노드로 재점프 (visitCount 리셋 후 다시 증가)
+    visitCounts_.clear();
+    jumpToNode(nodeName.c_str());
+    return !finished_;
+}
+
 // --- step ---
 StepResult Runner::step() {
     StepResult result;
@@ -1901,6 +1910,150 @@ std::string Runner::getInstructionInfo(const std::string& nodeName, uint32_t pc)
         default:
             return "Unknown";
     }
+}
+
+// --- Graph Data (비주얼 에디터용) ---
+Runner::GraphData Runner::getGraphData() const {
+    GraphData data;
+    auto* story = asStory(story_);
+    if (!story) return data;
+
+    if (story->start_node_name()) {
+        data.startNode = story->start_node_name()->c_str();
+    }
+
+    auto* nodes = story->nodes();
+    if (!nodes) return data;
+
+    for (flatbuffers::uoffset_t ni = 0; ni < nodes->size(); ++ni) {
+        auto* node = nodes->Get(ni);
+        if (!node->name()) continue;
+
+        GraphNode gn;
+        gn.name = node->name()->c_str();
+        gn.instructionCount = node->lines() ? static_cast<int>(node->lines()->size()) : 0;
+
+        // params
+        if (node->param_ids()) {
+            for (flatbuffers::uoffset_t pi = 0; pi < node->param_ids()->size(); ++pi) {
+                gn.params.push_back(poolStr(node->param_ids()->Get(pi)));
+            }
+        }
+
+        // tags
+        if (node->tags()) {
+            for (flatbuffers::uoffset_t ti = 0; ti < node->tags()->size(); ++ti) {
+                auto* tag = node->tags()->Get(ti);
+                gn.tags.emplace_back(poolStr(tag->key_id()), poolStr(tag->value_id()));
+            }
+        }
+
+        // Walk instructions for summary + edges
+        std::set<std::string> charSet;
+        if (node->lines()) {
+            for (flatbuffers::uoffset_t li = 0; li < node->lines()->size(); ++li) {
+                auto* instr = node->lines()->Get(li);
+                switch (instr->data_type()) {
+                case OpData::Line: {
+                    auto* line = instr->data_as_Line();
+                    gn.summary.lineCount++;
+                    if (line->character_id() >= 0) {
+                        charSet.insert(poolStr(line->character_id()));
+                    }
+                    if (gn.summary.firstLine.empty()) {
+                        std::string txt = poolStr(line->text_id());
+                        if (txt.length() > 40) txt = txt.substr(0, 40) + "...";
+                        if (line->character_id() >= 0) {
+                            gn.summary.firstLine = std::string(poolStr(line->character_id())) + ": \"" + txt + "\"";
+                        } else {
+                            gn.summary.firstLine = "\"" + txt + "\"";
+                        }
+                    }
+                    break;
+                }
+                case OpData::Choice: {
+                    auto* choice = instr->data_as_Choice();
+                    gn.summary.choiceCount++;
+                    GraphEdge edge;
+                    edge.from = gn.name;
+                    edge.to = poolStr(choice->target_node_name_id());
+                    edge.type = "choice";
+                    std::string txt = poolStr(choice->text_id());
+                    if (txt.length() > 30) txt = txt.substr(0, 30) + "...";
+                    edge.label = txt;
+                    data.edges.push_back(std::move(edge));
+                    break;
+                }
+                case OpData::Jump: {
+                    auto* jump = instr->data_as_Jump();
+                    gn.summary.hasJump = true;
+                    GraphEdge edge;
+                    edge.from = gn.name;
+                    edge.to = poolStr(jump->target_node_name_id());
+                    edge.type = jump->is_call() ? "call" : "jump";
+                    data.edges.push_back(std::move(edge));
+                    break;
+                }
+                case OpData::Command:
+                    gn.summary.hasCommand = true;
+                    break;
+                case OpData::Condition: {
+                    auto* cond = instr->data_as_Condition();
+                    gn.summary.hasCondition = true;
+                    if (cond->true_jump_node_id() >= 0) {
+                        GraphEdge edge;
+                        edge.from = gn.name;
+                        edge.to = poolStr(cond->true_jump_node_id());
+                        edge.type = "condition_true";
+                        data.edges.push_back(std::move(edge));
+                    }
+                    if (cond->false_jump_node_id() >= 0) {
+                        GraphEdge edge;
+                        edge.from = gn.name;
+                        edge.to = poolStr(cond->false_jump_node_id());
+                        edge.type = "condition_false";
+                        edge.label = "else";
+                        data.edges.push_back(std::move(edge));
+                    }
+                    break;
+                }
+                case OpData::Random: {
+                    auto* random = instr->data_as_Random();
+                    gn.summary.hasRandom = true;
+                    if (random->branches()) {
+                        for (flatbuffers::uoffset_t bi = 0; bi < random->branches()->size(); ++bi) {
+                            auto* branch = random->branches()->Get(bi);
+                            GraphEdge edge;
+                            edge.from = gn.name;
+                            edge.to = poolStr(branch->target_node_name_id());
+                            edge.type = "random";
+                            edge.label = std::to_string(branch->weight());
+                            data.edges.push_back(std::move(edge));
+                        }
+                    }
+                    break;
+                }
+                case OpData::CallWithReturn: {
+                    auto* cwr = instr->data_as_CallWithReturn();
+                    GraphEdge edge;
+                    edge.from = gn.name;
+                    edge.to = poolStr(cwr->target_node_name_id());
+                    edge.type = "call_return";
+                    edge.label = "$ " + std::string(poolStr(cwr->return_var_name_id()));
+                    data.edges.push_back(std::move(edge));
+                    break;
+                }
+                default:
+                    break;
+                }
+            }
+        }
+
+        gn.summary.characters.assign(charSet.begin(), charSet.end());
+        data.nodes.push_back(std::move(gn));
+    }
+
+    return data;
 }
 
 } // namespace Gyeol

@@ -56,10 +56,12 @@ jobs:
 
       - name: Copy Playground to site
         run: |
-          mkdir -p site/playground
+          mkdir -p site/playground/js site/playground/css
           cp bindings/wasm/build/dist/gyeol.js site/playground/
           cp bindings/wasm/build/dist/gyeol.wasm site/playground/
           cp bindings/wasm/web/index.html site/playground/
+          cp bindings/wasm/web/js/*.js site/playground/js/
+          cp bindings/wasm/web/css/*.css site/playground/css/
 
       - uses: actions/upload-pages-artifact@v3
         with:
