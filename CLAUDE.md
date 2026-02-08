@@ -13,6 +13,7 @@ Ren'Py의 연출력 + Ink의 구조적 강점 + Yarn의 유연함을 통합한 C
 - ~~**Step 3:** 텍스트 파서 — .gyeol 스크립트 → .gyb 컴파일 (순수 C++ 파서)~~ (완료)
 - ~~**Step 4:** Godot 연동 — GDExtension, StoryPlayer 노드, Signal 기반 UI 연결~~ (완료)
 - ~~**Step 5:** 개발 도구 — LSP 서버 + CLI 디버거 + VS Code 확장~~ (완료)
+- ~~**Step 6:** 웹 지원 — WASM 빌드 + Playground 웹 데모 + 브라우저 컴파일러~~ (완료)
 
 ## Build System
 
@@ -32,6 +33,12 @@ cmake --build build
 # GDExtension (SCons)
 cd bindings/godot_extension
 scons platform=windows target=template_debug
+
+# WebAssembly (Emscripten)
+cd bindings/wasm
+emcmake cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+# 출력: build/dist/gyeol.js + gyeol.wasm
 ```
 
 ### Build Targets
@@ -44,6 +51,7 @@ scons platform=windows target=template_debug
 - `GyeolLSP` — Language Server Protocol 서버 (CMake)
 - `GyeolDebugger` — CLI 인터랙티브 디버거 (CMake)
 - `libgyeol.dll` — Godot GDExtension (SCons)
+- `gyeol.js` + `gyeol.wasm` — WebAssembly 빌드 (Emscripten)
 
 ## Project Structure
 
@@ -87,7 +95,11 @@ bindings/
       register_types.h/cpp      # GDExtension 엔트리포인트
     SConstruct
   unity_plugin/          # Unity Native Plugin (planned)
-  wasm/                  # WebAssembly (planned)
+  wasm/                  # WebAssembly (Emscripten)
+    CMakeLists.txt       # WASM 전용 CMake 빌드
+    gyeol_wasm.cpp       # Embind 바인딩 (GyeolRunner + GyeolCompiler)
+    web/
+      index.html         # Playground 웹 데모 (에디터 + 플레이어)
 editors/
   vscode/                # VS Code 확장 (gyeol-lang)
     package.json         # 확장 설정 (LSP, 디버거, 문법 하이라이팅)
@@ -164,6 +176,7 @@ demo/
     - `parse()` → `parseFile()` 재귀 구조: 순환 감지, 상대 경로 해석, 중복 label 에러
     - `std::filesystem` 활용, `importedFiles_` set으로 절대 경로 기반 순환 방지
     - `start_node_name`은 메인 파일의 첫 label만 설정 (`isMainFile_` 플래그)
+  - 메모리 기반 API (WASM용): `parseString(source)` → 문자열에서 직접 파싱, `compileToBuffer()` → `std::vector<uint8_t>` 반환
   - 에러 복구: 첫 에러에서 멈추지 않고 모든 에러 수집 (`getErrors()`)
   - Jump target 검증: 파싱 후 모든 jump/choice/condition 타겟 유효성 검사 (import 포함)
   - global_vars: label 앞 `$ var = val` 선언 → Story.global_vars에 저장
@@ -211,6 +224,12 @@ demo/
   - `get_character_property(id, key)` / `get_character_names()` / `get_character_display_name(id)` — 캐릭터 메타데이터
   - `get_node_tag(name, key)` / `get_node_tags(name)` / `has_node_tag(name, key)` — 노드 메타데이터 태그
   - `set_seed(seed)` — RNG 시드 설정 (결정적 테스트용)
+- **WebAssembly** — Emscripten Embind 바인딩, 브라우저에서 컴파일+실행
+  - `GyeolRunner` — loadFromBuffer/step/choose/isFinished + Variable/Visit/Character/NodeTag API
+  - `GyeolCompiler` — compile(source) → {success, data, errors, warnings}
+  - step() 반환: JS 객체 {type: "LINE"|"CHOICES"|"COMMAND"|"END", ...}
+  - Playground 웹 데모: 에디터 + 플레이어 (bindings/wasm/web/index.html)
+  - GitHub Pages 배포: `/playground/` 경로
 
 ## .gyeol 스크립트 문법
 
@@ -314,6 +333,7 @@ label 함수(a, b) #pure:             # 함수 + 메타데이터 태그
 - **Google Test** v1.14.0 (auto-fetched via CMake FetchContent)
 - **nlohmann/json** v3.11.3 (auto-fetched via CMake FetchContent, LSP only)
 - **godot-cpp** 4.3 branch (git submodule at `bindings/godot_extension/godot-cpp`)
+- **Emscripten** 3.1.51+ (WASM 빌드, GitHub Actions에서 자동 설치)
 
 ## Testing
 

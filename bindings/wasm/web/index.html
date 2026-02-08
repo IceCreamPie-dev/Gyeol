@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gyeol Playground</title>
+<style>
+:root {
+    --bg: #1e1e2e;
+    --surface: #181825;
+    --overlay: #313244;
+    --text: #cdd6f4;
+    --subtext: #a6adc8;
+    --blue: #89b4fa;
+    --green: #a6e3a1;
+    --red: #f38ba8;
+    --yellow: #f9e2af;
+    --mauve: #cba6f7;
+    --teal: #94e2d5;
+    --peach: #fab387;
+    --border: #45475a;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Header */
+header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--blue);
+}
+
+header h1 span {
+    color: var(--subtext);
+    font-weight: 400;
+    font-size: 13px;
+    margin-left: 8px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.header-actions select {
+    background: var(--overlay);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+/* Main layout */
+main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+/* Editor panel */
+.editor-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    min-width: 0;
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.panel-header h2 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--subtext);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.btn {
+    padding: 5px 14px;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+.btn:hover { opacity: 0.85; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+
+.btn-primary {
+    background: var(--blue);
+    color: var(--bg);
+}
+
+.btn-success {
+    background: var(--green);
+    color: var(--bg);
+}
+
+.btn-secondary {
+    background: var(--overlay);
+    color: var(--text);
+}
+
+#editor {
+    flex: 1;
+    width: 100%;
+    background: var(--bg);
+    color: var(--text);
+    border: none;
+    resize: none;
+    padding: 12px;
+    font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    tab-size: 4;
+    outline: none;
+    overflow: auto;
+}
+
+#editor::placeholder {
+    color: var(--subtext);
+}
+
+/* Error bar */
+.error-bar {
+    padding: 6px 12px;
+    font-size: 12px;
+    font-family: monospace;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    max-height: 100px;
+    overflow-y: auto;
+    flex-shrink: 0;
+    display: none;
+}
+
+.error-bar.visible { display: block; }
+
+.error-bar .error { color: var(--red); }
+.error-bar .warning { color: var(--yellow); }
+.error-bar .info { color: var(--teal); }
+
+/* Player panel */
+.player-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.dialogue-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.dialogue-line {
+    padding: 4px 0;
+    line-height: 1.5;
+    animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.dialogue-line .character {
+    font-weight: 600;
+    color: var(--mauve);
+    margin-right: 6px;
+}
+
+.dialogue-line .text {
+    color: var(--text);
+}
+
+.dialogue-line.narration .text {
+    color: var(--subtext);
+    font-style: italic;
+}
+
+.dialogue-line.command {
+    color: var(--teal);
+    font-family: monospace;
+    font-size: 12px;
+    opacity: 0.7;
+}
+
+.dialogue-line.system {
+    color: var(--peach);
+    font-size: 12px;
+    text-align: center;
+    padding: 8px 0;
+}
+
+.dialogue-line.end-marker {
+    color: var(--subtext);
+    text-align: center;
+    padding: 16px 0;
+    font-weight: 600;
+}
+
+/* Choices */
+.choices-container {
+    padding: 8px 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.choice-btn {
+    width: 100%;
+    text-align: left;
+    padding: 10px 16px;
+    background: var(--overlay);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.choice-btn:hover {
+    background: var(--border);
+    border-color: var(--blue);
+}
+
+.choice-btn .choice-index {
+    color: var(--blue);
+    font-weight: 600;
+    margin-right: 8px;
+}
+
+/* Player controls */
+.player-controls {
+    padding: 8px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* Status bar */
+footer {
+    padding: 4px 12px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--subtext);
+    display: flex;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+
+/* Loading overlay */
+.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--subtext);
+    font-size: 14px;
+}
+
+.loading .spinner {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 8px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    main { flex-direction: column; }
+    .editor-panel { border-right: none; border-bottom: 1px solid var(--border); max-height: 40vh; }
+}
+</style>
+</head>
+<body>
+
+<header>
+    <h1>Gyeol Playground <span>Interactive Story Engine</span></h1>
+    <div class="header-actions">
+        <select id="examples">
+            <option value="">Load Example...</option>
+            <option value="hello">Hello World</option>
+            <option value="adventure">Adventure</option>
+            <option value="variables">Variables & Conditions</option>
+            <option value="characters">Characters</option>
+            <option value="functions">Functions</option>
+        </select>
+    </div>
+</header>
+
+<main>
+    <!-- Editor -->
+    <div class="editor-panel">
+        <div class="panel-header">
+            <h2>Script Editor</h2>
+            <div style="display:flex; gap:6px;">
+                <button id="btn-compile" class="btn btn-primary" disabled>Compile & Run</button>
+            </div>
+        </div>
+        <textarea id="editor" spellcheck="false" placeholder="Write your Gyeol script here..."></textarea>
+        <div id="error-bar" class="error-bar"></div>
+    </div>
+
+    <!-- Player -->
+    <div class="player-panel">
+        <div class="panel-header">
+            <h2>Story Player</h2>
+            <button id="btn-restart" class="btn btn-secondary" disabled>Restart</button>
+        </div>
+        <div id="dialogue-area" class="dialogue-area">
+            <div class="loading" id="loading">
+                <span class="spinner"></span>
+                Loading Gyeol Engine...
+            </div>
+        </div>
+        <div id="choices-container" class="choices-container"></div>
+        <div class="player-controls">
+            <button id="btn-next" class="btn btn-success" disabled>Next &rarr;</button>
+        </div>
+    </div>
+</main>
+
+<footer>
+    <span id="status-left">Initializing...</span>
+    <span id="status-right">Gyeol Engine v0.1.0</span>
+</footer>
+
+<script>
+// ============================================================
+// Example scripts
+// ============================================================
+const EXAMPLES = {
+    hello: `label start:
+    hero "Hey there! I'm Gyeol."
+    hero "Want to go on an adventure?"
+    menu:
+        "Sure, let's go!" -> accept
+        "No thanks." -> decline
+
+label accept:
+    hero "Great! Let's head out together!"
+
+label decline:
+    hero "Okay... maybe next time."`,
+
+    adventure: `$ courage = 0
+
+label start:
+    "You wake up in a dark forest."
+    hero "Where am I...?"
+    menu:
+        "Look around." -> explore
+        "Run away." -> flee
+
+label explore:
+    hero "I'll be brave and explore."
+    $ courage = 1
+    jump encounter
+
+label flee:
+    hero "Too scary!"
+    jump encounter
+
+label encounter:
+    "A giant wolf appears!"
+    if courage == 1 -> brave else coward
+
+label brave:
+    hero "I won't back down!"
+    "The wolf, impressed by your courage, steps aside."
+
+label coward:
+    hero "Help! Someone save me!"
+    "The wolf takes pity and walks away."`,
+
+    variables: `$ hp = 100
+$ name = "Hero"
+$ has_key = false
+
+label start:
+    "Welcome, {name}! Your HP is {hp}."
+    menu:
+        "Find the key" -> find_key
+        "Go to the door" -> door
+
+label find_key:
+    "{name} searches the room..."
+    $ has_key = true
+    $ hp = hp - 10
+    "Found a rusty key! (HP: {hp})"
+    jump door
+
+label door:
+    if has_key == true -> unlock else locked
+
+label unlock:
+    "{name} unlocks the door with the key!"
+    "Freedom at last!"
+
+label locked:
+    "The door is locked. You need a key."
+    menu:
+        "Search for a key" -> find_key`,
+
+    characters: `character hero:
+    displayName: "Aria"
+    color: "#4CAF50"
+
+character villain:
+    displayName: "Dark Lord"
+    color: "#F44336"
+
+character npc:
+    displayName: "Old Sage"
+    color: "#2196F3"
+
+label start:
+    npc "Brave one, the Dark Lord threatens our land."
+    hero "I will stop him!"
+    villain "You dare challenge me?"
+    menu:
+        "Fight!" -> battle
+        "Negotiate" -> talk
+
+label battle:
+    hero "For the people!"
+    villain "Foolish mortal!"
+    "An epic battle ensues..."
+    hero "I... I did it!"
+
+label talk:
+    hero "There must be another way."
+    villain "Hmph. Perhaps you're wiser than I thought."
+    npc "Peace is the greatest victory."`,
+
+    functions: `label start:
+    $ greeting = call greet("Hero", 100)
+    hero "{greeting}"
+    $ farewell = call greet("Traveler", 30)
+    hero "{farewell}"
+
+label greet(name, hp):
+    $ msg = "{if hp > 50}Welcome, strong {name}!{else}Rest well, {name}.{endif}"
+    return msg`
+};
+
+// ============================================================
+// App State
+// ============================================================
+let Module = null;
+let runner = null;
+let compiler = null;
+let isPlaying = false;
+let waitingForChoice = false;
+
+const editor = document.getElementById('editor');
+const dialogueArea = document.getElementById('dialogue-area');
+const choicesContainer = document.getElementById('choices-container');
+const errorBar = document.getElementById('error-bar');
+const btnCompile = document.getElementById('btn-compile');
+const btnNext = document.getElementById('btn-next');
+const btnRestart = document.getElementById('btn-restart');
+const examplesSelect = document.getElementById('examples');
+const statusLeft = document.getElementById('status-left');
+const loadingEl = document.getElementById('loading');
+
+// ============================================================
+// Initialize WASM
+// ============================================================
+async function initWasm() {
+    try {
+        Module = await createGyeolModule();
+        compiler = new Module.GyeolCompiler();
+        btnCompile.disabled = false;
+        loadingEl.innerHTML = '<span style="color:var(--subtext)">Write a script and click "Compile & Run" to start.</span>';
+        statusLeft.textContent = 'Ready';
+
+        // Load default example
+        editor.value = EXAMPLES.hello;
+    } catch (e) {
+        loadingEl.innerHTML = `<span style="color:var(--red)">Failed to load WASM: ${e.message}</span>`;
+        statusLeft.textContent = 'Error loading WASM';
+    }
+}
+
+// ============================================================
+// Compile & Run
+// ============================================================
+function compileAndRun() {
+    const source = editor.value;
+    if (!source.trim()) return;
+
+    // Reset
+    clearError();
+    clearDialogue();
+    clearChoices();
+    isPlaying = false;
+    waitingForChoice = false;
+
+    // Compile
+    const result = compiler.compile(source);
+
+    if (!result.success) {
+        showErrors(result.errors);
+        statusLeft.textContent = 'Compilation failed';
+        return;
+    }
+
+    // Show warnings
+    if (result.warnings && result.warnings.length > 0) {
+        showWarnings(result.warnings);
+    }
+
+    // Load into runner
+    if (runner) {
+        runner.delete();
+        runner = null;
+    }
+
+    runner = new Module.GyeolRunner();
+    const data = result.data;
+
+    if (!runner.loadFromBuffer(data)) {
+        showErrors(['Failed to load compiled story']);
+        statusLeft.textContent = 'Load failed';
+        return;
+    }
+
+    isPlaying = true;
+    btnNext.disabled = false;
+    btnRestart.disabled = false;
+    statusLeft.textContent = 'Playing...';
+
+    addSystemLine('Story started');
+
+    // Auto-advance first step
+    advanceStory();
+}
+
+// ============================================================
+// Story advancement
+// ============================================================
+function advanceStory() {
+    if (!runner || !isPlaying || waitingForChoice) return;
+
+    const result = runner.step();
+
+    switch (result.type) {
+        case 'LINE':
+            addDialogueLine(result.character, result.text, result.tags);
+            break;
+
+        case 'CHOICES':
+            waitingForChoice = true;
+            btnNext.disabled = true;
+            showChoices(result.choices);
+            return;
+
+        case 'COMMAND':
+            addCommandLine(result.commandType, result.params);
+            // Auto-advance after command
+            advanceStory();
+            return;
+
+        case 'END':
+            isPlaying = false;
+            btnNext.disabled = true;
+            addEndLine();
+            statusLeft.textContent = 'Story ended';
+            return;
+    }
+}
+
+function selectChoice(index) {
+    if (!runner || !waitingForChoice) return;
+
+    clearChoices();
+    waitingForChoice = false;
+    btnNext.disabled = false;
+
+    runner.choose(index);
+    advanceStory();
+}
+
+function restart() {
+    compileAndRun();
+}
+
+// ============================================================
+// UI helpers
+// ============================================================
+function addDialogueLine(character, text, tags) {
+    const div = document.createElement('div');
+    div.className = 'dialogue-line' + (character ? '' : ' narration');
+
+    if (character) {
+        const charSpan = document.createElement('span');
+        charSpan.className = 'character';
+        charSpan.textContent = `[${character}]`;
+        div.appendChild(charSpan);
+    }
+
+    const textSpan = document.createElement('span');
+    textSpan.className = 'text';
+    textSpan.textContent = text;
+    div.appendChild(textSpan);
+
+    // Show tags as subtle decorations
+    if (tags && tags.length > 0) {
+        const tagSpan = document.createElement('span');
+        tagSpan.style.cssText = 'color:var(--teal); font-size:11px; margin-left:8px; opacity:0.6;';
+        tagSpan.textContent = tags.map(t => `#${t.key}${t.value ? ':' + t.value : ''}`).join(' ');
+        div.appendChild(tagSpan);
+    }
+
+    dialogueArea.appendChild(div);
+    dialogueArea.scrollTop = dialogueArea.scrollHeight;
+}
+
+function addCommandLine(type, params) {
+    const div = document.createElement('div');
+    div.className = 'dialogue-line command';
+    div.textContent = `@ ${type} ${params.join(' ')}`;
+    dialogueArea.appendChild(div);
+    dialogueArea.scrollTop = dialogueArea.scrollHeight;
+}
+
+function addSystemLine(text) {
+    const div = document.createElement('div');
+    div.className = 'dialogue-line system';
+    div.textContent = text;
+    dialogueArea.appendChild(div);
+    dialogueArea.scrollTop = dialogueArea.scrollHeight;
+}
+
+function addEndLine() {
+    const div = document.createElement('div');
+    div.className = 'dialogue-line end-marker';
+    div.textContent = '--- END ---';
+    dialogueArea.appendChild(div);
+    dialogueArea.scrollTop = dialogueArea.scrollHeight;
+}
+
+function showChoices(choices) {
+    choicesContainer.innerHTML = '';
+    for (let i = 0; i < choices.length; i++) {
+        const btn = document.createElement('button');
+        btn.className = 'choice-btn';
+        btn.innerHTML = `<span class="choice-index">[${i + 1}]</span>${escapeHtml(choices[i].text)}`;
+        btn.addEventListener('click', () => selectChoice(choices[i].index));
+        choicesContainer.appendChild(btn);
+    }
+}
+
+function clearChoices() {
+    choicesContainer.innerHTML = '';
+}
+
+function clearDialogue() {
+    dialogueArea.innerHTML = '';
+}
+
+function showErrors(errors) {
+    errorBar.innerHTML = errors.map(e => `<div class="error">${escapeHtml(e)}</div>`).join('');
+    errorBar.classList.add('visible');
+}
+
+function showWarnings(warnings) {
+    const html = warnings.map(w => `<div class="warning">${escapeHtml(w)}</div>`).join('');
+    errorBar.innerHTML += html;
+    if (warnings.length > 0) errorBar.classList.add('visible');
+}
+
+function clearError() {
+    errorBar.innerHTML = '';
+    errorBar.classList.remove('visible');
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// ============================================================
+// Event handlers
+// ============================================================
+btnCompile.addEventListener('click', compileAndRun);
+btnNext.addEventListener('click', advanceStory);
+btnRestart.addEventListener('click', restart);
+
+examplesSelect.addEventListener('change', () => {
+    const key = examplesSelect.value;
+    if (key && EXAMPLES[key]) {
+        editor.value = EXAMPLES[key];
+        examplesSelect.value = '';
+    }
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+    // Ctrl+Enter: Compile & Run
+    if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        compileAndRun();
+    }
+    // Space or Enter: Next (when not in editor)
+    if ((e.key === ' ' || e.key === 'Enter') && document.activeElement !== editor && !waitingForChoice) {
+        e.preventDefault();
+        advanceStory();
+    }
+    // Number keys: Select choice
+    if (waitingForChoice && e.key >= '1' && e.key <= '9') {
+        const idx = parseInt(e.key) - 1;
+        const btns = choicesContainer.querySelectorAll('.choice-btn');
+        if (idx < btns.length) {
+            btns[idx].click();
+        }
+    }
+});
+
+// Tab key in editor: insert spaces
+editor.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = editor.selectionStart;
+        const end = editor.selectionEnd;
+        editor.value = editor.value.substring(0, start) + '    ' + editor.value.substring(end);
+        editor.selectionStart = editor.selectionEnd = start + 4;
+    }
+});
+
+// ============================================================
+// Init
+// ============================================================
+// initWasm is called after gyeol.js is loaded
+</script>
+<script src="gyeol.js" onload="initWasm()"></script>
+</body>
+</html>

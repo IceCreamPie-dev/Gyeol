@@ -4,6 +4,8 @@
 
 Gyeol is a high-performance interactive storytelling engine built in C++17. Write a single `.gyeol` script and play it on any game engine with zero modifications.
 
+[:material-play-circle: **Try the Playground**](../playground/){ .md-button .md-button--primary } — Write and run Gyeol scripts directly in your browser.
+
 ---
 
 ## Table of Contents

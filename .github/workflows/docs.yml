@@ -7,6 +7,10 @@ on:
       - 'docs/**'
       - 'mkdocs.yml'
       - 'tools/pygments-gyeol/**'
+      - 'bindings/wasm/**'
+      - 'src/gyeol_core/**'
+      - 'src/gyeol_compiler/**'
+      - 'schemas/**'
 
   workflow_dispatch:
 
@@ -25,6 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # --- MkDocs 문서 빌드 ---
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -36,6 +41,25 @@ jobs:
 
       - name: Build site
         run: mkdocs build --strict
+
+      # --- WASM Playground 빌드 ---
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.51
+
+      - name: Build WASM
+        run: |
+          cd bindings/wasm
+          emcmake cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+
+      - name: Copy Playground to site
+        run: |
+          mkdir -p site/playground
+          cp bindings/wasm/build/dist/gyeol.js site/playground/
+          cp bindings/wasm/build/dist/gyeol.wasm site/playground/
+          cp bindings/wasm/web/index.html site/playground/
 
       - uses: actions/upload-pages-artifact@v3
         with:

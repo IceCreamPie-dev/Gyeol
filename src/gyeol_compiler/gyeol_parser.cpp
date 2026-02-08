@@ -2127,6 +2127,258 @@ bool Parser::parse(const std::string& filepath) {
 }
 
 // =================================================================
+// 문자열에서 직접 파싱 (WASM 등 파일 시스템 없는 환경용)
+// =================================================================
+bool Parser::parseString(const std::string& source, const std::string& filename) {
+    filename_ = filename;
+    story_ = StoryT();
+    story_.version = "0.1.0";
+    stringMap_.clear();
+    lineIds_.clear();
+    currentNodeName_.clear();
+    currentNode_ = nullptr;
+    inMenu_ = false;
+    inRandom_ = false;
+    inCharacterBlock_ = false;
+    seenFirstLabel_ = false;
+    prevLineType_ = PrevLineType::NONE;
+    error_.clear();
+    errors_.clear();
+    warnings_.clear();
+    instrLineMap_.clear();
+    pendingRandomBranches_.clear();
+    importedFiles_.clear();
+    isMainFile_ = true;
+    startNodeSet_ = false;
+    currentCharacterId_.clear();
+    currentCharacter_.reset();
+    definedCharacters_.clear();
+    usedCharacters_.clear();
+
+    // 문자열 스트림으로 파싱
+    std::istringstream iss(source);
+    std::string rawLine;
+    int lineNum = 0;
+
+    while (std::getline(iss, rawLine)) {
+        lineNum++;
+
+        // BOM 제거 (UTF-8 BOM)
+        if (lineNum == 1 && rawLine.size() >= 3 &&
+            rawLine[0] == '\xEF' && rawLine[1] == '\xBB' && rawLine[2] == '\xBF') {
+            rawLine = rawLine.substr(3);
+        }
+
+        // CR 제거
+        if (!rawLine.empty() && rawLine.back() == '\r') {
+            rawLine.pop_back();
+        }
+
+        // 빈 줄
+        std::string trimmed = trim(rawLine);
+        if (trimmed.empty()) continue;
+
+        // 주석
+        if (trimmed[0] == '#') continue;
+
+        size_t indent = countIndent(rawLine);
+
+        // --- 들여쓰기 레벨 0: label 또는 global var ---
+        if (indent == 0) {
+            // import는 문자열 파싱에서 지원하지 않음
+            if (trimmed.size() >= 6 && trimmed.substr(0, 6) == "import" &&
+                (trimmed.size() == 6 || trimmed[6] == ' ')) {
+                addError(lineNum, "import is not supported in parseString mode");
+                continue;
+            }
+
+            // character definition
+            if (!seenFirstLabel_ && trimmed.size() >= 9 &&
+                trimmed.substr(0, 9) == "character" &&
+                (trimmed.size() == 9 || trimmed[9] == ' ')) {
+                parseCharacterLine(trimmed, lineNum);
+                continue;
+            }
+
+            if (trimmed.substr(0, 5) == "label") {
+                flushCharacterBlock();
+                if (inRandom_) { flushRandomBlock(lineNum); inRandom_ = false; }
+                inMenu_ = false;
+                prevLineType_ = PrevLineType::NONE;
+                if (!parseLabelLine(trimmed, lineNum)) continue;
+                continue;
+            }
+
+            // global variable
+            if (!seenFirstLabel_ && trimmed[0] == '$') {
+                flushCharacterBlock();
+                parseGlobalVarLine(trimmed, lineNum);
+                continue;
+            }
+
+            addError(lineNum, "unexpected content at column 0 (expected 'label', 'character', or global '$')");
+            continue;
+        }
+
+        // --- 들여쓰기 레벨 4+: label 내부 또는 character 속성 ---
+        if (indent >= 4 && indent < 8) {
+            if (inCharacterBlock_) {
+                parseCharacterProperty(trimmed, lineNum);
+                continue;
+            }
+
+            if (inRandom_) { flushRandomBlock(lineNum); }
+            inRandom_ = false;
+            inMenu_ = false;
+
+            if (trimmed == "menu:") {
+                inMenu_ = true;
+                prevLineType_ = PrevLineType::NONE;
+                continue;
+            }
+
+            if (trimmed == "random:") {
+                inRandom_ = true;
+                prevLineType_ = PrevLineType::NONE;
+                continue;
+            }
+
+            // jump
+            if (trimmed.substr(0, 4) == "jump" && (trimmed.size() == 4 || trimmed[4] == ' ')) {
+                parseJumpLine(trimmed, lineNum, false);
+                prevLineType_ = PrevLineType::NONE;
+                continue;
+            }
+
+            // call
+            if (trimmed.substr(0, 4) == "call" && (trimmed.size() == 4 || trimmed[4] == ' ')) {
+                parseJumpLine(trimmed, lineNum, true);
+                prevLineType_ = PrevLineType::NONE;
+                continue;
+            }
+
+            // return
+            if (trimmed.size() >= 6 && trimmed.substr(0, 6) == "return" &&
+                (trimmed.size() == 6 || trimmed[6] == ' ')) {
+                parseReturnLine(trimmed, lineNum);
+                prevLineType_ = PrevLineType::NONE;
+                continue;
+            }
+
+            // $ 변수
+            if (trimmed[0] == '$') {
+                parseSetVarLine(trimmed, lineNum);
+                prevLineType_ = PrevLineType::NONE;
+                continue;
+            }
+
+            // if
+            if (trimmed.substr(0, 2) == "if" && (trimmed.size() == 2 || trimmed[2] == ' ')) {
+                parseConditionLine(trimmed, lineNum);
+                prevLineType_ = PrevLineType::IF;
+                continue;
+            }
+
+            // elif
+            if (trimmed.size() >= 4 && trimmed.substr(0, 4) == "elif" && (trimmed.size() == 4 || trimmed[4] == ' ')) {
+                if (prevLineType_ == PrevLineType::IF || prevLineType_ == PrevLineType::ELIF) {
+                    parseElifLine(trimmed, lineNum);
+                    prevLineType_ = PrevLineType::ELIF;
+                } else {
+                    addError(lineNum, "'elif' must follow 'if' or 'elif'");
+                }
+                continue;
+            }
+
+            // else
+            if (trimmed.size() >= 4 && trimmed.substr(0, 4) == "else" && (trimmed.size() == 4 || trimmed[4] == ' ')) {
+                if (prevLineType_ == PrevLineType::IF || prevLineType_ == PrevLineType::ELIF) {
+                    parseElseLine(trimmed, lineNum);
+                } else {
+                    parseDialogueLine(trimmed, lineNum);
+                }
+                prevLineType_ = PrevLineType::NONE;
+                continue;
+            }
+
+            // @ 엔진 명령
+            if (trimmed[0] == '@') {
+                parseCommandLine(trimmed, lineNum);
+                prevLineType_ = PrevLineType::NONE;
+                continue;
+            }
+
+            // 대사
+            parseDialogueLine(trimmed, lineNum);
+            prevLineType_ = PrevLineType::NONE;
+            continue;
+        }
+
+        // --- 들여쓰기 레벨 8+: menu 선택지 / random 분기 ---
+        if (indent >= 8) {
+            if (inMenu_) {
+                parseMenuChoiceLine(trimmed, lineNum);
+                continue;
+            }
+            if (inRandom_) {
+                parseRandomBranchLine(trimmed, lineNum);
+                continue;
+            }
+            addError(lineNum, "unexpected deep indentation (not inside menu: or random:)");
+            continue;
+        }
+    }
+
+    // 마지막 random 블록 플러시
+    if (inRandom_) { flushRandomBlock(lineNum); }
+
+    // 마지막 캐릭터 블록 완성
+    flushCharacterBlock();
+
+    // "No labels found" 체크
+    if (!hasErrors() && story_.nodes.empty()) {
+        std::string msg = "No labels found in " + filename;
+        if (error_.empty()) error_ = msg;
+        errors_.push_back(msg);
+    }
+
+    // Jump target 검증 패스
+    if (!hasErrors()) {
+        validateJumpTargets();
+    }
+
+    // 캐릭터 참조 검증 (경고)
+    if (!hasErrors()) {
+        validateCharacters();
+    }
+
+    return !hasErrors();
+}
+
+// =================================================================
+// 파싱된 결과를 메모리 버퍼로 컴파일 (WASM 등 파일 시스템 없는 환경용)
+// =================================================================
+std::vector<uint8_t> Parser::compileToBuffer() {
+    if (hasErrors()) {
+        if (error_.empty()) error_ = "Cannot compile: parse errors exist";
+        return {};
+    }
+
+    // line_ids → story_ 복사
+    story_.line_ids = lineIds_;
+
+    flatbuffers::FlatBufferBuilder builder;
+
+    auto rootOffset = Story::Pack(builder, &story_);
+    builder.Finish(rootOffset);
+
+    const uint8_t* ptr = builder.GetBufferPointer();
+    size_t size = builder.GetSize();
+
+    return std::vector<uint8_t>(ptr, ptr + size);
+}
+
+// =================================================================
 // 단일 파일 파싱 (state 리셋 없이, import 재귀 호출용)
 // =================================================================
 bool Parser::parseFile(const std::string& filepath) {

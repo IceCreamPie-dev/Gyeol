@@ -13,8 +13,14 @@ public:
     // .gyeol 파일을 파싱하여 내부 StoryT 객체 생성
     bool parse(const std::string& filepath);
 
+    // 문자열에서 직접 파싱 (WASM 등 파일 시스템 없는 환경용)
+    bool parseString(const std::string& source, const std::string& filename = "<string>");
+
     // 파싱된 결과를 .gyb 바이너리로 저장
     bool compile(const std::string& outputPath);
+
+    // 파싱된 결과를 메모리 버퍼로 컴파일 (WASM 등 파일 시스템 없는 환경용)
+    std::vector<uint8_t> compileToBuffer();
 
     // 첫 번째 에러 (하위 호환)
     const std::string& getError() const { return error_; }
