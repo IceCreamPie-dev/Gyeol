@@ -18,9 +18,20 @@ using namespace Gyeol;
 // ============================================================
 class GyeolRunner {
 public:
-    // .gyb 바이너리 버퍼로 스토리 로드
-    bool loadFromBuffer(const std::string& data) {
-        buffer_.assign(data.begin(), data.end());
+    // .gyb 바이너리 버퍼로 스토리 로드 (Uint8Array → C++ vector)
+    bool loadFromBuffer(const val& jsData) {
+        // JS Uint8Array/Array에서 바이트 복사
+        unsigned int length = jsData["length"].as<unsigned int>();
+        buffer_.resize(length);
+        for (unsigned int i = 0; i < length; ++i) {
+            buffer_[i] = jsData[i].as<uint8_t>();
+        }
+        return runner_.start(buffer_.data(), buffer_.size());
+    }
+
+    // 내부 버퍼에서 직접 로드 (compileAndLoad용)
+    bool loadFromVector(const std::vector<uint8_t>& data) {
+        buffer_ = data;
         return runner_.start(buffer_.data(), buffer_.size());
     }
 
@@ -190,10 +201,11 @@ private:
 // ============================================================
 class GyeolCompiler {
 public:
-    // .gyeol 소스를 파싱하여 .gyb 바이너리 반환
+    // .gyeol 소스를 파싱하여 결과 반환 (바이너리는 내부 보관)
     val compile(const std::string& source) {
         Parser parser;
         val result = val::object();
+        lastBuffer_.clear();
 
         if (!parser.parseString(source, "script.gyeol")) {
             result.set("success", false);
@@ -202,7 +214,6 @@ public:
                 errors.call<void>("push", err);
             }
             result.set("errors", errors);
-            result.set("data", val::null());
             return result;
         }
 
@@ -212,26 +223,52 @@ public:
             warnings.call<void>("push", warn);
         }
 
-        auto buffer = parser.compileToBuffer();
-        if (buffer.empty()) {
+        lastBuffer_ = parser.compileToBuffer();
+        if (lastBuffer_.empty()) {
             result.set("success", false);
             val errors = val::array();
             errors.call<void>("push", std::string("Compilation failed"));
             result.set("errors", errors);
-            result.set("data", val::null());
             return result;
         }
 
         result.set("success", true);
         result.set("errors", val::array());
         result.set("warnings", warnings);
-        // 바이너리 데이터를 문자열로 전달 (JS에서 Uint8Array로 변환)
-        result.set("data", std::string(reinterpret_cast<const char*>(buffer.data()), buffer.size()));
-        result.set("size", static_cast<int>(buffer.size()));
+        result.set("size", static_cast<int>(lastBuffer_.size()));
 
         return result;
     }
+
+    // 마지막 컴파일 결과의 바이너리 데이터 접근
+    const std::vector<uint8_t>& getLastBuffer() const {
+        return lastBuffer_;
+    }
+
+private:
+    std::vector<uint8_t> lastBuffer_;
 };
+
+// ============================================================
+// 편의 함수: 컴파일 후 바로 Runner에 로드
+// ============================================================
+static GyeolCompiler* g_compiler = nullptr;
+
+val compileAndLoad(GyeolRunner& runner, GyeolCompiler& compiler, const std::string& source) {
+    val result = compiler.compile(source);
+    if (!result["success"].as<bool>()) {
+        return result;
+    }
+
+    if (!runner.loadFromVector(compiler.getLastBuffer())) {
+        result.set("success", false);
+        val errors = val::array();
+        errors.call<void>("push", std::string("Failed to load compiled story"));
+        result.set("errors", errors);
+    }
+
+    return result;
+}
 
 // ============================================================
 // Embind 등록
@@ -264,4 +301,6 @@ EMSCRIPTEN_BINDINGS(gyeol) {
         .constructor<>()
         .function("compile", &GyeolCompiler::compile)
         ;
+
+    function("compileAndLoad", &compileAndLoad);
 }

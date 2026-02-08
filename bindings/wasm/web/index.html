@@ -550,33 +550,27 @@ function compileAndRun() {
     isPlaying = false;
     waitingForChoice = false;
 
-    // Compile
-    const result = compiler.compile(source);
+    // Load into runner (reuse or create)
+    if (runner) {
+        runner.delete();
+        runner = null;
+    }
+    runner = new Module.GyeolRunner();
+
+    // Compile & Load in one step (avoids binary data transfer through JS)
+    const result = Module.compileAndLoad(runner, compiler, source);
 
     if (!result.success) {
         showErrors(result.errors);
         statusLeft.textContent = 'Compilation failed';
+        runner.delete();
+        runner = null;
         return;
     }
 
     // Show warnings
     if (result.warnings && result.warnings.length > 0) {
         showWarnings(result.warnings);
-    }
-
-    // Load into runner
-    if (runner) {
-        runner.delete();
-        runner = null;
-    }
-
-    runner = new Module.GyeolRunner();
-    const data = result.data;
-
-    if (!runner.loadFromBuffer(data)) {
-        showErrors(['Failed to load compiled story']);
-        statusLeft.textContent = 'Load failed';
-        return;
     }
 
     isPlaying = true;
