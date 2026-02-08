@@ -501,8 +501,7 @@ label greet(name, hp):
 // App State
 // ============================================================
 let Module = null;
-let runner = null;
-let compiler = null;
+let engine = null;
 let isPlaying = false;
 let waitingForChoice = false;
 
@@ -523,7 +522,7 @@ const loadingEl = document.getElementById('loading');
 async function initWasm() {
     try {
         Module = await createGyeolModule();
-        compiler = new Module.GyeolCompiler();
+        engine = new Module.GyeolEngine();
         btnCompile.disabled = false;
         loadingEl.innerHTML = '<span style="color:var(--subtext)">Write a script and click "Compile & Run" to start.</span>';
         statusLeft.textContent = 'Ready';
@@ -550,21 +549,12 @@ function compileAndRun() {
     isPlaying = false;
     waitingForChoice = false;
 
-    // Load into runner (reuse or create)
-    if (runner) {
-        runner.delete();
-        runner = null;
-    }
-    runner = new Module.GyeolRunner();
-
-    // Compile & Load in one step (avoids binary data transfer through JS)
-    const result = Module.compileAndLoad(runner, compiler, source);
+    // Compile & Load in one step (binary stays in C++, no JS transfer)
+    const result = engine.compileAndLoad(source);
 
     if (!result.success) {
         showErrors(result.errors);
         statusLeft.textContent = 'Compilation failed';
-        runner.delete();
-        runner = null;
         return;
     }
 
@@ -588,9 +578,9 @@ function compileAndRun() {
 // Story advancement
 // ============================================================
 function advanceStory() {
-    if (!runner || !isPlaying || waitingForChoice) return;
+    if (!engine || !isPlaying || waitingForChoice) return;
 
-    const result = runner.step();
+    const result = engine.step();
 
     switch (result.type) {
         case 'LINE':
@@ -619,13 +609,13 @@ function advanceStory() {
 }
 
 function selectChoice(index) {
-    if (!runner || !waitingForChoice) return;
+    if (!engine || !waitingForChoice) return;
 
     clearChoices();
     waitingForChoice = false;
     btnNext.disabled = false;
 
-    runner.choose(index);
+    engine.choose(index);
     advanceStory();
 }
 
