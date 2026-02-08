@@ -1,0 +1,75 @@
+site_name: Gyeol Documentation
+site_description: "Write Once, Run Everywhere Story Engine"
+site_url: https://icecreampie-dev.github.io/Gyeol/
+repo_url: https://github.com/IceCreamPie-dev/Gyeol
+repo_name: IceCreamPie-dev/Gyeol
+
+theme:
+  name: material
+  language: ko
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - tables
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - attr_list
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Introduction: getting-started/introduction.md
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quick-start.md
+    - Godot Integration: getting-started/godot-integration.md
+  - Scripting:
+    - Script Syntax: scripting/syntax.md
+    - Variables & Expressions: scripting/variables-and-expressions.md
+    - Flow Control: scripting/flow-control.md
+    - Functions: scripting/functions.md
+    - Advanced Features: scripting/advanced-features.md
+  - API Reference:
+    - StoryPlayer (Godot): api/class-story-player.md
+    - Runner (C++): api/class-runner.md
+    - Variant: api/class-variant.md
+  - Tools:
+    - Compiler CLI: tools/compiler.md
+    - Debugger: tools/debugger.md
+    - LSP Server: tools/lsp.md
+    - VS Code Extension: tools/vscode.md
+  - Advanced:
+    - Architecture: advanced/architecture.md
+    - Save & Load: advanced/save-load.md
+    - Localization: advanced/localization.md
+    - Binary Format: advanced/binary-format.md
