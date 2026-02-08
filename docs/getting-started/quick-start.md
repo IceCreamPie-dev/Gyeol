@@ -6,7 +6,7 @@ Write and run your first Gyeol story in 5 minutes.
 
 Create a file called `hello.gyeol`:
 
-```
+```gyeol
 label start:
     hero "Hey there! I'm Gyeol."
     hero "Want to go on an adventure?"
@@ -49,7 +49,7 @@ You'll see interactive dialogue in the console:
 
 ## Adding Variables
 
-```
+```gyeol
 $ courage = 0
 
 label start:
@@ -85,7 +85,7 @@ label coward:
 
 Define characters with metadata for your game engine:
 
-```
+```gyeol
 character hero:
     displayName: "Hero"
     color: "#4CAF50"
@@ -103,7 +103,7 @@ label start:
 
 Use `@` to send commands to your game engine:
 
-```
+```gyeol
 label start:
     @ bg "forest.png"
     @ bgm "ambient_forest.ogg"
@@ -116,7 +116,7 @@ label start:
 
 Attach metadata to dialogue lines for animation, expressions, etc.:
 
-```
+```gyeol
 label start:
     hero "Hello there!" #mood:happy #pose:wave
     hero "This is serious." #mood:angry #pose:arms_crossed
@@ -125,7 +125,7 @@ label start:
 
 ## Using Functions
 
-```
+```gyeol
 label start:
     $ greeting = call greet("Hero", 100)
     hero "{greeting}"

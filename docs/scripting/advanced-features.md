@@ -4,7 +4,7 @@
 
 Attach metadata to dialogue lines using `#key:value` tags:
 
-```
+```gyeol
 hero "I'm furious!" #mood:angry #pose:arms_crossed
 hero "Listen carefully." #voice:hero_line42.wav
 hero "This is important!" #important
@@ -37,7 +37,7 @@ func _on_dialogue_line(character: String, text: String, tags: Dictionary):
 
 The `#voice:filename` tag is the standard way to attach voice files:
 
-```
+```gyeol
 hero "Hello!" #voice:hero_hello.wav
 ```
 
@@ -45,7 +45,7 @@ hero "Hello!" #voice:hero_hello.wav
 
 Attach metadata to labels (nodes) for game-side logic:
 
-```
+```gyeol
 label shop #repeatable #category=shop:
     merchant "Welcome!"
 
@@ -97,7 +97,7 @@ var tags = story_player.get_node_tags("boss_fight")  # Dictionary
 
 Control how menu choices appear and disappear over time:
 
-```
+```gyeol
 menu:
     "Buy healing potion" -> buy_heal #once
     "Browse inventory" -> browse #sticky
@@ -115,7 +115,7 @@ menu:
 
 ### Once Choices
 
-```
+```gyeol
 menu:
     "Explore the cave" -> cave #once     # Disappears after first visit
     "Rest at camp" -> camp
@@ -126,7 +126,7 @@ After selecting "Explore the cave", it won't appear in future visits to this men
 
 ### Fallback Choices
 
-```
+```gyeol
 menu:
     "Buy sword (50g)" -> buy_sword if gold >= 50 #once
     "Buy shield (30g)" -> buy_shield if gold >= 30 #once
@@ -139,7 +139,7 @@ The fallback choice only appears when all other choices (sword + shield) are hid
 
 Both orderings are valid:
 
-```
+```gyeol
 "VIP special" -> vip if is_vip #once
 "VIP special" -> vip #once if is_vip
 ```
@@ -158,7 +158,7 @@ Both orderings are valid:
 
 ### Basic Variable Substitution
 
-```
+```gyeol
 hero "Hello {name}, you have {gold} gold."
 ```
 
@@ -168,7 +168,7 @@ All variable types are automatically converted to strings.
 
 Embed runtime conditions directly in text:
 
-```
+```gyeol
 hero "{if hp > 50}You look strong!{else}You're injured.{endif}"
 ```
 
@@ -185,7 +185,7 @@ hero "{if hp > 50}You look strong!{else}You're injured.{endif}"
 
 Variables can be interpolated within conditional branches:
 
-```
+```gyeol
 hero "{if gold > 0}You have {gold} coins.{else}You're broke!{endif}"
 ```
 
@@ -195,7 +195,7 @@ hero "{if gold > 0}You have {gold} coins.{else}You're broke!{endif}"
 
 Split large stories across multiple files:
 
-```
+```gyeol
 # main.gyeol
 import "characters.gyeol"
 import "chapter1/intro.gyeol"
@@ -205,7 +205,7 @@ label start:
     call intro_sequence
 ```
 
-```
+```gyeol
 # characters.gyeol
 character hero:
     displayName: "Hero"
@@ -215,7 +215,7 @@ character villain:
     displayName: "Dark Lord"
 ```
 
-```
+```gyeol
 # chapter1/intro.gyeol
 label intro_sequence:
     @ bg "castle.png"
@@ -238,7 +238,7 @@ label intro_sequence:
 
 Every time a node is entered (via `jump`, `call`, `choose`, or `start`), its visit count increments:
 
-```
+```gyeol
 label shop:
     hero "Welcome to the shop!"
     hero "This is visit #{visit_count(shop)}."
@@ -254,7 +254,7 @@ label shop:
 | Inline condition | `{if visit_count(shop) > 2}regular{endif}` | `{if visited(cave)}yes{endif}` |
 
 Both quoted and unquoted node names are accepted:
-```
+```gyeol
 visit_count("shop")    # Quoted
 visit_count(shop)      # Unquoted (same result)
 ```
@@ -263,7 +263,7 @@ visit_count(shop)      # Unquoted (same result)
 
 Define character metadata for your game engine to use:
 
-```
+```gyeol
 character hero:
     displayName: "Brave Hero"
     color: "#4CAF50"

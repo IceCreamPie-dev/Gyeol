@@ -81,7 +81,7 @@ Compilation failed with 3 errors.
 
 스크립트에서 `import`를 사용하면, 컴파일러가 모든 import를 해석합니다:
 
-```
+```gyeol
 # main.gyeol
 import "characters.gyeol"
 import "chapter1/intro.gyeol"

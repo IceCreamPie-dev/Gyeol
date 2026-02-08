@@ -6,7 +6,7 @@
 
 `hello.gyeol` 파일을 생성합니다:
 
-```
+```gyeol
 label start:
     hero "Hey there! I'm Gyeol."
     hero "Want to go on an adventure?"
@@ -49,7 +49,7 @@ GyeolTest hello.gyb
 
 ## 변수 추가하기
 
-```
+```gyeol
 $ courage = 0
 
 label start:
@@ -85,7 +85,7 @@ label coward:
 
 게임 엔진에서 사용할 메타데이터와 함께 캐릭터를 정의합니다:
 
-```
+```gyeol
 character hero:
     displayName: "Hero"
     color: "#4CAF50"
@@ -103,7 +103,7 @@ label start:
 
 `@`를 사용하여 게임 엔진에 명령을 보냅니다:
 
-```
+```gyeol
 label start:
     @ bg "forest.png"
     @ bgm "ambient_forest.ogg"
@@ -116,7 +116,7 @@ label start:
 
 애니메이션, 표정 등을 위한 메타데이터를 대사에 첨부합니다:
 
-```
+```gyeol
 label start:
     hero "Hello there!" #mood:happy #pose:wave
     hero "This is serious." #mood:angry #pose:arms_crossed
@@ -125,7 +125,7 @@ label start:
 
 ## 함수 사용하기
 
-```
+```gyeol
 label start:
     $ greeting = call greet("Hero", 100)
     hero "{greeting}"

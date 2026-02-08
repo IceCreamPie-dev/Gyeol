@@ -51,7 +51,7 @@ story_player.load_state("user://saves/slot1.gys")
 
 타입을 포함한 모든 런타임 변수:
 
-```
+```gyeol
 $ hp = 100        # Saved as Int
 $ name = "Hero"   # Saved as String
 $ alive = true    # Saved as Bool
@@ -62,7 +62,7 @@ $ items += "key"  # Saved as List
 
 함수 호출 중에 저장하면 전체 콜 스택이 보존됩니다:
 
-```
+```gyeol
 label start:
     call helper       # If saved here...
     hero "Back!"      # ...this resumes after load
@@ -90,7 +90,7 @@ label helper:
 
 이미 선택된 once 선택지는 로드 후에도 숨겨진 상태를 유지합니다:
 
-```
+```gyeol
 menu:
     "One-time offer" -> deal #once    # If selected before save, stays hidden after load
     "Browse" -> browse

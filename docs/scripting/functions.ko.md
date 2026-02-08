@@ -6,7 +6,7 @@ Gyeol의 label은 매개변수, 반환값, 로컬 스코프를 갖춘 함수로 
 
 함수는 매개변수가 있는 label입니다:
 
-```
+```gyeol
 label greet(name, title):
     hero "Hello, {title} {name}!"
 ```
@@ -19,7 +19,7 @@ label greet(name, title):
 
 ### 단순 호출
 
-```
+```gyeol
 call greet("Hero", "Sir")
 ```
 
@@ -27,7 +27,7 @@ call greet("Hero", "Sir")
 
 ### 반환값이 있는 호출
 
-```
+```gyeol
 $ result = call compute(10, 20)
 hero "Result: {result}"
 ```
@@ -38,7 +38,7 @@ hero "Result: {result}"
 
 인자로 어떤 표현식이든 사용할 수 있습니다:
 
-```
+```gyeol
 $ dmg = call calculate_damage(attack * 2, defense - 5)
 ```
 
@@ -46,21 +46,21 @@ $ dmg = call calculate_damage(attack * 2, defense - 5)
 
 ### 표현식을 반환
 
-```
+```gyeol
 label add(a, b):
     return a + b
 ```
 
 ### 리터럴을 반환
 
-```
+```gyeol
 label get_greeting():
     return "Hello!"
 ```
 
 ### 값 없이 반환
 
-```
+```gyeol
 label do_something():
     hero "Processing..."
     return     # 조기 종료, 반환값 없음
@@ -70,7 +70,7 @@ label do_something():
 
 함수가 명시적 `return` 없이 마지막 명령에 도달하면 자동으로 반환됩니다 (값 없음).
 
-```
+```gyeol
 label side_effect():
     $ counter = counter + 1
     # 여기서 암묵적으로 반환
@@ -82,7 +82,7 @@ label side_effect():
 
 매개변수는 동일한 이름의 기존 전역 변수를 **섀도잉**하는 로컬 스코프를 생성합니다:
 
-```
+```gyeol
 $ name = "Global"
 
 label start:
@@ -105,7 +105,7 @@ label set_name(name):
 
 누락된 인자는 `Int(0)`으로 기본 설정됩니다:
 
-```
+```gyeol
 label damage(amount, multiplier):
     # call damage(10)으로 호출하면:
     # amount = 10, multiplier = 0 (기본값)
@@ -122,7 +122,7 @@ label start:
 
 함수에서 다른 함수를 호출할 수 있습니다:
 
-```
+```gyeol
 label start:
     $ msg = call format_greeting("Hero", 100)
     hero "{msg}"
@@ -153,7 +153,7 @@ label low_status:
 | 반환값 지원? | 아니오 | 예 |
 | 용도 | 장면 전환 | 재사용 가능한 로직 |
 
-```
+```gyeol
 # 장면 흐름에는 jump 사용
 jump next_chapter
 
@@ -175,7 +175,7 @@ call play_cutscene
 
 ### 유틸리티 함수
 
-```
+```gyeol
 label clamp_hp(value):
     if value > 100 -> cap_high
     if value < 0 -> cap_low
@@ -193,7 +193,7 @@ label start:
 
 ### 대화 헬퍼
 
-```
+```gyeol
 label say_with_effect(character, text):
     @ shake 0.2
     # 참고: character/text를 변수로 사용하면 동적 디스패치가 되지 않습니다
@@ -204,7 +204,7 @@ label say_with_effect(character, text):
 
 ### 상태 머신
 
-```
+```gyeol
 label start:
     call game_loop
 

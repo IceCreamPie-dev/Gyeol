@@ -6,7 +6,7 @@
 
 `.gyeol` 파일은 다음과 같은 최상위 요소로 구성됩니다:
 
-```
+```gyeol
 import "other_file.gyeol"     # 1. Import (선택 사항)
 character hero:                # 2. 캐릭터 정의 (선택 사항)
     displayName: "Hero"
@@ -22,7 +22,7 @@ label start:                   # 4. 노드 정의
 
 ## 주석
 
-```
+```gyeol
 # 이것은 주석입니다
 hero "Hello!"  # 인라인 주석은 지원되지 않습니다
 ```
@@ -31,7 +31,7 @@ hero "Hello!"  # 인라인 주석은 지원되지 않습니다
 
 ## Import
 
-```
+```gyeol
 import "common.gyeol"
 import "characters/hero.gyeol"
 ```
@@ -44,7 +44,7 @@ import "characters/hero.gyeol"
 
 ## 캐릭터 정의
 
-```
+```gyeol
 character hero:
     displayName: "Hero"
     color: "#4CAF50"
@@ -63,7 +63,7 @@ character villain:
 
 ## Label (노드)
 
-```
+```gyeol
 label start:
     # 내용 작성
 
@@ -79,7 +79,7 @@ Label은 스토리 구조의 기본 단위입니다 (Ren'Py의 `label`, Ink의 `
 
 ### 노드 메타데이터 태그
 
-```
+```gyeol
 label shop #repeatable #category=shop:
     hero "Welcome to the shop!"
 
@@ -96,7 +96,7 @@ label boss_fight #difficulty=hard #checkpoint:
 
 ### 캐릭터 대사
 
-```
+```gyeol
 hero "Hello, how are you?"
 villain "Surrender now!"
 ```
@@ -105,7 +105,7 @@ villain "Surrender now!"
 
 ### 나레이션
 
-```
+```gyeol
 "The wind howled through the empty streets."
 "A door creaked open in the distance."
 ```
@@ -114,7 +114,7 @@ villain "Surrender now!"
 
 ### 문자열 보간
 
-```
+```gyeol
 hero "Hello, {player_name}!"
 hero "You have {gold} gold coins."
 hero "HP: {hp}/{max_hp}"
@@ -124,7 +124,7 @@ hero "HP: {hp}/{max_hp}"
 
 ### 인라인 조건 텍스트
 
-```
+```gyeol
 hero "{if hp > 50}You look strong!{else}You look tired.{endif}"
 hero "You have {if gold > 0}{gold} coins{else}no money{endif}."
 hero "{if visited(shop)}Welcome back!{else}First time here?{endif}"
@@ -148,7 +148,7 @@ hero "{if visited(shop)}Welcome back!{else}First time here?{endif}"
 
 ### 대사 태그 (메타데이터)
 
-```
+```gyeol
 hero "I'm angry!" #mood:angry #pose:arms_crossed
 hero "Listen to this." #voice:hero_line42.wav
 hero "Important line!" #important
@@ -161,7 +161,7 @@ hero "Important line!" #important
 
 ## Menu (선택지)
 
-```
+```gyeol
 menu:
     "Go left" -> cave
     "Go right" -> forest
@@ -170,7 +170,7 @@ menu:
 
 ### 조건부 선택지
 
-```
+```gyeol
 menu:
     "Open the door" -> locked_room if has_key
     "Walk away" -> hallway
@@ -180,7 +180,7 @@ menu:
 
 ### 선택지 수식어
 
-```
+```gyeol
 menu:
     "Buy potion" -> buy_potion #once
     "Browse wares" -> browse #sticky
@@ -203,7 +203,7 @@ menu:
 
 ### 선언
 
-```
+```gyeol
 $ hp = 100                  # 정수
 $ name = "Hero"             # 문자열
 $ is_ready = true           # 불리언
@@ -214,7 +214,7 @@ $ speed = 3.14              # 실수
 
 첫 번째 label 앞에 선언된 변수는 **전역 변수**이며 스토리 시작 시 초기화됩니다:
 
-```
+```gyeol
 $ max_hp = 100
 $ gold = 0
 
@@ -224,7 +224,7 @@ label start:
 
 ### 표현식을 사용한 대입
 
-```
+```gyeol
 $ hp = hp - 10
 $ damage = attack * 2 + bonus
 $ total = (a + b) * c
@@ -234,7 +234,7 @@ $ been_there = visited("cave")
 
 ### 리스트 변수
 
-```
+```gyeol
 $ inventory += "sword"       # 리스트에 추가
 $ inventory -= "potion"      # 리스트에서 제거
 ```
@@ -245,26 +245,26 @@ $ inventory -= "potion"      # 리스트에서 제거
 
 ### Jump
 
-```
+```gyeol
 jump next_scene              # 단방향 이동 (복귀 없음)
 ```
 
 ### Call / Return
 
-```
+```gyeol
 call helper_function         # 호출 후 완료되면 복귀
 $ result = call compute(10, 20)  # 반환값이 있는 호출
 ```
 
 ### 조건문
 
-```
+```gyeol
 if hp > 50 -> strong_path
 elif hp > 20 -> weak_path
 else -> critical_path
 ```
 
-```
+```gyeol
 if hp > 0 -> alive else dead
 if has_key == true -> open_door else locked
 if courage >= 10 and wisdom >= 5 -> hero_path
@@ -272,7 +272,7 @@ if courage >= 10 and wisdom >= 5 -> hero_path
 
 ### 랜덤 분기
 
-```
+```gyeol
 random:
     50 -> common_event       # 가중치 50
     30 -> uncommon_event     # 가중치 30
@@ -284,7 +284,7 @@ random:
 
 ## 함수
 
-```
+```gyeol
 label greet(name, title):
     hero "Hello, {title} {name}!"
     return name
@@ -297,7 +297,7 @@ label start:
 
 ## 커맨드
 
-```
+```gyeol
 @ bg "forest.png"
 @ sfx "sword_clash.wav"
 @ bgm "battle_theme.ogg" loop
@@ -311,7 +311,7 @@ label start:
 
 ## 전체 예제
 
-```
+```gyeol
 import "characters.gyeol"
 
 $ gold = 50

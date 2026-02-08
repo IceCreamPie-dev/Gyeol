@@ -6,6 +6,7 @@ on:
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
+      - 'tools/pygments-gyeol/**'
 
   workflow_dispatch:
 
@@ -28,8 +29,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install MkDocs + Material + i18n
-        run: pip install mkdocs-material "mkdocs-static-i18n[material]"
+      - name: Install MkDocs + Material + i18n + Gyeol lexer
+        run: |
+          pip install mkdocs-material "mkdocs-static-i18n[material]"
+          pip install ./tools/pygments-gyeol
 
       - name: Build site
         run: mkdocs build --strict

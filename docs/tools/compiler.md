@@ -81,7 +81,7 @@ Compilation failed with 3 errors.
 
 When a script uses `import`, the compiler resolves all imports:
 
-```
+```gyeol
 # main.gyeol
 import "characters.gyeol"
 import "chapter1/intro.gyeol"

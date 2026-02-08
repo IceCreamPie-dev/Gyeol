@@ -6,7 +6,7 @@ Complete reference for the `.gyeol` scripting language.
 
 A `.gyeol` file consists of these top-level elements:
 
-```
+```gyeol
 import "other_file.gyeol"     # 1. Imports (optional)
 character hero:                # 2. Character definitions (optional)
     displayName: "Hero"
@@ -22,7 +22,7 @@ label start:                   # 4. Node definitions
 
 ## Comments
 
-```
+```gyeol
 # This is a comment
 hero "Hello!"  # Inline comments are NOT supported
 ```
@@ -31,7 +31,7 @@ Comments start with `#` at the beginning of a line (after optional whitespace).
 
 ## Imports
 
-```
+```gyeol
 import "common.gyeol"
 import "characters/hero.gyeol"
 ```
@@ -44,7 +44,7 @@ import "characters/hero.gyeol"
 
 ## Character Definitions
 
-```
+```gyeol
 character hero:
     displayName: "Hero"
     color: "#4CAF50"
@@ -63,7 +63,7 @@ character villain:
 
 ## Labels (Nodes)
 
-```
+```gyeol
 label start:
     # Content here
 
@@ -79,7 +79,7 @@ Labels are the fundamental unit of story structure (equivalent to Ren'Py's `labe
 
 ### Node Metadata Tags
 
-```
+```gyeol
 label shop #repeatable #category=shop:
     hero "Welcome to the shop!"
 
@@ -96,7 +96,7 @@ label boss_fight #difficulty=hard #checkpoint:
 
 ### Character Dialogue
 
-```
+```gyeol
 hero "Hello, how are you?"
 villain "Surrender now!"
 ```
@@ -105,7 +105,7 @@ Format: `<character_id> "<text>"`
 
 ### Narration
 
-```
+```gyeol
 "The wind howled through the empty streets."
 "A door creaked open in the distance."
 ```
@@ -114,7 +114,7 @@ Narration lines have no character ID (stored as `character_id = -1`).
 
 ### String Interpolation
 
-```
+```gyeol
 hero "Hello, {player_name}!"
 hero "You have {gold} gold coins."
 hero "HP: {hp}/{max_hp}"
@@ -124,7 +124,7 @@ Variables inside `{...}` are replaced at runtime with their current values.
 
 ### Inline Conditional Text
 
-```
+```gyeol
 hero "{if hp > 50}You look strong!{else}You look tired.{endif}"
 hero "You have {if gold > 0}{gold} coins{else}no money{endif}."
 hero "{if visited(shop)}Welcome back!{else}First time here?{endif}"
@@ -148,7 +148,7 @@ Inline conditions support:
 
 ### Dialogue Tags (Metadata)
 
-```
+```gyeol
 hero "I'm angry!" #mood:angry #pose:arms_crossed
 hero "Listen to this." #voice:hero_line42.wav
 hero "Important line!" #important
@@ -161,7 +161,7 @@ hero "Important line!" #important
 
 ## Menu (Choices)
 
-```
+```gyeol
 menu:
     "Go left" -> cave
     "Go right" -> forest
@@ -170,7 +170,7 @@ menu:
 
 ### Conditional Choices
 
-```
+```gyeol
 menu:
     "Open the door" -> locked_room if has_key
     "Walk away" -> hallway
@@ -180,7 +180,7 @@ A conditional choice is only displayed if the variable evaluates to true.
 
 ### Choice Modifiers
 
-```
+```gyeol
 menu:
     "Buy potion" -> buy_potion #once
     "Browse wares" -> browse #sticky
@@ -203,7 +203,7 @@ menu:
 
 ### Declaration
 
-```
+```gyeol
 $ hp = 100                  # Integer
 $ name = "Hero"             # String
 $ is_ready = true           # Boolean
@@ -214,7 +214,7 @@ $ speed = 3.14              # Float
 
 Variables declared before the first label are **global** and initialized at story start:
 
-```
+```gyeol
 $ max_hp = 100
 $ gold = 0
 
@@ -224,7 +224,7 @@ label start:
 
 ### Assignment with Expressions
 
-```
+```gyeol
 $ hp = hp - 10
 $ damage = attack * 2 + bonus
 $ total = (a + b) * c
@@ -234,7 +234,7 @@ $ been_there = visited("cave")
 
 ### List Variables
 
-```
+```gyeol
 $ inventory += "sword"       # Append to list
 $ inventory -= "potion"      # Remove from list
 ```
@@ -245,26 +245,26 @@ See [Variables & Expressions](variables-and-expressions.md) for the complete exp
 
 ### Jump
 
-```
+```gyeol
 jump next_scene              # One-way jump (no return)
 ```
 
 ### Call / Return
 
-```
+```gyeol
 call helper_function         # Call and return when done
 $ result = call compute(10, 20)  # Call with return value
 ```
 
 ### Conditions
 
-```
+```gyeol
 if hp > 50 -> strong_path
 elif hp > 20 -> weak_path
 else -> critical_path
 ```
 
-```
+```gyeol
 if hp > 0 -> alive else dead
 if has_key == true -> open_door else locked
 if courage >= 10 and wisdom >= 5 -> hero_path
@@ -272,7 +272,7 @@ if courage >= 10 and wisdom >= 5 -> hero_path
 
 ### Random Branching
 
-```
+```gyeol
 random:
     50 -> common_event       # Weight 50
     30 -> uncommon_event     # Weight 30
@@ -284,7 +284,7 @@ See [Flow Control](flow-control.md) for details.
 
 ## Functions
 
-```
+```gyeol
 label greet(name, title):
     hero "Hello, {title} {name}!"
     return name
@@ -297,7 +297,7 @@ See [Functions](functions.md) for details.
 
 ## Commands
 
-```
+```gyeol
 @ bg "forest.png"
 @ sfx "sword_clash.wav"
 @ bgm "battle_theme.ogg" loop
@@ -311,7 +311,7 @@ Commands are passed through to the game engine via the `command_received` signal
 
 ## Complete Example
 
-```
+```gyeol
 import "characters.gyeol"
 
 $ gold = 50

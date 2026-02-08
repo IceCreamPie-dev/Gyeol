@@ -16,7 +16,7 @@ Gyeol supports five variable types:
 
 ### Simple Assignment
 
-```
+```gyeol
 $ hp = 100
 $ name = "Hero"
 $ is_alive = true
@@ -25,7 +25,7 @@ $ speed = 2.5
 
 ### Arithmetic Expressions
 
-```
+```gyeol
 $ hp = hp - 10
 $ damage = attack * 2 + bonus
 $ total = (a + b) * c
@@ -56,7 +56,7 @@ When mixing Int and Float in arithmetic:
 
 Variables declared before the first `label` are globals, initialized when the story starts:
 
-```
+```gyeol
 $ max_hp = 100
 $ gold = 0
 $ difficulty = "normal"
@@ -69,7 +69,7 @@ label start:
 
 Lists are created implicitly with `+=` and `-=` on string values:
 
-```
+```gyeol
 $ inventory += "sword"       # Append "sword" to inventory list
 $ inventory += "potion"      # Append "potion"
 $ inventory -= "potion"      # Remove "potion" from list
@@ -82,7 +82,7 @@ $ inventory -= "potion"      # Remove "potion" from list
 | `list_contains(var, "item")` | Bool | Check if list contains item |
 | `list_length(var)` | Int | Get list size |
 
-```
+```gyeol
 if list_contains(inventory, "key") -> has_key_path
 $ count = list_length(inventory)
 ```
@@ -96,7 +96,7 @@ $ count = list_length(inventory)
 | `visit_count("node_name")` | Int | Number of times a node was entered |
 | `visited("node_name")` | Bool | Whether a node was ever visited |
 
-```
+```gyeol
 $ times = visit_count("shop")
 $ been_there = visited("cave")
 
@@ -106,7 +106,7 @@ $ times = visit_count(shop)
 
 Functions work everywhere expressions are allowed:
 
-```
+```gyeol
 # In assignments
 $ count = visit_count("shop")
 
@@ -128,13 +128,13 @@ hero "{if visited(shop)}Welcome back!{else}First time here?{endif}"
 
 Variables can be embedded in dialogue and choice text using `{...}`:
 
-```
+```gyeol
 hero "Hello, {name}! You have {gold} gold."
 ```
 
 ### Variable Substitution
 
-```
+```gyeol
 hero "HP: {hp}/{max_hp}"
 hero "Level {level} warrior"
 ```
@@ -148,7 +148,7 @@ Any variable name inside `{...}` is replaced with its current value at runtime. 
 
 ### Inline Conditions
 
-```
+```gyeol
 hero "{if hp > 50}You look strong!{else}You look weak.{endif}"
 ```
 
@@ -159,13 +159,13 @@ Supported condition types:
 
 The `{else}` clause is optional:
 
-```
+```gyeol
 hero "{if has_key}You have a key.{endif}"
 ```
 
 Inline conditions can be nested with other interpolation:
 
-```
+```gyeol
 hero "{if gold > 0}You have {gold} coins.{else}You're broke!{endif}"
 ```
 
@@ -186,7 +186,7 @@ Used in `if` conditions and inline conditions:
 
 Combine conditions with logical operators:
 
-```
+```gyeol
 if hp > 0 and has_weapon == true -> can_fight
 if is_tired or is_hungry -> need_rest
 if not is_dead -> still_alive

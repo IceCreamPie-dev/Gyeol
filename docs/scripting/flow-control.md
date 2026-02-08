@@ -4,13 +4,13 @@
 
 A one-way transfer to another node. Execution continues from the target node and does **not** return.
 
-```
+```gyeol
 jump target_node
 ```
 
 ### Example
 
-```
+```gyeol
 label start:
     hero "Let's go!"
     jump next_scene
@@ -25,7 +25,7 @@ Call pushes the current position onto a **call stack** and jumps to the target n
 
 ### Basic Call
 
-```
+```gyeol
 label start:
     call greeting
     hero "Back from greeting."
@@ -37,7 +37,7 @@ label greeting:
 
 ### Explicit Return
 
-```
+```gyeol
 label helper:
     hero "Doing something..."
     return      # Explicitly return (skips remaining instructions)
@@ -45,7 +45,7 @@ label helper:
 
 ### Call with Return Value
 
-```
+```gyeol
 label start:
     $ result = call compute(10, 20)
     hero "The answer is {result}."
@@ -60,7 +60,7 @@ The `return` expression is evaluated and stored in the variable specified by `$ 
 
 ### Simple Condition
 
-```
+```gyeol
 if hp > 50 -> strong_path else weak_path
 ```
 
@@ -72,7 +72,7 @@ if hp > 50 -> strong_path else weak_path
 
 ### Truthiness Check
 
-```
+```gyeol
 if has_key -> unlock_door
 ```
 
@@ -86,14 +86,14 @@ When there's no operator, the variable is checked for "truthiness":
 
 Both sides can be full expressions:
 
-```
+```gyeol
 if hp - 10 > 0 -> survive else die
 if attack * 2 + bonus >= defense -> hit
 ```
 
 ### Logical Operators
 
-```
+```gyeol
 if hp > 0 and has_weapon == true -> fight
 if is_tired or is_hungry -> rest
 if not is_dead -> alive
@@ -101,14 +101,14 @@ if not is_dead -> alive
 
 Logical operators can combine any conditions:
 
-```
+```gyeol
 if hp > 50 and gold > 100 and visited("shop") -> wealthy_warrior
 if not has_key or not has_torch -> cannot_enter
 ```
 
 ### Elif / Else Chains
 
-```
+```gyeol
 if score >= 90 -> grade_a
 elif score >= 80 -> grade_b
 elif score >= 70 -> grade_c
@@ -122,7 +122,7 @@ else -> grade_f
 
 ### Visit-based Conditions
 
-```
+```gyeol
 if visited("secret_room") -> knows_secret
 if visit_count("shop") > 5 -> loyal_customer
 ```
@@ -131,7 +131,7 @@ if visit_count("shop") > 5 -> loyal_customer
 
 Present choices to the player. Execution pauses until the player selects one.
 
-```
+```gyeol
 menu:
     "Choice A" -> node_a
     "Choice B" -> node_b
@@ -140,7 +140,7 @@ menu:
 
 ### Conditional Choices
 
-```
+```gyeol
 menu:
     "Use key" -> unlock if has_key
     "Force the door" -> force if strength > 10
@@ -151,7 +151,7 @@ Only choices whose conditions are met are shown to the player.
 
 ### Choice Modifiers
 
-```
+```gyeol
 menu:
     "Buy healing potion" -> buy_heal #once
     "Buy mana potion" -> buy_mana #once
@@ -168,7 +168,7 @@ menu:
 
 **Combined with conditions:**
 
-```
+```gyeol
 menu:
     "VIP offer" -> vip_deal if is_vip #once
     "Regular deal" -> regular #once
@@ -193,7 +193,7 @@ Both orderings are valid: `if condition #modifier` and `#modifier if condition`.
 
 Weighted random selection:
 
-```
+```gyeol
 random:
     50 -> common_path       # 50/(50+30+10+1) = ~55% chance
     30 -> uncommon_path     # 30/91 = ~33% chance

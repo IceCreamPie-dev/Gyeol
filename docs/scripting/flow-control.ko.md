@@ -4,13 +4,13 @@
 
 다른 노드로의 단방향 이동입니다. 대상 노드에서 실행이 계속되며 **복귀하지 않습니다**.
 
-```
+```gyeol
 jump target_node
 ```
 
 ### 예제
 
-```
+```gyeol
 label start:
     hero "Let's go!"
     jump next_scene
@@ -25,7 +25,7 @@ Call은 현재 위치를 **콜 스택**에 저장하고 대상 노드로 이동�
 
 ### 기본 Call
 
-```
+```gyeol
 label start:
     call greeting
     hero "Back from greeting."
@@ -37,7 +37,7 @@ label greeting:
 
 ### 명시적 Return
 
-```
+```gyeol
 label helper:
     hero "Doing something..."
     return      # 명시적으로 복귀 (남은 명령을 건너뜀)
@@ -45,7 +45,7 @@ label helper:
 
 ### 반환값이 있는 Call
 
-```
+```gyeol
 label start:
     $ result = call compute(10, 20)
     hero "The answer is {result}."
@@ -60,7 +60,7 @@ label compute(a, b):
 
 ### 단순 조건
 
-```
+```gyeol
 if hp > 50 -> strong_path else weak_path
 ```
 
@@ -72,7 +72,7 @@ if hp > 50 -> strong_path else weak_path
 
 ### 참/거짓 판정
 
-```
+```gyeol
 if has_key -> unlock_door
 ```
 
@@ -86,14 +86,14 @@ if has_key -> unlock_door
 
 양쪽 모두 완전한 표현식을 사용할 수 있습니다:
 
-```
+```gyeol
 if hp - 10 > 0 -> survive else die
 if attack * 2 + bonus >= defense -> hit
 ```
 
 ### 논리 연산자
 
-```
+```gyeol
 if hp > 0 and has_weapon == true -> fight
 if is_tired or is_hungry -> rest
 if not is_dead -> alive
@@ -101,14 +101,14 @@ if not is_dead -> alive
 
 논리 연산자는 어떤 조건이든 결합할 수 있습니다:
 
-```
+```gyeol
 if hp > 50 and gold > 100 and visited("shop") -> wealthy_warrior
 if not has_key or not has_torch -> cannot_enter
 ```
 
 ### Elif / Else 체인
 
-```
+```gyeol
 if score >= 90 -> grade_a
 elif score >= 80 -> grade_b
 elif score >= 70 -> grade_c
@@ -122,7 +122,7 @@ else -> grade_f
 
 ### 방문 기반 조건
 
-```
+```gyeol
 if visited("secret_room") -> knows_secret
 if visit_count("shop") > 5 -> loyal_customer
 ```
@@ -131,7 +131,7 @@ if visit_count("shop") > 5 -> loyal_customer
 
 플레이어에게 선택지를 제시합니다. 플레이어가 하나를 선택할 때까지 실행이 일시 정지됩니다.
 
-```
+```gyeol
 menu:
     "Choice A" -> node_a
     "Choice B" -> node_b
@@ -140,7 +140,7 @@ menu:
 
 ### 조건부 선택지
 
-```
+```gyeol
 menu:
     "Use key" -> unlock if has_key
     "Force the door" -> force if strength > 10
@@ -151,7 +151,7 @@ menu:
 
 ### 선택지 수식어
 
-```
+```gyeol
 menu:
     "Buy healing potion" -> buy_heal #once
     "Buy mana potion" -> buy_mana #once
@@ -168,7 +168,7 @@ menu:
 
 **조건과 함께 사용:**
 
-```
+```gyeol
 menu:
     "VIP offer" -> vip_deal if is_vip #once
     "Regular deal" -> regular #once
@@ -193,7 +193,7 @@ menu:
 
 가중치 기반 랜덤 선택:
 
-```
+```gyeol
 random:
     50 -> common_path       # 50/(50+30+10+1) = ~55% 확률
     30 -> uncommon_path     # 30/91 = ~33% 확률

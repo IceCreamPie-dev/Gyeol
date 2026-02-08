@@ -16,7 +16,7 @@ Gyeol은 다섯 가지 변수 타입을 지원합니다:
 
 ### 단순 대입
 
-```
+```gyeol
 $ hp = 100
 $ name = "Hero"
 $ is_alive = true
@@ -25,7 +25,7 @@ $ speed = 2.5
 
 ### 산술 표현식
 
-```
+```gyeol
 $ hp = hp - 10
 $ damage = attack * 2 + bonus
 $ total = (a + b) * c
@@ -56,7 +56,7 @@ Int와 Float를 혼합한 산술 연산 시:
 
 첫 번째 `label` 앞에 선언된 변수는 전역 변수이며, 스토리 시작 시 초기화됩니다:
 
-```
+```gyeol
 $ max_hp = 100
 $ gold = 0
 $ difficulty = "normal"
@@ -69,7 +69,7 @@ label start:
 
 리스트는 문자열 값에 `+=`와 `-=`를 사용하면 암묵적으로 생성됩니다:
 
-```
+```gyeol
 $ inventory += "sword"       # inventory 리스트에 "sword" 추가
 $ inventory += "potion"      # "potion" 추가
 $ inventory -= "potion"      # 리스트에서 "potion" 제거
@@ -82,7 +82,7 @@ $ inventory -= "potion"      # 리스트에서 "potion" 제거
 | `list_contains(var, "item")` | Bool | 리스트에 항목이 포함되어 있는지 확인 |
 | `list_length(var)` | Int | 리스트 크기 반환 |
 
-```
+```gyeol
 if list_contains(inventory, "key") -> has_key_path
 $ count = list_length(inventory)
 ```
@@ -96,7 +96,7 @@ $ count = list_length(inventory)
 | `visit_count("node_name")` | Int | 노드에 진입한 횟수 |
 | `visited("node_name")` | Bool | 노드를 방문한 적이 있는지 여부 |
 
-```
+```gyeol
 $ times = visit_count("shop")
 $ been_there = visited("cave")
 
@@ -106,7 +106,7 @@ $ times = visit_count(shop)
 
 함수는 표현식이 허용되는 모든 곳에서 사용할 수 있습니다:
 
-```
+```gyeol
 # 대입에서
 $ count = visit_count("shop")
 
@@ -128,13 +128,13 @@ hero "{if visited(shop)}Welcome back!{else}First time here?{endif}"
 
 `{...}`를 사용하여 대사와 선택지 텍스트에 변수를 삽입할 수 있습니다:
 
-```
+```gyeol
 hero "Hello, {name}! You have {gold} gold."
 ```
 
 ### 변수 치환
 
-```
+```gyeol
 hero "HP: {hp}/{max_hp}"
 hero "Level {level} warrior"
 ```
@@ -148,7 +148,7 @@ hero "Level {level} warrior"
 
 ### 인라인 조건
 
-```
+```gyeol
 hero "{if hp > 50}You look strong!{else}You look weak.{endif}"
 ```
 
@@ -159,13 +159,13 @@ hero "{if hp > 50}You look strong!{else}You look weak.{endif}"
 
 `{else}` 절은 선택 사항입니다:
 
-```
+```gyeol
 hero "{if has_key}You have a key.{endif}"
 ```
 
 인라인 조건 안에서 다른 보간을 중첩할 수 있습니다:
 
-```
+```gyeol
 hero "{if gold > 0}You have {gold} coins.{else}You're broke!{endif}"
 ```
 
@@ -186,7 +186,7 @@ hero "{if gold > 0}You have {gold} coins.{else}You're broke!{endif}"
 
 논리 연산자로 조건을 결합합니다:
 
-```
+```gyeol
 if hp > 0 and has_weapon == true -> can_fight
 if is_tired or is_hungry -> need_rest
 if not is_dead -> still_alive

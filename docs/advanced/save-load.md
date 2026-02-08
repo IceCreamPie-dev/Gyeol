@@ -51,7 +51,7 @@ story_player.load_state("user://saves/slot1.gys")
 
 All runtime variables including their types:
 
-```
+```gyeol
 $ hp = 100        # Saved as Int
 $ name = "Hero"   # Saved as String
 $ alive = true    # Saved as Bool
@@ -62,7 +62,7 @@ $ items += "key"  # Saved as List
 
 If the save happens during a function call, the entire call stack is preserved:
 
-```
+```gyeol
 label start:
     call helper       # If saved here...
     hero "Back!"      # ...this resumes after load
@@ -90,7 +90,7 @@ Every node's visit count is serialized:
 
 Once-choices that were already selected remain hidden after load:
 
-```
+```gyeol
 menu:
     "One-time offer" -> deal #once    # If selected before save, stays hidden after load
     "Browse" -> browse

@@ -4,7 +4,7 @@
 
 `#key:value` 태그를 사용하여 대사 줄에 메타데이터를 첨부합니다:
 
-```
+```gyeol
 hero "I'm furious!" #mood:angry #pose:arms_crossed
 hero "Listen carefully." #voice:hero_line42.wav
 hero "This is important!" #important
@@ -37,7 +37,7 @@ func _on_dialogue_line(character: String, text: String, tags: Dictionary):
 
 `#voice:filename` 태그는 보이스 파일을 연결하는 표준 방법입니다:
 
-```
+```gyeol
 hero "Hello!" #voice:hero_hello.wav
 ```
 
@@ -45,7 +45,7 @@ hero "Hello!" #voice:hero_hello.wav
 
 게임 측 로직을 위해 label(노드)에 메타데이터를 첨부합니다:
 
-```
+```gyeol
 label shop #repeatable #category=shop:
     merchant "Welcome!"
 
@@ -97,7 +97,7 @@ var tags = story_player.get_node_tags("boss_fight")  # Dictionary
 
 시간에 따라 메뉴 선택지가 나타나고 사라지는 방식을 제어합니다:
 
-```
+```gyeol
 menu:
     "Buy healing potion" -> buy_heal #once
     "Browse inventory" -> browse #sticky
@@ -115,7 +115,7 @@ menu:
 
 ### Once 선택지
 
-```
+```gyeol
 menu:
     "Explore the cave" -> cave #once     # 첫 방문 후 사라짐
     "Rest at camp" -> camp
@@ -126,7 +126,7 @@ menu:
 
 ### Fallback 선택지
 
-```
+```gyeol
 menu:
     "Buy sword (50g)" -> buy_sword if gold >= 50 #once
     "Buy shield (30g)" -> buy_shield if gold >= 30 #once
@@ -139,7 +139,7 @@ Fallback 선택지는 다른 모든 선택지(검 + 방패)가 숨겨졌을 때�
 
 두 가지 순서 모두 유효합니다:
 
-```
+```gyeol
 "VIP special" -> vip if is_vip #once
 "VIP special" -> vip #once if is_vip
 ```
@@ -158,7 +158,7 @@ Fallback 선택지는 다른 모든 선택지(검 + 방패)가 숨겨졌을 때�
 
 ### 기본 변수 치환
 
-```
+```gyeol
 hero "Hello {name}, you have {gold} gold."
 ```
 
@@ -168,7 +168,7 @@ hero "Hello {name}, you have {gold} gold."
 
 런타임 조건을 텍스트에 직접 삽입합니다:
 
-```
+```gyeol
 hero "{if hp > 50}You look strong!{else}You're injured.{endif}"
 ```
 
@@ -185,7 +185,7 @@ hero "{if hp > 50}You look strong!{else}You're injured.{endif}"
 
 조건 분기 안에서 변수를 보간할 수 있습니다:
 
-```
+```gyeol
 hero "{if gold > 0}You have {gold} coins.{else}You're broke!{endif}"
 ```
 
@@ -195,7 +195,7 @@ hero "{if gold > 0}You have {gold} coins.{else}You're broke!{endif}"
 
 대규모 스토리를 여러 파일로 분할합니다:
 
-```
+```gyeol
 # main.gyeol
 import "characters.gyeol"
 import "chapter1/intro.gyeol"
@@ -205,7 +205,7 @@ label start:
     call intro_sequence
 ```
 
-```
+```gyeol
 # characters.gyeol
 character hero:
     displayName: "Hero"
@@ -215,7 +215,7 @@ character villain:
     displayName: "Dark Lord"
 ```
 
-```
+```gyeol
 # chapter1/intro.gyeol
 label intro_sequence:
     @ bg "castle.png"
@@ -238,7 +238,7 @@ label intro_sequence:
 
 노드에 진입할 때마다 (`jump`, `call`, `choose`, `start`를 통해) 방문 횟수가 증가합니다:
 
-```
+```gyeol
 label shop:
     hero "Welcome to the shop!"
     hero "This is visit #{visit_count(shop)}."
@@ -254,7 +254,7 @@ label shop:
 | 인라인 조건 | `{if visit_count(shop) > 2}regular{endif}` | `{if visited(cave)}yes{endif}` |
 
 따옴표가 있든 없든 모두 사용할 수 있습니다:
-```
+```gyeol
 visit_count("shop")    # 따옴표 있음
 visit_count(shop)      # 따옴표 없음 (동일한 결과)
 ```
@@ -263,7 +263,7 @@ visit_count(shop)      # 따옴표 없음 (동일한 결과)
 
 게임 엔진에서 사용할 캐릭터 메타데이터를 정의합니다:
 
-```
+```gyeol
 character hero:
     displayName: "Brave Hero"
     color: "#4CAF50"
