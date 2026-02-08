@@ -32,7 +32,11 @@ public:
         switch (result.type) {
         case StepType::LINE:
             obj.set("type", std::string("LINE"));
-            obj.set("character", result.line.character ? std::string(result.line.character) : val::null());
+            if (result.line.character) {
+                obj.set("character", std::string(result.line.character));
+            } else {
+                obj.set("character", val::null());
+            }
             obj.set("text", result.line.text ? std::string(result.line.text) : std::string(""));
             {
                 val tags = val::array();
