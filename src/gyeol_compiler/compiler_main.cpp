@@ -1,5 +1,6 @@
 ﻿#include "gyeol_parser.h"
 #include "gyeol_comp_analyzer.h"
+#include "gyeol_json_export.h"
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -9,15 +10,16 @@ static const char* VERSION = "0.2.0";
 
 static void printUsage() {
     std::cout << "Gyeol Compiler v" << VERSION << "\n"
-              << "Usage: GyeolCompiler <input.gyeol> [-o output.gyb]\n"
+              << "Usage: GyeolCompiler <input.gyeol> [-o output] [options]\n"
               << "\n"
               << "Options:\n"
-              << "  -o <path>    Output file path (default: story.gyb)\n"
+              << "  -o <path>           Output file path (default: story.gyb)\n"
+              << "  --format <fmt>      Output format: gyb (default) or json\n"
               << "  --export-strings <path>  Export translatable strings to CSV\n"
-              << "  --analyze [path]  Run analysis report (default: stdout)\n"
-              << "  -O           Apply optimizations (constant folding, dead code removal)\n"
-              << "  -h, --help   Show this help message\n"
-              << "  --version    Show version number\n";
+              << "  --analyze [path]    Run analysis report (default: stdout)\n"
+              << "  -O                  Apply optimizations (constant folding, dead code removal)\n"
+              << "  -h, --help          Show this help message\n"
+              << "  --version           Show version number\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -39,16 +41,26 @@ int main(int argc, char* argv[]) {
     }
 
     std::string inputPath = argv[1];
-    std::string outputPath = "story.gyb";
+    std::string outputPath;
+    std::string outputFormat = "gyb";
     std::string exportPath;
     std::string analyzePath;
     bool doAnalyze = false;
     bool doOptimize = false;
+    bool outputPathSet = false;
 
     // 옵션 파싱
     for (int i = 2; i < argc; ++i) {
         if (std::strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
             outputPath = argv[++i];
+            outputPathSet = true;
+        } else if (std::strcmp(argv[i], "--format") == 0 && i + 1 < argc) {
+            outputFormat = argv[++i];
+            if (outputFormat != "gyb" && outputFormat != "json") {
+                std::cerr << "error: unknown format '" << outputFormat
+                          << "'. Supported: gyb, json" << std::endl;
+                return 1;
+            }
         } else if (std::strcmp(argv[i], "--export-strings") == 0 && i + 1 < argc) {
             exportPath = argv[++i];
         } else if (std::strcmp(argv[i], "--analyze") == 0) {
@@ -59,6 +71,11 @@ int main(int argc, char* argv[]) {
         } else if (std::strcmp(argv[i], "-O") == 0) {
             doOptimize = true;
         }
+    }
+
+    // 기본 출력 경로 설정 (포맷에 따라)
+    if (!outputPathSet) {
+        outputPath = (outputFormat == "json") ? "story.json" : "story.gyb";
     }
 
     Gyeol::Parser parser;
@@ -114,13 +131,26 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if (!parser.compile(outputPath)) {
-        const auto& errors = parser.getErrors();
-        for (const auto& err : errors) {
-            std::cerr << "error: " << err << std::endl;
+    if (outputFormat == "json") {
+        // JSON IR output
+        std::string jsonStr = Gyeol::JsonExport::toJsonString(parser.getStory());
+        std::ofstream ofs(outputPath);
+        if (!ofs.is_open()) {
+            std::cerr << "error: failed to write JSON output: " << outputPath << std::endl;
+            return 1;
         }
-        std::cerr << "\n" << errors.size() << " error(s). Compilation failed." << std::endl;
-        return 1;
+        ofs << jsonStr;
+        ofs.close();
+    } else {
+        // Binary .gyb output (default)
+        if (!parser.compile(outputPath)) {
+            const auto& errors = parser.getErrors();
+            for (const auto& err : errors) {
+                std::cerr << "error: " << err << std::endl;
+            }
+            std::cerr << "\n" << errors.size() << " error(s). Compilation failed." << std::endl;
+            return 1;
+        }
     }
 
     return 0;

@@ -1,18 +1,4 @@
-# --- nlohmann/json (FetchContent) ---
-include(FetchContent)
-
-message(STATUS "Fetching nlohmann/json...")
-
-FetchContent_Declare(
-  nlohmann_json
-  GIT_REPOSITORY https://github.com/nlohmann/json.git
-  GIT_TAG        v3.11.3
-)
-
-set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
-set(JSON_Install OFF CACHE BOOL "" FORCE)
-
-FetchContent_MakeAvailable(nlohmann_json)
+# nlohmann/json은 루트 CMakeLists.txt에서 이미 FetchContent로 가져옴
 
 # --- GyeolLSP 실행 파일 ---
 add_executable(GyeolLSP

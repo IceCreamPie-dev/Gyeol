@@ -1,9 +1,10 @@
-# --- 기존 테스트 (Core + Parser) ---
+# --- 기존 테스트 (Core + Parser + JSON Export) ---
 add_executable(GyeolTests
     test_parser.cpp
     test_runner.cpp
     test_story.cpp
     test_saveload.cpp
+    test_json_export.cpp
     test_helpers.h
 )
 

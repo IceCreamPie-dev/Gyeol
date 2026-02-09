@@ -20,6 +20,16 @@ set(FLATBUFFERS_BUILD_FLATHASH OFF CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(flatbuffers)
 
+# --- nlohmann/json (JSON IR export) ---
+FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG        v3.11.3
+)
+set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
+set(JSON_Install OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(nlohmann_json)
+
 # --- 소스 경로 ---
 set(CORE_DIR "${CMAKE_SOURCE_DIR}/../../src/gyeol_core")
 set(COMPILER_DIR "${CMAKE_SOURCE_DIR}/../../src/gyeol_compiler")
@@ -38,10 +48,11 @@ target_include_directories(GyeolCore PUBLIC
 
 target_link_libraries(GyeolCore PUBLIC flatbuffers)
 
-# --- GyeolParser 라이브러리 (Parser + Analyzer) ---
+# --- GyeolParser 라이브러리 (Parser + Analyzer + JSON Export) ---
 add_library(GyeolParser STATIC
     ${COMPILER_DIR}/gyeol_parser.cpp
     ${COMPILER_DIR}/gyeol_comp_analyzer.cpp
+    ${COMPILER_DIR}/gyeol_json_export.cpp
 )
 
 target_include_directories(GyeolParser PUBLIC
@@ -50,7 +61,7 @@ target_include_directories(GyeolParser PUBLIC
     ${GENERATED_DIR}
 )
 
-target_link_libraries(GyeolParser PUBLIC flatbuffers)
+target_link_libraries(GyeolParser PUBLIC flatbuffers nlohmann_json::nlohmann_json)
 
 # --- WASM 바인딩 실행 파일 ---
 add_executable(gyeol gyeol_wasm.cpp)
