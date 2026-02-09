@@ -7,6 +7,8 @@ add_library(GyeolParser
     gyeol_parser.cpp
     gyeol_comp_analyzer.h
     gyeol_comp_analyzer.cpp
+    gyeol_json_export.h
+    gyeol_json_export.cpp
 )
 
 target_include_directories(GyeolParser PUBLIC
@@ -15,7 +17,7 @@ target_include_directories(GyeolParser PUBLIC
     "${GENERATED_DIR}"
 )
 
-target_link_libraries(GyeolParser PUBLIC flatbuffers)
+target_link_libraries(GyeolParser PUBLIC flatbuffers nlohmann_json::nlohmann_json)
 add_dependencies(GyeolParser GyeolCore)
 
 # Compiler 실행 파일

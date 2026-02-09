@@ -13,6 +13,7 @@
 #include <emscripten/val.h>
 #include "gyeol_runner.h"
 #include "gyeol_parser.h"
+#include "gyeol_json_export.h"
 
 using namespace emscripten;
 using namespace Gyeol;
@@ -211,6 +212,38 @@ public:
     // RNG seed
     void setSeed(unsigned int seed) { runner_.setSeed(seed); }
 
+    // --- JSON IR API ---
+
+    // .gyeol 소스를 컴파일하여 JSON IR 문자열로 반환
+    val compileToJson(const std::string& source) {
+        Parser parser;
+        val result = val::object();
+
+        if (!parser.parseString(source, "script.gyeol")) {
+            result.set("success", false);
+            val errors = val::array();
+            for (const auto& err : parser.getErrors()) {
+                errors.call<void>("push", err);
+            }
+            result.set("errors", errors);
+            result.set("json", std::string(""));
+            return result;
+        }
+
+        val warnings = val::array();
+        for (const auto& warn : parser.getWarnings()) {
+            warnings.call<void>("push", warn);
+        }
+
+        std::string jsonStr = JsonExport::toJsonString(parser.getStory());
+
+        result.set("success", true);
+        result.set("errors", val::array());
+        result.set("warnings", warnings);
+        result.set("json", jsonStr);
+        return result;
+    }
+
     // --- Graph Data API (비주얼 에디터용) ---
 
     // 현재 노드 이름 반환
@@ -297,6 +330,7 @@ EMSCRIPTEN_BINDINGS(gyeol) {
         .constructor<>()
         // Compiler
         .function("compile", &GyeolEngine::compile)
+        .function("compileToJson", &GyeolEngine::compileToJson)
         .function("loadLast", &GyeolEngine::loadLast)
         .function("compileAndLoad", &GyeolEngine::compileAndLoad)
         // Runner
