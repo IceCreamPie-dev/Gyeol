@@ -230,14 +230,20 @@ Variant Runner::evaluateExpression(const void* exprPtr) const {
             case ExprOp::Mul:
             case ExprOp::Div:
             case ExprOp::Mod: {
-                if (stack.size() < 2) return Variant::Int(0);
+                if (stack.size() < 2) {
+                    std::cerr << "[Gyeol] Warning: expression stack underflow (arithmetic op)\n";
+                    return Variant::Int(0);
+                }
                 Variant rhs = stack.back(); stack.pop_back();
                 Variant lhs = stack.back(); stack.pop_back();
                 stack.push_back(applyBinaryOp(lhs, token->op(), rhs));
                 break;
             }
             case ExprOp::Negate: {
-                if (stack.empty()) return Variant::Int(0);
+                if (stack.empty()) {
+                    std::cerr << "[Gyeol] Warning: expression stack underflow (negate op)\n";
+                    return Variant::Int(0);
+                }
                 Variant val = stack.back(); stack.pop_back();
                 if (val.type == Variant::FLOAT) {
                     stack.push_back(Variant::Float(-val.f));
@@ -254,7 +260,10 @@ Variant Runner::evaluateExpression(const void* exprPtr) const {
             case ExprOp::CmpLt:
             case ExprOp::CmpGe:
             case ExprOp::CmpLe: {
-                if (stack.size() < 2) return Variant::Int(0);
+                if (stack.size() < 2) {
+                    std::cerr << "[Gyeol] Warning: expression stack underflow (comparison op)\n";
+                    return Variant::Int(0);
+                }
                 Variant rhs = stack.back(); stack.pop_back();
                 Variant lhs = stack.back(); stack.pop_back();
                 Operator cmpOp = Operator::Equal;
@@ -272,21 +281,30 @@ Variant Runner::evaluateExpression(const void* exprPtr) const {
             }
             // --- 논리 연산자 ---
             case ExprOp::And: {
-                if (stack.size() < 2) return Variant::Int(0);
+                if (stack.size() < 2) {
+                    std::cerr << "[Gyeol] Warning: expression stack underflow (logical AND)\n";
+                    return Variant::Int(0);
+                }
                 Variant rhs = stack.back(); stack.pop_back();
                 Variant lhs = stack.back(); stack.pop_back();
                 stack.push_back(Variant::Bool(variantToBool(lhs) && variantToBool(rhs)));
                 break;
             }
             case ExprOp::Or: {
-                if (stack.size() < 2) return Variant::Int(0);
+                if (stack.size() < 2) {
+                    std::cerr << "[Gyeol] Warning: expression stack underflow (logical OR)\n";
+                    return Variant::Int(0);
+                }
                 Variant rhs = stack.back(); stack.pop_back();
                 Variant lhs = stack.back(); stack.pop_back();
                 stack.push_back(Variant::Bool(variantToBool(lhs) || variantToBool(rhs)));
                 break;
             }
             case ExprOp::Not: {
-                if (stack.empty()) return Variant::Int(0);
+                if (stack.empty()) {
+                    std::cerr << "[Gyeol] Warning: expression stack underflow (logical NOT)\n";
+                    return Variant::Int(0);
+                }
                 Variant val = stack.back(); stack.pop_back();
                 stack.push_back(Variant::Bool(!variantToBool(val)));
                 break;
@@ -307,7 +325,10 @@ Variant Runner::evaluateExpression(const void* exprPtr) const {
             }
             // --- 리스트 연산자 ---
             case ExprOp::ListContains: {
-                if (stack.size() < 2) return Variant::Int(0);
+                if (stack.size() < 2) {
+                    std::cerr << "[Gyeol] Warning: expression stack underflow (list contains)\n";
+                    return Variant::Int(0);
+                }
                 Variant rhs = stack.back(); stack.pop_back(); // 검색할 문자열
                 Variant lhs = stack.back(); stack.pop_back(); // 리스트
                 if (lhs.type == Variant::LIST) {
@@ -358,8 +379,14 @@ std::string Runner::variantToString(const Variant& v) {
     return "";
 }
 
-std::string Runner::interpolateText(const char* text) const {
+std::string Runner::interpolateText(const char* text, int depth) const {
     if (!text) return "";
+
+    // 재귀 깊이 제한 (악의적 입력에 의한 스택 오버플로 방지)
+    if (depth > 32) {
+        std::cerr << "[Gyeol] Warning: interpolation depth limit exceeded\n";
+        return text;
+    }
 
     // 빠른 경로: { 가 없으면 빈 문자열 반환 (호출측이 pool 포인터 유지)
     if (std::strchr(text, '{') == nullptr) return "";
@@ -426,7 +453,7 @@ std::string Runner::interpolateText(const char* text) const {
 
                 // 선택된 분기를 재귀 보간
                 const std::string& chosen = condResult ? trueBranch : falseBranch;
-                std::string interp = interpolateText(chosen.c_str());
+                std::string interp = interpolateText(chosen.c_str(), depth + 1);
                 result += interp.empty() ? chosen : interp;
             } else {
                 p = end;
@@ -1024,17 +1051,24 @@ StepResult Runner::step() {
                 if (!random || !random->branches() || random->branches()->size() == 0)
                     continue;
 
-                int totalWeight = 0;
+                int64_t totalWeight = 0;
                 for (flatbuffers::uoffset_t k = 0; k < random->branches()->size(); ++k) {
                     int w = random->branches()->Get(k)->weight();
-                    if (w > 0) totalWeight += w;
+                    if (w > 0) {
+                        totalWeight += w;
+                        if (totalWeight > 0x7FFFFFFF) {
+                            std::cerr << "[Gyeol] Warning: random weight sum overflow, capping\n";
+                            totalWeight = 0x7FFFFFFF;
+                            break;
+                        }
+                    }
                 }
                 if (totalWeight <= 0) continue; // 모든 weight 0 → skip
 
-                std::uniform_int_distribution<int> dist(0, totalWeight - 1);
+                std::uniform_int_distribution<int> dist(0, static_cast<int>(totalWeight) - 1);
                 int roll = dist(rng_);
 
-                int cumulative = 0;
+                int64_t cumulative = 0;
                 for (flatbuffers::uoffset_t k = 0; k < random->branches()->size(); ++k) {
                     int w = random->branches()->Get(k)->weight();
                     if (w <= 0) continue;

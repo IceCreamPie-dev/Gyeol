@@ -243,7 +243,7 @@ private:
     Variant evaluateExpression(const void* exprPtr) const;
 
     // 문자열 보간 ({변수명} → 값 치환, {if cond}...{else}...{endif} 지원)
-    std::string interpolateText(const char* text) const;
+    std::string interpolateText(const char* text, int depth = 0) const;
     static std::string variantToString(const Variant& v);
 
     // 인라인 조건 평가 ({if cond}...{else}...{endif})

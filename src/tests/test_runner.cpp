@@ -3451,6 +3451,51 @@ label start:
     EXPECT_EQ(v.list.size(), 1u);
 }
 
+TEST(RunnerEdgeCaseTest, InterpolationDepthLimit) {
+    // 33단계 중첩 인라인 조건 — 깊이 제한(32)을 초과하지만 크래시 없어야 함
+    std::string nested = "";
+    for (int i = 0; i < 33; ++i) nested += "{if x}";
+    nested += "deep";
+    for (int i = 0; i < 33; ++i) nested += "{endif}";
+
+    std::string script = "label start:\n    $ x = 1\n    narrator \"" + nested + "\"\n";
+    auto buf = GyeolTest::compileScript(script);
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    // 깊이 초과 시에도 텍스트가 반환되어야 함 (크래시 없이)
+    EXPECT_TRUE(r.line.text != nullptr);
+    EXPECT_TRUE(std::string(r.line.text).find("deep") != std::string::npos);
+}
+
+TEST(RunnerEdgeCaseTest, RandomWeightOverflow) {
+    // 가중치 합이 int32 범위를 초과해도 크래시 없어야 함
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    random:
+        1000000000 -> path_a
+        1000000000 -> path_b
+        1000000000 -> path_c
+label path_a:
+    "a"
+label path_b:
+    "b"
+label path_c:
+    "c"
+)");
+    ASSERT_FALSE(buf.empty());
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    std::string text = r.line.text ? r.line.text : "";
+    EXPECT_TRUE(text == "a" || text == "b" || text == "c");
+}
+
 // ============================================================
 // --- 캐릭터 API 런타임 테스트 ---
 // ============================================================
