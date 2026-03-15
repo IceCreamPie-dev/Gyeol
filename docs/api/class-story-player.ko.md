@@ -287,11 +287,11 @@ PackedStringArray get_variable_names()
 bool load_locale(path: String)
 ```
 
-로케일 오버레이 CSV 파일을 로드합니다. 번역된 문자열이 런타임에 원본을 대체합니다. `res://` 및 `user://` 경로를 지원합니다.
+로케일 오버레이 파일을 로드합니다(`.json` 권장, CSV 하위 호환 지원). 번역된 문자열이 런타임에 원본을 대체합니다. `res://` 및 `user://` 경로를 지원합니다.
 
 성공 시 `true`를 반환합니다.
 
-CSV 형식에 대한 자세한 내용은 [로컬라이제이션](../advanced/localization.md)을 참고하세요.
+PO/JSON 워크플로와 CSV 하위 호환은 [로컬라이제이션](../advanced/localization.md)을 참고하세요.
 
 ---
 
@@ -361,7 +361,7 @@ PackedStringArray get_character_names()
 String get_character_display_name(character_id: String)
 ```
 
-캐릭터의 `displayName` 속성을 반환하는 편의 메서드입니다. `get_character_property(character_id, "displayName")`와 동일합니다.
+`displayName`을 우선 사용하고, 없으면 `name`, 그것도 없으면 캐릭터 ID를 반환하는 편의 메서드입니다.
 
 ---
 

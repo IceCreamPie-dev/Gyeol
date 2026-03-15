@@ -2,20 +2,12 @@
 
 ## 사전 요구사항
 
-| 의존성 | 버전 | 비고 |
-|--------|------|------|
-| CMake | 3.15+ | 빌드 시스템 |
-| Ninja | 모든 버전 | 빌드 백엔드 |
-| C++17 컴파일러 | GCC 8+ / MinGW / Clang 7+ | GDExtension은 MSVC 필요 |
-| Git | 모든 버전 | 서브모듈 가져오기용 |
+| 플랫폼 | 필요 항목 |
+|---|---|
+| Windows (권장 개발 흐름) | CMake 3.15+, Git, Visual Studio C++ 툴체인, Python 3 |
+| Linux/macOS (Core 빌드) | CMake 3.15+, Ninja, C++17 컴파일러, Git |
 
-이외의 의존성은 자동으로 가져옵니다:
-
-| 라이브러리 | 버전 | 용도 |
-|-----------|------|------|
-| FlatBuffers | v24.3.25 | 바이너리 직렬화 |
-| Google Test | v1.14.0 | 유닛 테스트 |
-| nlohmann/json | v3.11.3 | LSP 서버 |
+Core 의존성(FlatBuffers, Google Test, nlohmann/json)은 CMake가 자동으로 내려받습니다.
 
 ## 저장소 클론
 
@@ -24,84 +16,70 @@ git clone --recurse-submodules https://github.com/IceCreamPie-dev/Gyeol.git
 cd Gyeol
 ```
 
-> **참고:** `--recurse-submodules` 플래그는 GDExtension 빌드에 필요한 `godot-cpp` 서브모듈을 가져오기 위해 반드시 필요합니다.
+`godot-cpp` 서브모듈이 필요하므로 `--recurse-submodules`를 사용해야 합니다.
+
+## 로컬 툴체인 부트스트랩 (Windows 기본)
+
+```powershell
+.\tools\dev\bootstrap-toolchains.ps1
+.\tools\dev\activate-toolchains.ps1
+.\tools\dev\doctor-toolchains.ps1
+```
+
+Windows ARM64 환경에서 prebuilt Emscripten 바이너리가 없으면 다음 fallback으로 다시 실행하세요:
+
+```powershell
+.\tools\dev\bootstrap-toolchains.ps1 -AllowSourceBuild
+```
+
+이 과정에서 `.tools/` 아래에 로컬 툴체인이 준비됩니다:
+- `.tools/emsdk` (Emscripten)
+- `.tools/venv` (SCons, Ninja)
 
 ## Core + 도구 빌드
 
-```bash
-cmake -B build -G Ninja
+```powershell
+cmake -S . -B build -G Ninja
 cmake --build build
+ctest --test-dir build --output-on-failure
 ```
 
-빌드가 완료되면 다음 실행 파일이 생성됩니다:
+생성되는 주요 바이너리:
+- `build/src/gyeol_compiler/GyeolCompiler`
+- `build/src/gyeol_core/GyeolTest`
+- `build/src/gyeol_lsp/GyeolLSP`
+- `build/src/gyeol_debugger/GyeolDebugger`
 
-| 실행 파일 | 위치 | 용도 |
-|----------|------|------|
-| `GyeolCompiler` | `build/src/gyeol_compiler/` | `.gyeol` → `.gyb` 컴파일러 |
-| `GyeolTest` | `build/src/gyeol_core/` | 콘솔 인터랙티브 플레이어 |
-| `GyeolLSP` | `build/src/gyeol_lsp/` | Language Server Protocol 서버 |
-| `GyeolDebugger` | `build/src/gyeol_debugger/` | CLI 인터랙티브 디버거 |
-| `GyeolTests` | `build/src/tests/` | 유닛 테스트 실행기 |
-| `GyeolLSPTests` | `build/src/tests/` | LSP 테스트 실행기 |
+## WASM 빌드
 
-## GDExtension 빌드 (Godot)
-
-Windows에서 MSVC와 [SCons](https://scons.org/)가 필요합니다:
-
-```bash
-cd bindings/godot_extension
-scons platform=windows target=template_debug
+```powershell
+.\tools\dev\build-wasm.ps1
 ```
 
-출력: `demo/godot/bin/libgyeol.windows.template_debug.x86_64.dll`
+기대 산출물:
+- `build_wasm/dist/gyeol.js`
+- `build_wasm/dist/*.wasm`
 
-> **참고:** 첫 빌드 시 godot-cpp 바인딩 전체를 컴파일하므로 약 5분 정도 소요됩니다.
+## Godot GDExtension 빌드
 
-## 테스트 실행
-
-```bash
-cd build && ctest --output-on-failure
+```powershell
+.\tools\dev\build-godot.ps1
 ```
 
-또는 테스트 실행 파일을 직접 실행합니다:
+기대 산출물:
+- `demo/godot/bin/libgyeol.windows.template_debug.x86_64.dll`
 
-```bash
-./build/src/tests/GyeolTests       # Core + Parser + Runner
-./build/src/tests/GyeolLSPTests    # LSP Analyzer + Server
+ARM64 아티팩트가 필요하면:
+
+```powershell
+.\tools\dev\build-godot.ps1 -Arch arm64
 ```
 
-## 설치 확인
+## 전역 툴체인 (선택)
 
-```bash
-# 테스트 스토리 컴파일
-./build/src/gyeol_compiler/GyeolCompiler test.gyeol -o test.gyb
-
-# 콘솔에서 플레이
-./build/src/gyeol_core/GyeolTest test.gyb
-```
-
-## 프로젝트 구조
-
-```
-Gyeol/
-  schemas/
-    gyeol.fbs              # FlatBuffers 스키마
-  src/
-    gyeol_core/            # Core 엔진 라이브러리 + Runner VM
-    gyeol_compiler/        # Parser + Compiler
-    gyeol_lsp/             # LSP 서버
-    gyeol_debugger/        # CLI 디버거
-    tests/                 # Google Test 테스트 스위트
-  bindings/
-    godot_extension/       # Godot 4.3 GDExtension (SCons)
-  editors/
-    vscode/                # VS Code 확장 (gyeol-lang)
-  demo/
-    godot/                 # Godot 데모 프로젝트
-  docs/                    # 이 문서
-```
+전역 `emsdk`/`scons`를 계속 사용할 수 있지만, 재현성을 위해 기본 권장 흐름은 로컬 `.tools/` 방식입니다.
 
 ## 다음 단계
 
-- [빠른 시작](quick-start.md) - 첫 스토리 작성 및 실행
-- [Godot 연동](godot-integration.md) - Godot에서 Gyeol 사용하기
+- [빠른 시작](quick-start.md)
+- [Godot 연동](godot-integration.md)

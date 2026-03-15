@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <cstddef>
 #include <unordered_map>
 #include <unordered_set>
 #include <random>
@@ -60,6 +61,38 @@ struct StepResult {
 // --- Runner (VM) ---
 class Runner {
 public:
+    struct Snapshot {
+        std::vector<uint8_t> bytes;
+    };
+
+    struct TraceEvent {
+        std::string kind;
+        std::string nodeName;
+        uint32_t pc = 0;
+        std::string detail;
+    };
+
+    struct ExecutionMetrics {
+        uint64_t stepCalls = 0;
+        uint64_t instructionsExecuted = 0;
+        uint64_t lineResults = 0;
+        uint64_t choiceResults = 0;
+        uint64_t commandResults = 0;
+        uint64_t endResults = 0;
+        uint64_t jumps = 0;
+        uint64_t calls = 0;
+        uint64_t returns = 0;
+        uint64_t conditionsEvaluated = 0;
+        uint64_t randomRolls = 0;
+        uint64_t choicesMade = 0;
+        uint64_t snapshotsCreated = 0;
+        uint64_t snapshotsRestored = 0;
+        uint64_t saveOperations = 0;
+        uint64_t loadOperations = 0;
+        uint64_t errors = 0;
+        uint64_t traceEvents = 0;
+    };
+
     bool start(const uint8_t* buffer, size_t size);
     bool startAtNode(const uint8_t* buffer, size_t size, const std::string& nodeName);
     StepResult step();
@@ -76,12 +109,15 @@ public:
     bool saveState(const std::string& filepath) const;
     bool loadState(const std::string& filepath);
     bool hasStory() const { return story_ != nullptr; }
+    Snapshot snapshot() const;
+    bool restore(const Snapshot& snapshot);
 
     // RNG seed (deterministic testing)
     void setSeed(uint32_t seed);
+    uint32_t getSeed() const;
 
     // Locale (다국어) API
-    bool loadLocale(const std::string& csvPath);
+    bool loadLocale(const std::string& path);
     void clearLocale();
     std::string getLocale() const;
 
@@ -164,6 +200,14 @@ public:
     std::vector<CallFrameInfo> getCallStack() const;  // Human-readable call stack
     std::string getCurrentNodeName() const;  // Convenience wrapper
     uint32_t getCurrentPC() const;
+    const std::string& getLastError() const;
+    void clearLastError();
+    const ExecutionMetrics& getMetrics() const;
+    void resetMetrics();
+    void setTraceEnabled(bool enabled, size_t maxEvents = 256);
+    bool isTraceEnabled() const;
+    const std::vector<TraceEvent>& getTrace() const;
+    void clearTrace();
 
     // Node inspection
     std::vector<std::string> getNodeNames() const;  // List all node names in story
@@ -233,11 +277,27 @@ private:
     std::set<std::pair<std::string, uint32_t>> breakpoints_;
     bool stepMode_ = false;
     bool hitBreakpoint_ = false;
+    bool hasExplicitSeed_ = false;
+    uint32_t currentSeed_ = 0;
+    mutable std::string lastError_;
+    mutable ExecutionMetrics metrics_;
+    bool traceEnabled_ = false;
+    size_t traceLimit_ = 256;
+    mutable std::vector<TraceEvent> trace_;
 
     // 헬퍼
     const char* poolStr(int32_t index) const;
     void jumpToNode(const char* name);
     void jumpToNodeById(int32_t nameId);
+    void setError(const std::string& message) const;
+    void clearErrorInternal() const;
+    void recordTrace(const std::string& kind, const std::string& detail = "") const;
+    void recordTrace(const std::string& kind, const std::string& nodeName, uint32_t pc, const std::string& detail) const;
+    void seedRngForStart();
+    std::string exportRngState() const;
+    void importRngState(const std::string& state);
+    std::vector<uint8_t> serializeStateBuffer() const;
+    bool deserializeStateBuffer(const uint8_t* data, size_t size);
 
     // 표현식 평가 (RPN 스택 머신)
     Variant evaluateExpression(const void* exprPtr) const;

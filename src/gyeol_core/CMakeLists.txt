@@ -20,6 +20,8 @@ add_custom_command(
 add_library(GyeolCore
     src/gyeol_story.cpp
     src/gyeol_runner.cpp
+    src/gyeol_runner_locale.cpp
+    src/gyeol_runner_debug.cpp
     include/gyeol_story.h
     include/gyeol_runner.h
     "${GENERATED_DIR}/gyeol_generated.h"

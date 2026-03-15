@@ -6,18 +6,22 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  EMSCRIPTEN_VERSION: "4.0.23"
+  SCONS_VERSION: "4.8.1"
+
 jobs:
-  build:
+  core:
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
-            name: Windows (MinGW)
+            name: Windows (MSVC)
           - os: ubuntu-latest
             name: Linux (GCC)
 
-    name: ${{ matrix.name }}
+    name: Core (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -29,18 +33,130 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@v5
 
-      - name: Configure (Windows)
-        if: runner.os == 'Windows'
+      - name: Prepare logs
         shell: bash
-        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: mkdir -p logs
 
-      - name: Configure (Linux)
+      - name: Configure + Build + Test (Linux)
         if: runner.os == 'Linux'
-        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release 2>&1 | tee logs/core-configure.log
+          cmake --build build 2>&1 | tee logs/core-build.log
+          ctest --test-dir build --output-on-failure 2>&1 | tee logs/core-test.log
 
-      - name: Build
-        run: cmake --build build
+      - name: Configure + Build + Test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release 2>&1 | Tee-Object -FilePath logs/core-configure.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build 2>&1 | Tee-Object -FilePath logs/core-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build --output-on-failure 2>&1 | Tee-Object -FilePath logs/core-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Test
-        working-directory: build
-        run: ctest --output-on-failure
+      - name: Upload core logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-logs-${{ runner.os }}
+          path: logs/*
+
+  wasm:
+    name: WASM (Emscripten)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSCRIPTEN_VERSION }}
+
+      - name: Prepare logs
+        run: mkdir -p logs
+
+      - name: Configure + Build WASM
+        shell: bash
+        run: |
+          set -o pipefail
+          emcmake cmake -S bindings/wasm -B build_wasm -G Ninja -DCMAKE_BUILD_TYPE=Release 2>&1 | tee logs/wasm-configure.log
+          cmake --build build_wasm 2>&1 | tee logs/wasm-build.log
+
+      - name: Verify WASM artifacts
+        shell: bash
+        run: |
+          test -f build_wasm/dist/gyeol.js
+          ls build_wasm/dist/*.wasm
+
+      - name: Upload wasm logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-logs
+          path: logs/*
+
+  godot-extension:
+    name: Godot Extension (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install SCons
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install scons==${{ env.SCONS_VERSION }}
+
+      - name: Prepare logs
+        shell: pwsh
+        run: New-Item -ItemType Directory -Path logs -Force | Out-Null
+
+      - name: Configure root build (FlatBuffers headers)
+        shell: pwsh
+        run: |
+          cmake -S . -B build 2>&1 | Tee-Object -FilePath logs/godot-configure.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build Godot extension
+        shell: pwsh
+        run: |
+          Push-Location bindings/godot_extension
+          scons platform=windows target=template_debug 2>&1 | Tee-Object -FilePath ../../logs/godot-build.log
+          $code = $LASTEXITCODE
+          Pop-Location
+          if ($code -ne 0) { exit $code }
+
+      - name: Verify Godot artifact
+        shell: pwsh
+        run: |
+          $artifact = Get-ChildItem -Path demo/godot/bin -Filter "libgyeol*" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $artifact) {
+            throw "Godot extension artifact not found in demo/godot/bin"
+          }
+          Write-Host "Found artifact: $($artifact.FullName)"
+
+      - name: Upload godot logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-logs
+          path: logs/*

@@ -1329,6 +1329,122 @@ TEST(ParserTest, ExportStringsCSV) {
     std::remove(csvPath.c_str());
 }
 
+TEST(ParserTest, ExportStringsPOT) {
+    std::string inPath = "test_export_strings_po.gyeol";
+    std::string potPath = "test_export_strings.po";
+    {
+        std::ofstream ofs(inPath);
+        ofs << "label start:\n"
+            << "    hero \"Hello world!\"\n"
+            << "    menu:\n"
+            << "        \"Go left\" -> start\n";
+    }
+
+    Parser parser;
+    ASSERT_TRUE(parser.parse(inPath));
+    ASSERT_TRUE(parser.exportStringsPO(potPath));
+
+    std::ifstream ifs(potPath);
+    ASSERT_TRUE(ifs.is_open());
+    std::stringstream ss;
+    ss << ifs.rdbuf();
+    std::string content = ss.str();
+
+    EXPECT_NE(content.find("msgctxt \""), std::string::npos);
+    EXPECT_NE(content.find("msgid \"Hello world!\""), std::string::npos);
+    EXPECT_NE(content.find("msgid \"Go left\""), std::string::npos);
+    EXPECT_NE(content.find("msgstr \"\""), std::string::npos);
+
+    std::remove(inPath.c_str());
+    std::remove(potPath.c_str());
+}
+
+TEST(ParserTest, ConvertPoToJsonLocale) {
+    std::string poPath = "test_locale_convert.po";
+    std::string jsonPath = "test_locale_convert.json";
+    {
+        std::ofstream ofs(poPath);
+        ofs << "msgid \"\"\n";
+        ofs << "msgstr \"\"\n";
+        ofs << "\"Language: ko\\n\"\n\n";
+        ofs << "msgctxt \"start:0:aaaa\"\n";
+        ofs << "msgid \"Hello\"\n";
+        ofs << "msgstr \"hello-ko\"\n\n";
+        ofs << "#, fuzzy\n";
+        ofs << "msgctxt \"start:1:bbbb\"\n";
+        ofs << "msgid \"Skip\"\n";
+        ofs << "msgstr \"skip-me\"\n\n";
+        ofs << "msgctxt \"start:2:cccc\"\n";
+        ofs << "msgid \"Multi\"\n";
+        ofs << "msgstr \"\"\n";
+        ofs << "\"multi \"\n";
+        ofs << "\"line\"\n\n";
+        ofs << "msgctxt \"start:3:dddd\"\n";
+        ofs << "msgid \"Empty\"\n";
+        ofs << "msgstr \"\"\n";
+    }
+
+    std::string err;
+    ASSERT_TRUE(LocaleTools::convertPoToJson(poPath, jsonPath, "ko", &err)) << err;
+
+    std::ifstream ifs(jsonPath);
+    ASSERT_TRUE(ifs.is_open());
+    std::stringstream ss;
+    ss << ifs.rdbuf();
+    std::string jsonText = ss.str();
+
+    EXPECT_NE(jsonText.find("\"version\": 1"), std::string::npos);
+    EXPECT_NE(jsonText.find("\"locale\": \"ko\""), std::string::npos);
+    EXPECT_NE(jsonText.find("\"start:0:aaaa\""), std::string::npos);
+    EXPECT_NE(jsonText.find("hello-ko"), std::string::npos);
+    EXPECT_NE(jsonText.find("\"start:2:cccc\""), std::string::npos);
+    EXPECT_NE(jsonText.find("multi line"), std::string::npos);
+    EXPECT_EQ(jsonText.find("\"start:1:bbbb\""), std::string::npos);
+    EXPECT_EQ(jsonText.find("\"start:3:dddd\""), std::string::npos);
+
+    std::remove(poPath.c_str());
+    std::remove(jsonPath.c_str());
+}
+
+TEST(ParserTest, ConvertPoToJsonLocaleUsesFilenameAndLatestMsgctxtWins) {
+    std::string poPath = "test_locale_auto.po";
+    std::string jsonPath = "test_locale_auto.json";
+    {
+        std::ofstream ofs(poPath);
+        ofs << "msgid \"\"\n";
+        ofs << "msgstr \"\"\n";
+        ofs << "\"Content-Type: text/plain; charset=UTF-8\\n\"\n\n";
+        ofs << "msgctxt \"line:dup\"\n";
+        ofs << "msgid \"Hello\"\n";
+        ofs << "msgstr \"First\"\n\n";
+        ofs << "msgctxt \"line:dup\"\n";
+        ofs << "msgid \"Hello\"\n";
+        ofs << "msgstr \"Second\"\n\n";
+        ofs << "msgctxt \"line:keep\"\n";
+        ofs << "msgid \"World\"\n";
+        ofs << "msgstr \"Keep\"\n";
+    }
+
+    std::string err;
+    ASSERT_TRUE(LocaleTools::convertPoToJson(poPath, jsonPath, "", &err)) << err;
+
+    std::ifstream ifs(jsonPath);
+    ASSERT_TRUE(ifs.is_open());
+    std::stringstream ss;
+    ss << ifs.rdbuf();
+    std::string jsonText = ss.str();
+
+    EXPECT_NE(jsonText.find("\"locale\": \"test_locale_auto\""), std::string::npos);
+    EXPECT_NE(jsonText.find("\"line:dup\""), std::string::npos);
+    EXPECT_NE(jsonText.find("\"Second\""), std::string::npos);
+    EXPECT_EQ(jsonText.find("\"First\""), std::string::npos);
+    EXPECT_NE(jsonText.find("\"line:keep\""), std::string::npos);
+    EXPECT_NE(jsonText.find("\"Keep\""), std::string::npos);
+
+    std::remove(poPath.c_str());
+    std::remove(jsonPath.c_str());
+}
+
 // =================================================================
 // --- Import 테스트 ---
 // =================================================================

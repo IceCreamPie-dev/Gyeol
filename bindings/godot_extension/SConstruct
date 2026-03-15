@@ -21,6 +21,8 @@ sources = Glob("src/*.cpp")
 # GyeolCore 소스 (직접 컴파일)
 sources.append(env.Object(gyeol_root + "src/gyeol_core/src/gyeol_story.cpp"))
 sources.append(env.Object(gyeol_root + "src/gyeol_core/src/gyeol_runner.cpp"))
+sources.append(env.Object(gyeol_root + "src/gyeol_core/src/gyeol_runner_locale.cpp"))
+sources.append(env.Object(gyeol_root + "src/gyeol_core/src/gyeol_runner_debug.cpp"))
 
 # 출력 경로: demo/godot/bin/
 output_dir = "../../demo/godot/bin/"

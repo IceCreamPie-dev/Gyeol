@@ -883,3 +883,89 @@ label opt_c:
 
     std::remove(savePath.c_str());
 }
+
+TEST_F(SaveLoadTest, SaveLoadPreservesRandomSequence) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    random:
+        1 -> first_a
+        1 -> first_b
+
+label first_a:
+    narrator "first_a"
+    random:
+        1 -> second_1
+        1 -> second_2
+
+label first_b:
+    narrator "first_b"
+    random:
+        1 -> second_1
+        1 -> second_2
+
+label second_1:
+    narrator "second_1"
+
+label second_2:
+    narrator "second_2"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    r1.setSeed(12345);
+    ASSERT_TRUE(GyeolTest::startRunner(r1, buf));
+
+    auto res = r1.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    ASSERT_TRUE(r1.saveState(SAVE_PATH));
+
+    auto expected = r1.step();
+    ASSERT_EQ(expected.type, StepType::LINE);
+
+    Runner r2;
+    r2.setSeed(99999);
+    ASSERT_TRUE(r2.start(buf.data(), buf.size()));
+    ASSERT_TRUE(r2.loadState(SAVE_PATH));
+
+    auto restored = r2.step();
+    ASSERT_EQ(restored.type, StepType::LINE);
+    EXPECT_STREQ(restored.line.text, expected.line.text);
+}
+
+TEST_F(SaveLoadTest, SnapshotRestorePreservesPendingOnceChoiceMetadata) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "Once option" -> once_path #once
+        "Always option" -> always_path
+
+label once_path:
+    narrator "Once"
+    jump start
+
+label always_path:
+    narrator "Always"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(GyeolTest::startRunner(r1, buf));
+    auto res = r1.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    auto snapshot = r1.snapshot();
+    ASSERT_FALSE(snapshot.bytes.empty());
+
+    Runner r2;
+    ASSERT_TRUE(GyeolTest::startRunner(r2, buf));
+    ASSERT_TRUE(r2.restore(snapshot));
+
+    r2.choose(0);
+    res = r2.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "Once");
+
+    res = r2.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    ASSERT_EQ(res.choices.size(), 1u);
+    EXPECT_STREQ(res.choices[0].text, "Always option");
+}

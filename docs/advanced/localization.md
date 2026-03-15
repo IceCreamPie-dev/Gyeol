@@ -1,168 +1,87 @@
 # Localization
 
-Gyeol supports multi-language stories through an automatic Line ID system and CSV-based locale overlays.
+Gyeol supports multi-language stories with stable `line_id` keys and runtime locale overlays.
 
-## How It Works
+## Recommended Workflow (PO + JSON)
 
 ```
-1. Write story  -->  2. Compile + export CSV  -->  3. Translate CSV  -->  4. Load locale at runtime
+1) Write story  ->  2) Export POT  ->  3) Translate in PO  ->  4) Convert PO to JSON  ->  5) Load locale
 ```
 
-1. Write your story in the primary language
-2. Compile and export a translation CSV with auto-generated Line IDs
-3. Translators fill in translations in the CSV
-4. Load the locale CSV at runtime to overlay translations
+1. Write `.gyeol` in your source language.
+2. Export POT template from the compiled script metadata.
+3. Translators work in PO (`msgctxt = line_id`).
+4. Convert PO into runtime JSON locale.
+5. Load JSON locale at runtime (`Runner` / `StoryPlayer`).
 
-## Step 1: Export Strings
+## Step 1: Export POT
 
 ```bash
-GyeolCompiler story.gyeol --export-strings strings.csv
+GyeolCompiler story.gyeol --export-strings-po strings.pot
 ```
 
-This generates a CSV file with all translatable text:
+Each translatable entry is exported as:
 
-```csv
-id,text
-start:0:a3f2,"Hello, how are you?"
-start:1:b7c1,"Sure, let's go!"
-start:2:c4d8,"No thanks."
-shop:0:e1f3,"Welcome to the shop!"
+```po
+msgctxt "start:0:a3f2"
+msgid "Hello, how are you?"
+msgstr ""
 ```
 
-### What Gets Line IDs
+## Step 2: Translate PO
 
-| Type | Translatable? | Example |
-|------|:------------:|---------|
-| Dialogue text | Yes | `hero "Hello!"` |
-| Choice text | Yes | `"Go left" -> cave` |
-| Node names | No | `label start:` |
-| Variable names | No | `$ hp = 100` |
-| Command types | No | `@ bg "forest.png"` |
-| Command params | No | `@ sfx "sound.wav"` |
-| Character IDs | No | `character hero:` |
+Translators fill `msgstr` values.
+Entries marked `#, fuzzy` are ignored by the converter in v1.
 
-### Line ID Format
+## Step 3: Convert PO to Runtime JSON
 
-```
-{node_name}:{instruction_index}:{hash4}
+```bash
+GyeolCompiler --po-to-json strings_ko.po -o ko.locale.json --locale ko
 ```
 
-| Part | Description |
-|------|-------------|
-| `node_name` | The containing label |
-| `instruction_index` | 0-based position within the node |
-| `hash4` | 4-digit hex from FNV-1a hash of the text |
+Output schema:
 
-The hash ensures IDs remain stable even if instruction order changes slightly.
-
-## Step 2: Create Translations
-
-Copy `strings.csv` and translate the `text` column:
-
-**strings_ko.csv** (Korean):
-```csv
-id,text
-start:0:a3f2,"안녕하세요?"
-start:1:b7c1,"좋아, 같이 가자!"
-start:2:c4d8,"아니, 됐어."
-shop:0:e1f3,"상점에 오신 것을 환영합니다!"
+```json
+{
+  "version": 1,
+  "locale": "ko",
+  "entries": {
+    "start:0:a3f2": "안녕하세요!"
+  }
+}
 ```
 
-**strings_ja.csv** (Japanese):
-```csv
-id,text
-start:0:a3f2,"こんにちは、元気ですか？"
-start:1:b7c1,"うん、行こう！"
-start:2:c4d8,"いいえ、大丈夫。"
-shop:0:e1f3,"お店へようこそ！"
-```
+Rules:
+- `version` is required and currently must be `1`.
+- `entries` is required (`line_id -> translated text`).
+- Empty translations are ignored.
+- Unknown `line_id` values are ignored at runtime.
 
-### Partial Translation
-
-You don't have to translate every line. Missing translations fall back to the original text:
-
-```csv
-id,text
-start:0:a3f2,"안녕하세요?"
-# Lines not in the CSV use the original language
-```
-
-## Step 3: Load at Runtime
+## Step 4: Load Locale at Runtime
 
 ### C++ (Runner)
 
 ```cpp
-runner.loadLocale("strings_ko.csv");  // Load Korean
-// ... play story with Korean text ...
-
-runner.clearLocale();                  // Revert to original
-runner.loadLocale("strings_ja.csv");  // Switch to Japanese
+runner.loadLocale("ko.locale.json");
+// ...
+runner.clearLocale();
 ```
 
 ### GDScript (StoryPlayer)
 
 ```gdscript
-# Load locale
-story_player.load_locale("res://locales/ko.csv")
-
-# Check current locale
-var locale = story_player.get_locale()
-
-# Clear (revert to original)
+story_player.load_locale("res://locales/ko.locale.json")
 story_player.clear_locale()
-
-# Switch language
-story_player.load_locale("res://locales/ja.csv")
 ```
 
-## Runtime Behavior
+## Backward Compatibility
 
-When a locale is loaded:
-- `poolStr()` checks the locale overlay first
-- If a translation exists for the Line ID, it's used
-- If not, the original text is used (fallback)
-- String interpolation (`{variable}`) works on translated text
-- Inline conditions (`{if ...}`) work on translated text
+CSV locale loading is still supported:
 
-## Practical Setup
-
-### Folder Structure
-
-```
-project/
-  story.gyeol
-  story.gyb
-  locales/
-    strings.csv        # Original (exported)
-    ko.csv             # Korean
-    ja.csv             # Japanese
-    en.csv             # English (if original is different)
+```bash
+GyeolCompiler story.gyeol --export-strings strings.csv
 ```
 
-### Language Selection in Godot
-
-```gdscript
-var locale_map = {
-    "ko": "res://locales/ko.csv",
-    "ja": "res://locales/ja.csv",
-    "en": "res://locales/en.csv",
-}
-
-func set_language(lang: String):
-    story_player.clear_locale()
-    if lang in locale_map:
-        story_player.load_locale(locale_map[lang])
-
-func _ready():
-    # Use Godot's system locale
-    var lang = OS.get_locale_language()
-    set_language(lang)
-```
-
-## Yarn Spinner Compatibility
-
-Gyeol's localization system is inspired by Yarn Spinner's approach:
-- Automatic Line ID generation (no manual ID assignment)
-- CSV-based translation files
-- Runtime overlay (no recompilation needed)
-- Fallback to original text for missing translations
+`Runner::loadLocale(path)` auto-detects:
+- `.json` -> JSON locale
+- other extensions -> CSV locale

@@ -14,6 +14,9 @@ GyeolCompiler <input.gyeol> [options]
 |--------|-------------|
 | `-o <path>` | Output `.gyb` file path (default: `story.gyb`) |
 | `--export-strings <path>` | Export translatable strings to CSV |
+| `--export-strings-po <path>` | Export translatable strings to POT (`msgctxt = line_id`) |
+| `--po-to-json <path>` | Convert PO translations to runtime locale JSON |
+| `--locale <code>` | Locale code override for `--po-to-json` |
 | `--analyze [path]` | Run static analysis (print to stdout or file) |
 | `-O` | Enable optimizations (constant folding, dead code removal) |
 | `-h`, `--help` | Show help message |
@@ -43,6 +46,30 @@ Generates a CSV file with Line IDs and original text for translation:
 id,text
 start:0:a3f2,"Hello, how are you?"
 start:1:b7c1,"Sure, let's go!"
+```
+
+```bash
+GyeolCompiler my_story.gyeol --export-strings-po strings.pot
+```
+
+Generates a POT template where each entry uses `msgctxt` as Gyeol `line_id`.
+
+### PO to Runtime JSON
+
+```bash
+GyeolCompiler --po-to-json strings_ko.po -o ko.locale.json --locale ko
+```
+
+Output JSON schema:
+
+```json
+{
+  "version": 1,
+  "locale": "ko",
+  "entries": {
+    "start:0:a3f2": "안녕하세요!"
+  }
+}
 ```
 
 ### Static Analysis

@@ -147,7 +147,7 @@ struct CommandData {
 
 | 반환 타입 | 메서드 |
 |--------|--------|
-| `bool` | [loadLocale](#loadlocale)`(const std::string& csvPath)` |
+| `bool` | [loadLocale](#loadlocale)`(const std::string& path)` |
 | `void` | [clearLocale](#clearlocale)`()` |
 | `std::string` | [getLocale](#getlocale)`() const` |
 
@@ -343,10 +343,13 @@ bool loadState(const std::string& filepath)
 ### loadLocale
 
 ```cpp
-bool loadLocale(const std::string& csvPath)
+bool loadLocale(const std::string& path)
 ```
 
-CSV 로케일 오버레이를 로드합니다. 번역된 문자열이 Line과 Choice 텍스트의 원본을 대체합니다.
+경로에서 로케일 오버레이를 로드합니다.
+지원 포맷:
+- `.json` 런타임 locale (`version`, 선택 `locale`, `entries`)
+- CSV 오버레이 (하위 호환)
 
 ---
 
@@ -416,7 +419,7 @@ std::vector<std::string> getCharacterNames() const
 std::string getCharacterDisplayName(const std::string& characterId) const
 ```
 
-`displayName` 속성을 반환하는 편의 메서드입니다.
+`displayName`을 우선 사용하고, 없으면 `name`, 그것도 없으면 캐릭터 ID를 반환하는 편의 메서드입니다.
 
 ---
 

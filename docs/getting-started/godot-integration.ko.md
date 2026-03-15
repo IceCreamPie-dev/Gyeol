@@ -4,22 +4,41 @@ Gyeol은 Godot 4.3용 GDExtension을 제공하며, Signal 기반 API를 갖춘 `
 
 ## 설정
 
-### 1. GDExtension 빌드
+### 1. 로컬 툴체인 부트스트랩 (Windows 기본)
 
-```bash
-cd bindings/godot_extension
-scons platform=windows target=template_debug
+```powershell
+.\tools\dev\bootstrap-toolchains.ps1
+.\tools\dev\activate-toolchains.ps1
+```
+
+### 2. GDExtension 빌드
+
+```powershell
+.\tools\dev\build-godot.ps1
 ```
 
 빌드 결과: `demo/godot/bin/libgyeol.windows.template_debug.x86_64.dll`
 
-### 2. 스토리 컴파일
+ARM64 빌드가 필요하면:
+
+```powershell
+.\tools\dev\build-godot.ps1 -Arch arm64
+```
+
+> 직접 빌드 명령(선택):
+>
+> ```bash
+> cd bindings/godot_extension
+> scons platform=windows target=template_debug
+> ```
+
+### 3. 스토리 컴파일
 
 ```bash
 GyeolCompiler story.gyeol -o project/story.gyb
 ```
 
-### 3. Extension 설정
+### 4. Extension 설정
 
 다음 파일들을 Godot 프로젝트의 `bin/` 디렉토리에 복사합니다:
 
@@ -37,7 +56,7 @@ compatibility_minimum = "4.3"
 windows.debug.x86_64 = "res://bin/libgyeol.windows.template_debug.x86_64.dll"
 ```
 
-### 4. 씬에 StoryPlayer 추가
+### 5. 씬에 StoryPlayer 추가
 
 1. Godot에서 씬을 엽니다
 2. `StoryPlayer` 노드를 추가합니다 (`Node`를 상속합니다)
@@ -176,8 +195,8 @@ story_player.load_state("user://save1.gys")
 ## 다국어 지원
 
 ```gdscript
-# 번역된 로케일 CSV 로드
-story_player.load_locale("res://locales/en.csv")
+# 로케일 로드 (JSON 권장, CSV도 지원)
+story_player.load_locale("res://locales/en.locale.json")
 
 # 현재 로케일 확인
 var locale = story_player.get_locale()
@@ -186,7 +205,7 @@ var locale = story_player.get_locale()
 story_player.clear_locale()
 ```
 
-CSV 포맷에 대한 자세한 내용은 [다국어 지원](../advanced/localization.md)을 참조하세요.
+PO/JSON 워크플로와 CSV 하위 호환은 [다국어 지원](../advanced/localization.md)을 참고하세요.
 
 ## 방문 추적
 

@@ -5,6 +5,10 @@ project(Gyeol VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(MSVC)
+  add_compile_options(/utf-8)
+endif()
+
 # --- [핵심 변경] FlatBuffers 자동 다운로드 및 설정 (FetchContent) ---
 include(FetchContent)
 

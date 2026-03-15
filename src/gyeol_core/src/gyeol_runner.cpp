@@ -19,6 +19,174 @@ asPool(const void* p) {
     return static_cast<const flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>*>(p);
 }
 
+namespace {
+
+constexpr char kStateExtensionMagic[] = {'G', 'Y', 'E', 'X'};
+constexpr uint32_t kStateExtensionVersion = 1;
+
+struct RuntimeExtensionState {
+    uint32_t seed = 0;
+    bool hasExplicitSeed = false;
+    std::string rngState;
+    std::vector<std::string> pendingOnceKeys;
+    std::string currentLocale;
+    std::vector<std::string> localePool;
+};
+
+void appendUint32(std::vector<uint8_t>& out, uint32_t value) {
+    out.push_back(static_cast<uint8_t>(value & 0xFF));
+    out.push_back(static_cast<uint8_t>((value >> 8) & 0xFF));
+    out.push_back(static_cast<uint8_t>((value >> 16) & 0xFF));
+    out.push_back(static_cast<uint8_t>((value >> 24) & 0xFF));
+}
+
+bool readUint32(const uint8_t* data, size_t size, size_t& offset, uint32_t& value) {
+    if (!data || offset + 4 > size) return false;
+    value = static_cast<uint32_t>(data[offset])
+        | (static_cast<uint32_t>(data[offset + 1]) << 8)
+        | (static_cast<uint32_t>(data[offset + 2]) << 16)
+        | (static_cast<uint32_t>(data[offset + 3]) << 24);
+    offset += 4;
+    return true;
+}
+
+void appendBool(std::vector<uint8_t>& out, bool value) {
+    out.push_back(value ? 1 : 0);
+}
+
+bool readBool(const uint8_t* data, size_t size, size_t& offset, bool& value) {
+    if (!data || offset >= size) return false;
+    value = data[offset++] != 0;
+    return true;
+}
+
+void appendString(std::vector<uint8_t>& out, const std::string& value) {
+    appendUint32(out, static_cast<uint32_t>(value.size()));
+    out.insert(out.end(), value.begin(), value.end());
+}
+
+bool readString(const uint8_t* data, size_t size, size_t& offset, std::string& value) {
+    uint32_t length = 0;
+    if (!readUint32(data, size, offset, length) || offset + length > size) {
+        return false;
+    }
+    value.assign(reinterpret_cast<const char*>(data + offset), length);
+    offset += length;
+    return true;
+}
+
+std::vector<uint8_t> serializeExtensionState(const RuntimeExtensionState& ext) {
+    std::vector<uint8_t> payload;
+    appendUint32(payload, kStateExtensionVersion);
+    appendUint32(payload, ext.seed);
+    appendBool(payload, ext.hasExplicitSeed);
+    appendString(payload, ext.rngState);
+
+    appendUint32(payload, static_cast<uint32_t>(ext.pendingOnceKeys.size()));
+    for (const auto& key : ext.pendingOnceKeys) {
+        appendString(payload, key);
+    }
+
+    appendString(payload, ext.currentLocale);
+    appendUint32(payload, static_cast<uint32_t>(ext.localePool.size()));
+    for (const auto& value : ext.localePool) {
+        appendString(payload, value);
+    }
+
+    return payload;
+}
+
+bool deserializeExtensionState(const uint8_t* data, size_t size, RuntimeExtensionState& ext) {
+    size_t offset = 0;
+    uint32_t version = 0;
+    if (!readUint32(data, size, offset, version) || version != kStateExtensionVersion) {
+        return false;
+    }
+    if (!readUint32(data, size, offset, ext.seed)) return false;
+    if (!readBool(data, size, offset, ext.hasExplicitSeed)) return false;
+    if (!readString(data, size, offset, ext.rngState)) return false;
+
+    uint32_t onceCount = 0;
+    if (!readUint32(data, size, offset, onceCount)) return false;
+    ext.pendingOnceKeys.clear();
+    ext.pendingOnceKeys.reserve(onceCount);
+    for (uint32_t i = 0; i < onceCount; ++i) {
+        std::string key;
+        if (!readString(data, size, offset, key)) return false;
+        ext.pendingOnceKeys.push_back(std::move(key));
+    }
+
+    if (!readString(data, size, offset, ext.currentLocale)) return false;
+
+    uint32_t localeCount = 0;
+    if (!readUint32(data, size, offset, localeCount)) return false;
+    ext.localePool.clear();
+    ext.localePool.reserve(localeCount);
+    for (uint32_t i = 0; i < localeCount; ++i) {
+        std::string value;
+        if (!readString(data, size, offset, value)) return false;
+        ext.localePool.push_back(std::move(value));
+    }
+
+    return offset == size;
+}
+
+std::vector<uint8_t> attachExtensionToState(
+    const std::vector<uint8_t>& baseState,
+    const RuntimeExtensionState& ext)
+{
+    std::vector<uint8_t> result = baseState;
+    std::vector<uint8_t> payload = serializeExtensionState(ext);
+    result.insert(result.end(), payload.begin(), payload.end());
+    appendUint32(result, static_cast<uint32_t>(payload.size()));
+    result.insert(result.end(), kStateExtensionMagic, kStateExtensionMagic + sizeof(kStateExtensionMagic));
+    return result;
+}
+
+bool splitSerializedState(
+    const uint8_t* data,
+    size_t size,
+    const uint8_t*& baseData,
+    size_t& baseSize,
+    RuntimeExtensionState* ext)
+{
+    baseData = data;
+    baseSize = size;
+    if (!data || size < 8) {
+        return true;
+    }
+
+    if (std::memcmp(data + size - sizeof(kStateExtensionMagic), kStateExtensionMagic, sizeof(kStateExtensionMagic)) != 0) {
+        return true;
+    }
+
+    size_t lengthOffset = size - sizeof(kStateExtensionMagic) - 4;
+    size_t cursor = lengthOffset;
+    uint32_t payloadSize = 0;
+    if (!readUint32(data, size, cursor, payloadSize)) {
+        return false;
+    }
+
+    if (lengthOffset < payloadSize) {
+        return false;
+    }
+
+    size_t payloadOffset = lengthOffset - payloadSize;
+    baseSize = payloadOffset;
+
+    if (ext) {
+        RuntimeExtensionState parsed;
+        if (!deserializeExtensionState(data + payloadOffset, payloadSize, parsed)) {
+            return false;
+        }
+        *ext = std::move(parsed);
+    }
+
+    return true;
+}
+
+} // namespace
+
 // --- poolStr ---
 const char* Runner::poolStr(int32_t index) const {
     auto* pool = asPool(pool_);
@@ -33,11 +201,54 @@ const char* Runner::poolStr(int32_t index) const {
     return pool->Get(static_cast<flatbuffers::uoffset_t>(index))->c_str();
 }
 
+void Runner::setError(const std::string& message) const {
+    lastError_ = message;
+    metrics_.errors++;
+    std::cerr << "[Gyeol] " << message << std::endl;
+    recordTrace("ERROR", message);
+}
+
+void Runner::clearErrorInternal() const {
+    lastError_.clear();
+}
+
+void Runner::recordTrace(const std::string& kind, const std::string& detail) const {
+    recordTrace(kind, currentNodeName(), pc_, detail);
+}
+
+void Runner::recordTrace(const std::string& kind, const std::string& nodeName, uint32_t pc, const std::string& detail) const {
+    if (!traceEnabled_ || traceLimit_ == 0) return;
+    if (trace_.size() >= traceLimit_) {
+        trace_.erase(trace_.begin());
+    }
+    trace_.push_back({kind, nodeName, pc, detail});
+    metrics_.traceEvents++;
+}
+
+void Runner::seedRngForStart() {
+    if (!hasExplicitSeed_) {
+        currentSeed_ = std::random_device{}();
+    }
+    rng_.seed(currentSeed_);
+}
+
+std::string Runner::exportRngState() const {
+    std::ostringstream oss;
+    oss << rng_;
+    return oss.str();
+}
+
+void Runner::importRngState(const std::string& state) {
+    std::istringstream iss(state);
+    iss >> rng_;
+}
+
 // --- 노드 검색 및 이동 ---
 void Runner::jumpToNode(const char* name) {
     auto* story = asStory(story_);
     auto* nodes = story->nodes();
     if (!nodes) {
+        setError("Story has no nodes");
         finished_ = true;
         return;
     }
@@ -52,7 +263,7 @@ void Runner::jumpToNode(const char* name) {
         }
     }
 
-    std::cerr << "[Gyeol] Node not found: " << name << std::endl;
+    setError(std::string("Node not found: ") + (name ? name : "<null>"));
     finished_ = true;
 }
 
@@ -661,9 +872,10 @@ void Runner::restoreShadowedVars(const CallFrame& frame) {
 
 // --- start ---
 bool Runner::start(const uint8_t* buffer, size_t size) {
+    clearErrorInternal();
     flatbuffers::Verifier verifier(buffer, size);
     if (!VerifyStoryBuffer(verifier)) {
-        std::cerr << "[Gyeol] Invalid buffer" << std::endl;
+        setError("Invalid buffer");
         return false;
     }
 
@@ -732,12 +944,15 @@ bool Runner::start(const uint8_t* buffer, size_t size) {
     chosenOnceChoices_.clear();
     visitCounts_.clear();
     hasPendingReturn_ = false;
-    rng_.seed(std::random_device{}());
+    hitBreakpoint_ = false;
+    seedRngForStart();
     finished_ = false;
+    recordTrace("START", std::string("seed=") + std::to_string(currentSeed_));
 
     if (story->start_node_name()) {
         jumpToNode(story->start_node_name()->c_str());
     } else {
+        setError("Story has no start node");
         finished_ = true;
         return false;
     }
@@ -751,6 +966,7 @@ bool Runner::startAtNode(const uint8_t* buffer, size_t size, const std::string& 
     // 지정된 노드로 재점프 (visitCount 리셋 후 다시 증가)
     visitCounts_.clear();
     jumpToNode(nodeName.c_str());
+    recordTrace("START_AT_NODE", nodeName, pc_, "");
     return !finished_;
 }
 
@@ -758,8 +974,13 @@ bool Runner::startAtNode(const uint8_t* buffer, size_t size, const std::string& 
 StepResult Runner::step() {
     StepResult result;
     result.type = StepType::END;
+    metrics_.stepCalls++;
 
-    if (finished_) return result;
+    if (finished_) {
+        metrics_.endResults++;
+        recordTrace("END", "already_finished");
+        return result;
+    }
 
     auto* node = asNode(currentNode_);
     auto* pool = asPool(pool_);
@@ -789,6 +1010,8 @@ StepResult Runner::step() {
             // 스토리 종료
             finished_ = true;
             result.type = StepType::END;
+            metrics_.endResults++;
+            recordTrace("END", "story_finished");
             return result;
         }
 
@@ -813,6 +1036,7 @@ StepResult Runner::step() {
 
         auto* instr = node->lines()->Get(pc_);
         pc_++;
+        metrics_.instructionsExecuted++;
 
         switch (instr->data_type()) {
             case OpData::Line: {
@@ -838,6 +1062,12 @@ StepResult Runner::step() {
                         );
                     }
                 }
+                metrics_.lineResults++;
+                recordTrace(
+                    "LINE",
+                    nodeNameFromPtr(currentNode_),
+                    pc_ - 1,
+                    result.line.text ? result.line.text : "");
                 return result;
             }
 
@@ -931,11 +1161,18 @@ StepResult Runner::step() {
                     cd.index = k;
                     result.choices.push_back(cd);
                 }
+                metrics_.choiceResults++;
+                recordTrace(
+                    "CHOICES",
+                    nodeNameFromPtr(currentNode_),
+                    pc_ - 1,
+                    std::to_string(result.choices.size()));
                 return result;
             }
 
             case OpData::Jump: {
                 auto* jump = instr->data_as_Jump();
+                metrics_.jumps++;
                 if (jump->is_call()) {
                     // 1. 호출자 컨텍스트에서 인자 평가
                     std::vector<Variant> argValues;
@@ -946,6 +1183,8 @@ StepResult Runner::step() {
                     }
                     // 2. call frame push
                     callStack_.push_back({currentNode_, pc_, "", {}, {}});
+                    metrics_.calls++;
+                    recordTrace("CALL", nodeNameFromPtr(currentNode_), pc_ - 1, poolStr(jump->target_node_name_id()));
                     // 3. 대상 노드로 이동
                     jumpToNodeById(jump->target_node_name_id());
                     // 4. 매개변수 바인딩
@@ -953,6 +1192,7 @@ StepResult Runner::step() {
                         bindParameters(currentNode_, argValues, callStack_.back());
                     }
                 } else {
+                    recordTrace("JUMP", nodeNameFromPtr(currentNode_), pc_ - 1, poolStr(jump->target_node_name_id()));
                     jumpToNodeById(jump->target_node_name_id());
                 }
                 node = asNode(currentNode_);
@@ -999,12 +1239,14 @@ StepResult Runner::step() {
                         break;
                     }
                 }
+                recordTrace("SET_VAR", nodeNameFromPtr(currentNode_), pc_ - 1, varName);
                 continue;
             }
 
             case OpData::Condition: {
                 auto* cond = instr->data_as_Condition();
                 bool condResult;
+                metrics_.conditionsEvaluated++;
 
                 if (cond->cond_expr()) {
                     // 논리 연산자 경로: 전체 불리언 표현식 평가
@@ -1034,6 +1276,11 @@ StepResult Runner::step() {
                 }
 
                 int32_t targetId = condResult ? cond->true_jump_node_id() : cond->false_jump_node_id();
+                recordTrace(
+                    "CONDITION",
+                    nodeNameFromPtr(currentNode_),
+                    pc_ - 1,
+                    condResult ? "true" : "false");
                 if (targetId >= 0) {
                     jumpToNodeById(targetId);
                     node = asNode(currentNode_);
@@ -1067,6 +1314,8 @@ StepResult Runner::step() {
 
                 std::uniform_int_distribution<int> dist(0, static_cast<int>(totalWeight) - 1);
                 int roll = dist(rng_);
+                metrics_.randomRolls++;
+                recordTrace("RANDOM", nodeNameFromPtr(currentNode_), pc_ - 1, std::to_string(roll));
 
                 int64_t cumulative = 0;
                 for (flatbuffers::uoffset_t k = 0; k < random->branches()->size(); ++k) {
@@ -1094,11 +1343,19 @@ StepResult Runner::step() {
                         result.command.params.push_back(poolStr(params->Get(k)));
                     }
                 }
+                metrics_.commandResults++;
+                recordTrace(
+                    "COMMAND",
+                    nodeNameFromPtr(currentNode_),
+                    pc_ - 1,
+                    result.command.type ? result.command.type : "");
                 return result;
             }
 
             case OpData::Return: {
                 auto* ret = instr->data_as_Return();
+                metrics_.returns++;
+                recordTrace("RETURN", nodeNameFromPtr(currentNode_), pc_ - 1, "");
                 // 반환값 평가
                 if (ret->expr()) {
                     pendingReturnValue_ = evaluateExpression(ret->expr());
@@ -1135,6 +1392,8 @@ StepResult Runner::step() {
                 hasPendingReturn_ = false;
                 finished_ = true;
                 result.type = StepType::END;
+                metrics_.endResults++;
+                recordTrace("END", "return_without_call");
                 return result;
             }
 
@@ -1152,6 +1411,8 @@ StepResult Runner::step() {
 
                 // 2. call stack에 반환변수 이름 포함하여 push
                 callStack_.push_back({currentNode_, pc_, returnVarName, {}, {}});
+                metrics_.calls++;
+                recordTrace("CALL_RETURN", nodeNameFromPtr(currentNode_), pc_ - 1, poolStr(cwr->target_node_name_id()));
 
                 // 3. 대상 노드로 이동
                 jumpToNodeById(cwr->target_node_name_id());
@@ -1178,12 +1439,14 @@ StepResult Runner::step() {
 // --- choose ---
 void Runner::choose(int index) {
     if (index < 0 || index >= static_cast<int>(pendingChoices_.size())) {
-        std::cerr << "[Gyeol] Invalid choice index: " << index << std::endl;
+        setError("Invalid choice index: " + std::to_string(index));
         return;
     }
 
     // Once 선택지 추적: 선택된 once 선택지의 키를 기록
     auto& chosen = pendingChoices_[index];
+    metrics_.choicesMade++;
+    recordTrace("CHOOSE", nodeNameFromPtr(currentNode_), pc_, poolStr(chosen.text_id));
     if (chosen.choice_modifier == 1 /* Once */ && !chosen.once_key.empty()) {
         chosenOnceChoices_.insert(chosen.once_key);
     }
@@ -1199,7 +1462,13 @@ bool Runner::isFinished() const {
 
 // --- setSeed ---
 void Runner::setSeed(uint32_t seed) {
+    hasExplicitSeed_ = true;
+    currentSeed_ = seed;
     rng_.seed(seed);
+}
+
+uint32_t Runner::getSeed() const {
+    return currentSeed_;
 }
 
 // --- Variable access API ---
@@ -1259,6 +1528,8 @@ std::vector<std::string> Runner::getCharacterNames() const {
 }
 
 std::string Runner::getCharacterDisplayName(const std::string& characterId) const {
+    std::string displayName = getCharacterProperty(characterId, "displayName");
+    if (!displayName.empty()) return displayName;
     std::string name = getCharacterProperty(characterId, "name");
     return name.empty() ? characterId : name;
 }
@@ -1325,16 +1596,14 @@ int32_t Runner::findStringInPool(const char* str) const {
     return -1;
 }
 
-// --- saveState ---
-bool Runner::saveState(const std::string& filepath) const {
+std::vector<uint8_t> Runner::serializeStateBuffer() const {
     if (!story_) {
-        std::cerr << "[Gyeol] No story loaded" << std::endl;
-        return false;
+        setError("No story loaded");
+        return {};
     }
 
     auto* story = asStory(story_);
 
-    // SaveStateT 객체 생성
     SaveStateT state;
     state.version = "1.0";
     state.story_version = story->version() ? story->version()->c_str() : "";
@@ -1342,8 +1611,7 @@ bool Runner::saveState(const std::string& filepath) const {
     state.pc = pc_;
     state.finished = finished_;
 
-    // 변수 저장
-    for (auto& pair : variables_) {
+    for (const auto& pair : variables_) {
         auto sv = std::make_unique<SavedVarT>();
         sv->name = pair.first;
         switch (pair.second.type) {
@@ -1366,20 +1634,16 @@ bool Runner::saveState(const std::string& filepath) const {
                 break;
             }
             case Variant::STRING: {
-                // STRING은 string_value 필드에 직접 저장 (pool index 불필요)
                 sv->string_value = pair.second.s;
-                // value union은 비워둠 (타입 구분용으로 StringRef 사용)
                 auto sr = std::make_unique<StringRefT>();
-                sr->index = -1; // 의미 없음, 타입 마커용
+                sr->index = -1;
                 sv->value.Set(std::move(*sr));
                 break;
             }
             case Variant::LIST: {
-                // LIST는 list_items 필드에 직접 저장
                 for (const auto& item : pair.second.list) {
                     sv->list_items.push_back(item);
                 }
-                // value union은 ListValue 타입 마커용
                 auto lv = std::make_unique<ListValueT>();
                 sv->value.Set(std::move(*lv));
                 break;
@@ -1388,15 +1652,13 @@ bool Runner::saveState(const std::string& filepath) const {
         state.variables.push_back(std::move(sv));
     }
 
-    // Call stack 저장
-    for (auto& frame : callStack_) {
+    for (const auto& frame : callStack_) {
         auto cf = std::make_unique<SavedCallFrameT>();
         cf->node_name = nodeNameFromPtr(frame.node);
         cf->pc = frame.pc;
         cf->return_var_name = frame.returnVarName;
 
-        // 섀도된 변수 저장
-        for (auto& sv : frame.shadowedVars) {
+        for (const auto& sv : frame.shadowedVars) {
             auto ssv = std::make_unique<SavedShadowedVarT>();
             ssv->name = sv.name;
             ssv->existed = sv.existed;
@@ -1438,14 +1700,11 @@ bool Runner::saveState(const std::string& filepath) const {
             cf->shadowed_vars.push_back(std::move(ssv));
         }
 
-        // 매개변수 이름 저장
         cf->param_names = frame.paramNames;
-
         state.call_stack.push_back(std::move(cf));
     }
 
-    // Pending choices 저장
-    for (auto& pc : pendingChoices_) {
+    for (const auto& pc : pendingChoices_) {
         auto spc = std::make_unique<SavedPendingChoiceT>();
         spc->text = poolStr(pc.text_id);
         spc->target_node_name = poolStr(pc.target_node_name_id);
@@ -1453,74 +1712,74 @@ bool Runner::saveState(const std::string& filepath) const {
         state.pending_choices.push_back(std::move(spc));
     }
 
-    // Chosen once choices 저장
     for (const auto& key : chosenOnceChoices_) {
         state.chosen_once_choices.push_back(key);
     }
 
-    // Visit counts 저장
-    for (auto& pair : visitCounts_) {
+    for (const auto& pair : visitCounts_) {
         auto vc = std::make_unique<SavedVisitCountT>();
         vc->node_name = pair.first;
         vc->count = pair.second;
         state.visit_counts.push_back(std::move(vc));
     }
 
-    // FlatBuffers 직렬화
     flatbuffers::FlatBufferBuilder fbb;
     auto offset = SaveState::Pack(fbb, &state);
     fbb.Finish(offset);
 
-    // 파일 쓰기
-    std::ofstream ofs(filepath, std::ios::binary);
-    if (!ofs) {
-        std::cerr << "[Gyeol] Cannot open save file: " << filepath << std::endl;
-        return false;
+    std::vector<uint8_t> baseState(
+        fbb.GetBufferPointer(),
+        fbb.GetBufferPointer() + fbb.GetSize());
+
+    RuntimeExtensionState ext;
+    ext.seed = currentSeed_;
+    ext.hasExplicitSeed = hasExplicitSeed_;
+    ext.rngState = exportRngState();
+    ext.pendingOnceKeys.reserve(pendingChoices_.size());
+    for (const auto& pc : pendingChoices_) {
+        ext.pendingOnceKeys.push_back(pc.once_key);
     }
-    ofs.write(reinterpret_cast<const char*>(fbb.GetBufferPointer()), fbb.GetSize());
-    return ofs.good();
+    ext.currentLocale = currentLocale_;
+    ext.localePool = localePool_;
+
+    return attachExtensionToState(baseState, ext);
 }
 
-// --- loadState ---
-bool Runner::loadState(const std::string& filepath) {
+bool Runner::deserializeStateBuffer(const uint8_t* data, size_t size) {
     if (!story_) {
-        std::cerr << "[Gyeol] No story loaded" << std::endl;
+        setError("No story loaded");
         return false;
     }
 
-    // 파일 읽기
-    std::ifstream ifs(filepath, std::ios::binary | std::ios::ate);
-    if (!ifs) {
-        std::cerr << "[Gyeol] Cannot open save file: " << filepath << std::endl;
+    clearErrorInternal();
+
+    RuntimeExtensionState ext;
+    const uint8_t* baseData = nullptr;
+    size_t baseSize = 0;
+    if (!splitSerializedState(data, size, baseData, baseSize, &ext)) {
+        setError("Invalid save metadata");
+        return false;
+    }
+    if (!baseData || baseSize == 0) {
+        setError("Invalid save file");
         return false;
     }
 
-    auto size = ifs.tellg();
-    ifs.seekg(0, std::ios::beg);
-    std::vector<uint8_t> buf(static_cast<size_t>(size));
-    if (!ifs.read(reinterpret_cast<char*>(buf.data()), size)) {
-        std::cerr << "[Gyeol] Failed to read save file" << std::endl;
-        return false;
-    }
-
-    // 검증
-    flatbuffers::Verifier verifier(buf.data(), buf.size());
-    auto* saveState = flatbuffers::GetRoot<SaveState>(buf.data());
+    flatbuffers::Verifier verifier(baseData, baseSize);
+    auto* saveState = flatbuffers::GetRoot<SaveState>(baseData);
     if (!saveState->Verify(verifier)) {
-        std::cerr << "[Gyeol] Invalid save file" << std::endl;
+        setError("Invalid save file");
         return false;
     }
 
-    // 상태 복원
     finished_ = saveState->finished();
     pc_ = saveState->pc();
+    hitBreakpoint_ = false;
 
-    // 현재 노드 복원
     if (saveState->current_node_name()) {
         currentNode_ = findNodeByName(saveState->current_node_name()->c_str());
         if (!currentNode_ && !finished_) {
-            std::cerr << "[Gyeol] Save state node not found: "
-                      << saveState->current_node_name()->c_str() << std::endl;
+            setError(std::string("Save state node not found: ") + saveState->current_node_name()->c_str());
             finished_ = true;
             return false;
         }
@@ -1528,7 +1787,6 @@ bool Runner::loadState(const std::string& filepath) {
         currentNode_ = nullptr;
     }
 
-    // 변수 복원
     variables_.clear();
     auto* vars = saveState->variables();
     if (vars) {
@@ -1539,14 +1797,10 @@ bool Runner::loadState(const std::string& filepath) {
             std::string varName = sv->name()->c_str();
 
             if (sv->value_type() == ValueData::StringRef) {
-                // STRING 타입: string_value 필드에서 읽기
-                if (sv->string_value()) {
-                    variables_[varName] = Variant::String(sv->string_value()->c_str());
-                } else {
-                    variables_[varName] = Variant::String("");
-                }
+                variables_[varName] = sv->string_value()
+                    ? Variant::String(sv->string_value()->c_str())
+                    : Variant::String("");
             } else if (sv->value_type() == ValueData::ListValue) {
-                // LIST 타입: list_items 필드에서 읽기
                 std::vector<std::string> items;
                 if (sv->list_items()) {
                     for (flatbuffers::uoffset_t j = 0; j < sv->list_items()->size(); ++j) {
@@ -1560,7 +1814,6 @@ bool Runner::loadState(const std::string& filepath) {
         }
     }
 
-    // Call stack 복원
     callStack_.clear();
     auto* stack = saveState->call_stack();
     if (stack) {
@@ -1568,52 +1821,48 @@ bool Runner::loadState(const std::string& filepath) {
             auto* frame = stack->Get(i);
             if (!frame->node_name()) continue;
             const void* nodePtr = findNodeByName(frame->node_name()->c_str());
-            if (nodePtr) {
-                std::string retVar = frame->return_var_name()
-                    ? frame->return_var_name()->c_str() : "";
+            if (!nodePtr) continue;
 
-                CallFrame cf = {nodePtr, frame->pc(), retVar, {}, {}};
+            std::string retVar = frame->return_var_name()
+                ? frame->return_var_name()->c_str() : "";
+            CallFrame cf = {nodePtr, frame->pc(), retVar, {}, {}};
 
-                // 섀도된 변수 복원 (하위 호환: nullptr 체크)
-                if (frame->shadowed_vars()) {
-                    for (flatbuffers::uoffset_t j = 0; j < frame->shadowed_vars()->size(); ++j) {
-                        auto* ssv = frame->shadowed_vars()->Get(j);
-                        ShadowedVar sv;
-                        sv.name = ssv->name() ? ssv->name()->c_str() : "";
-                        sv.existed = ssv->existed();
-                        if (ssv->value_type() == ValueData::StringRef) {
-                            sv.value = ssv->string_value()
-                                ? Variant::String(ssv->string_value()->c_str())
-                                : Variant::String("");
-                        } else if (ssv->value_type() == ValueData::ListValue) {
-                            std::vector<std::string> items;
-                            if (ssv->list_items()) {
-                                for (flatbuffers::uoffset_t k = 0; k < ssv->list_items()->size(); ++k) {
-                                    items.push_back(ssv->list_items()->Get(k)->c_str());
-                                }
+            if (frame->shadowed_vars()) {
+                for (flatbuffers::uoffset_t j = 0; j < frame->shadowed_vars()->size(); ++j) {
+                    auto* ssv = frame->shadowed_vars()->Get(j);
+                    ShadowedVar sv;
+                    sv.name = ssv->name() ? ssv->name()->c_str() : "";
+                    sv.existed = ssv->existed();
+                    if (ssv->value_type() == ValueData::StringRef) {
+                        sv.value = ssv->string_value()
+                            ? Variant::String(ssv->string_value()->c_str())
+                            : Variant::String("");
+                    } else if (ssv->value_type() == ValueData::ListValue) {
+                        std::vector<std::string> items;
+                        if (ssv->list_items()) {
+                            for (flatbuffers::uoffset_t k = 0; k < ssv->list_items()->size(); ++k) {
+                                items.push_back(ssv->list_items()->Get(k)->c_str());
                             }
-                            sv.value = Variant::List(std::move(items));
-                        } else if (ssv->value() && ssv->value_type() != ValueData::NONE) {
-                            sv.value = readValueData(ssv->value(), ssv->value_type(), asPool(pool_));
                         }
-                        cf.shadowedVars.push_back(std::move(sv));
+                        sv.value = Variant::List(std::move(items));
+                    } else if (ssv->value() && ssv->value_type() != ValueData::NONE) {
+                        sv.value = readValueData(ssv->value(), ssv->value_type(), asPool(pool_));
                     }
+                    cf.shadowedVars.push_back(std::move(sv));
                 }
-
-                // 매개변수 이름 복원 (하위 호환: nullptr 체크)
-                if (frame->param_names()) {
-                    for (flatbuffers::uoffset_t j = 0; j < frame->param_names()->size(); ++j) {
-                        cf.paramNames.push_back(frame->param_names()->Get(j)->c_str());
-                    }
-                }
-
-                callStack_.push_back(std::move(cf));
             }
+
+            if (frame->param_names()) {
+                for (flatbuffers::uoffset_t j = 0; j < frame->param_names()->size(); ++j) {
+                    cf.paramNames.push_back(frame->param_names()->Get(j)->c_str());
+                }
+            }
+
+            callStack_.push_back(std::move(cf));
         }
     }
     hasPendingReturn_ = false;
 
-    // Pending choices 복원
     pendingChoices_.clear();
     auto* choices = saveState->pending_choices();
     if (choices) {
@@ -1627,13 +1876,17 @@ bool Runner::loadState(const std::string& filepath) {
                 pending.text_id = textId;
                 pending.target_node_name_id = targetId;
                 pending.choice_modifier = static_cast<int8_t>(pc->choice_modifier());
-                // once_key는 세이브에서 직접 복원할 필요 없음 (chosenOnceChoices_에서 관리)
                 pendingChoices_.push_back(std::move(pending));
             }
         }
     }
 
-    // Chosen once choices 복원
+    if (ext.pendingOnceKeys.size() == pendingChoices_.size()) {
+        for (size_t i = 0; i < pendingChoices_.size(); ++i) {
+            pendingChoices_[i].once_key = ext.pendingOnceKeys[i];
+        }
+    }
+
     chosenOnceChoices_.clear();
     auto* onceKeys = saveState->chosen_once_choices();
     if (onceKeys) {
@@ -1644,7 +1897,6 @@ bool Runner::loadState(const std::string& filepath) {
         }
     }
 
-    // Visit counts 복원
     visitCounts_.clear();
     auto* vcs = saveState->visit_counts();
     if (vcs) {
@@ -1656,438 +1908,90 @@ bool Runner::loadState(const std::string& filepath) {
         }
     }
 
-    return true;
-}
-
-// --- CSV 파싱 헬퍼 ---
-static std::vector<std::string> parseCSVLine(const std::string& line) {
-    std::vector<std::string> result;
-    std::string cur;
-    bool inQ = false;
-    for (size_t i = 0; i < line.size(); ++i) {
-        char c = line[i];
-        if (c == '"') {
-            if (inQ && i + 1 < line.size() && line[i + 1] == '"') {
-                cur += '"';
-                i++;
-            } else {
-                inQ = !inQ;
-            }
-        } else if (c == ',' && !inQ) {
-            result.push_back(cur);
-            cur.clear();
-        } else {
-            cur += c;
-        }
-    }
-    result.push_back(cur);
-    return result;
-}
-
-// --- Locale API ---
-bool Runner::loadLocale(const std::string& csvPath) {
-    auto* story = asStory(story_);
-    auto* pool = asPool(pool_);
-    auto* lineIds = story ? story->line_ids() : nullptr;
-    if (!pool || !lineIds || lineIds->size() == 0) {
-        std::cerr << "[Gyeol] No line_ids in story\n";
-        return false;
+    currentSeed_ = ext.seed;
+    hasExplicitSeed_ = ext.hasExplicitSeed;
+    if (!ext.rngState.empty()) {
+        importRngState(ext.rngState);
+    } else {
+        rng_.seed(currentSeed_);
     }
 
-    std::ifstream ifs(csvPath);
-    if (!ifs.is_open()) {
-        std::cerr << "[Gyeol] Failed to open locale: " << csvPath << "\n";
-        return false;
-    }
-
-    // line_id → pool index 매핑
-    std::unordered_map<std::string, int32_t> idMap;
-    for (flatbuffers::uoffset_t i = 0; i < lineIds->size(); ++i) {
-        auto* s = lineIds->Get(i);
-        if (s && s->size() > 0) {
-            idMap[s->str()] = static_cast<int32_t>(i);
-        }
-    }
-
-    localePool_.clear();
-    localePool_.resize(pool->size());
-
-    std::string line;
-    std::getline(ifs, line); // 헤더 스킵
-    int count = 0;
-    while (std::getline(ifs, line)) {
-        if (line.empty()) continue;
-        // Windows CRLF 처리
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
-        auto cols = parseCSVLine(line);
-        if (cols.size() < 5) continue;
-        auto it = idMap.find(cols[0]);
-        if (it != idMap.end()) {
-            localePool_[static_cast<size_t>(it->second)] = cols[4];
-            count++;
-        }
-    }
-
-    // 로케일 이름 추출 (파일명에서)
-    size_t slash = csvPath.find_last_of("/\\");
-    size_t dot = csvPath.find_last_of('.');
-    size_t nameStart = (slash == std::string::npos) ? 0 : slash + 1;
-    currentLocale_ = csvPath.substr(nameStart,
-        (dot == std::string::npos || dot < nameStart) ? std::string::npos : dot - nameStart);
+    currentLocale_ = ext.currentLocale;
+    localePool_ = ext.localePool;
 
     return true;
 }
 
-void Runner::clearLocale() {
-    localePool_.clear();
-    currentLocale_.clear();
-}
-
-std::string Runner::getLocale() const {
-    return currentLocale_;
-}
-
-// ==========================================================================
-// Debug API 구현
-// ==========================================================================
-
-// --- Breakpoint management ---
-void Runner::addBreakpoint(const std::string& nodeName, uint32_t pc) {
-    breakpoints_.insert({nodeName, pc});
-}
-
-void Runner::removeBreakpoint(const std::string& nodeName, uint32_t pc) {
-    breakpoints_.erase({nodeName, pc});
-}
-
-void Runner::clearBreakpoints() {
-    breakpoints_.clear();
-}
-
-bool Runner::hasBreakpoint(const std::string& nodeName, uint32_t pc) const {
-    return breakpoints_.count({nodeName, pc}) > 0;
-}
-
-std::vector<std::pair<std::string, uint32_t>> Runner::getBreakpoints() const {
-    std::vector<std::pair<std::string, uint32_t>> result;
-    result.reserve(breakpoints_.size());
-    for (const auto& bp : breakpoints_) {
-        result.push_back(bp);
-    }
-    return result;
-}
-
-// --- Step control ---
-void Runner::setStepMode(bool enabled) {
-    stepMode_ = enabled;
-}
-
-bool Runner::isStepMode() const {
-    return stepMode_;
-}
-
-// --- Debug info ---
-Runner::DebugLocation Runner::getLocation() const {
-    DebugLocation loc;
-    if (!currentNode_) return loc;
-
-    loc.nodeName = currentNodeName();
-    loc.pc = pc_;
-
-    auto* node = asNode(currentNode_);
-    if (node && node->lines() && pc_ < node->lines()->size()) {
-        auto* instr = node->lines()->Get(pc_);
-        switch (instr->data_type()) {
-            case OpData::Line:            loc.instructionType = "Line"; break;
-            case OpData::Choice:          loc.instructionType = "Choice"; break;
-            case OpData::Jump:            loc.instructionType = "Jump"; break;
-            case OpData::Command:         loc.instructionType = "Command"; break;
-            case OpData::SetVar:          loc.instructionType = "SetVar"; break;
-            case OpData::Condition:       loc.instructionType = "Condition"; break;
-            case OpData::Random:          loc.instructionType = "Random"; break;
-            case OpData::Return:          loc.instructionType = "Return"; break;
-            case OpData::CallWithReturn:  loc.instructionType = "CallWithReturn"; break;
-            default:                      loc.instructionType = "Unknown"; break;
-        }
+// --- saveState ---
+bool Runner::saveState(const std::string& filepath) const {
+    std::vector<uint8_t> data = serializeStateBuffer();
+    if (data.empty()) {
+        return false;
     }
 
-    return loc;
-}
-
-std::vector<Runner::CallFrameInfo> Runner::getCallStack() const {
-    std::vector<CallFrameInfo> result;
-    result.reserve(callStack_.size());
-    for (const auto& frame : callStack_) {
-        CallFrameInfo info;
-        info.nodeName = nodeNameFromPtr(frame.node);
-        info.pc = frame.pc;
-        info.returnVarName = frame.returnVarName;
-        info.paramNames = frame.paramNames;
-        result.push_back(std::move(info));
+    std::ofstream ofs(filepath, std::ios::binary);
+    if (!ofs) {
+        setError("Cannot open save file: " + filepath);
+        return false;
     }
-    return result;
-}
-
-std::string Runner::getCurrentNodeName() const {
-    return currentNodeName();
-}
-
-uint32_t Runner::getCurrentPC() const {
-    return pc_;
-}
-
-// --- Node inspection ---
-std::vector<std::string> Runner::getNodeNames() const {
-    std::vector<std::string> result;
-    auto* story = asStory(story_);
-    if (!story || !story->nodes()) return result;
-
-    auto* nodes = story->nodes();
-    result.reserve(nodes->size());
-    for (flatbuffers::uoffset_t i = 0; i < nodes->size(); ++i) {
-        auto* node = nodes->Get(i);
-        if (node->name()) {
-            result.push_back(node->name()->c_str());
-        }
-    }
-    return result;
-}
-
-uint32_t Runner::getNodeInstructionCount(const std::string& nodeName) const {
-    const void* nodePtr = findNodeByName(nodeName.c_str());
-    if (!nodePtr) return 0;
-    auto* node = asNode(nodePtr);
-    if (!node->lines()) return 0;
-    return node->lines()->size();
-}
-
-std::string Runner::getInstructionInfo(const std::string& nodeName, uint32_t pc) const {
-    if (!story_) return "";
-    const void* nodePtr = findNodeByName(nodeName.c_str());
-    if (!nodePtr) return "";
-    auto* node = asNode(nodePtr);
-    if (!node->lines() || pc >= node->lines()->size()) return "";
-
-    auto* instr = node->lines()->Get(pc);
-    switch (instr->data_type()) {
-        case OpData::Line: {
-            auto* line = instr->data_as_Line();
-            std::string chr = (line->character_id() >= 0)
-                ? poolStr(line->character_id()) : "(narration)";
-            std::string txt = poolStr(line->text_id());
-            return "Line: " + chr + " \"" + txt + "\"";
-        }
-        case OpData::Choice: {
-            auto* choice = instr->data_as_Choice();
-            std::string txt = poolStr(choice->text_id());
-            std::string target = poolStr(choice->target_node_name_id());
-            std::string info = "Choice: \"" + txt + "\" -> " + target;
-            if (choice->choice_modifier() == ChoiceModifier::Once) info += " #once";
-            else if (choice->choice_modifier() == ChoiceModifier::Sticky) info += " #sticky";
-            else if (choice->choice_modifier() == ChoiceModifier::Fallback) info += " #fallback";
-            return info;
-        }
-        case OpData::Jump: {
-            auto* jump = instr->data_as_Jump();
-            std::string target = poolStr(jump->target_node_name_id());
-            if (jump->is_call()) {
-                return "Call: -> " + target;
-            }
-            return "Jump: -> " + target;
-        }
-        case OpData::Command: {
-            auto* cmd = instr->data_as_Command();
-            std::string info = "Command: @ " + std::string(poolStr(cmd->type_id()));
-            auto* params = cmd->params();
-            if (params) {
-                for (flatbuffers::uoffset_t k = 0; k < params->size(); ++k) {
-                    info += " " + std::string(poolStr(params->Get(k)));
-                }
-            }
-            return info;
-        }
-        case OpData::SetVar: {
-            auto* sv = instr->data_as_SetVar();
-            return "SetVar: $ " + std::string(poolStr(sv->var_name_id())) + " = ...";
-        }
-        case OpData::Condition: {
-            auto* cond = instr->data_as_Condition();
-            std::string info = "Condition: if ...";
-            if (cond->true_jump_node_id() >= 0) {
-                info += " -> " + std::string(poolStr(cond->true_jump_node_id()));
-            }
-            if (cond->false_jump_node_id() >= 0) {
-                info += " else -> " + std::string(poolStr(cond->false_jump_node_id()));
-            }
-            return info;
-        }
-        case OpData::Random: {
-            auto* random = instr->data_as_Random();
-            uint32_t count = (random->branches()) ? random->branches()->size() : 0;
-            return "Random: " + std::to_string(count) + " branches";
-        }
-        case OpData::Return: {
-            auto* ret = instr->data_as_Return();
-            if (ret->expr() || (ret->value() && ret->value_type() != ValueData::NONE)) {
-                return "Return: <expr>";
-            }
-            return "Return";
-        }
-        case OpData::CallWithReturn: {
-            auto* cwr = instr->data_as_CallWithReturn();
-            std::string var = poolStr(cwr->return_var_name_id());
-            std::string target = poolStr(cwr->target_node_name_id());
-            return "CallWithReturn: $ " + var + " = call " + target;
-        }
-        default:
-            return "Unknown";
-    }
-}
-
-// --- Graph Data (비주얼 에디터용) ---
-Runner::GraphData Runner::getGraphData() const {
-    GraphData data;
-    auto* story = asStory(story_);
-    if (!story) return data;
-
-    if (story->start_node_name()) {
-        data.startNode = story->start_node_name()->c_str();
+    ofs.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+    if (!ofs.good()) {
+        setError("Failed to write save file: " + filepath);
+        return false;
     }
 
-    auto* nodes = story->nodes();
-    if (!nodes) return data;
+    metrics_.saveOperations++;
+    recordTrace("SAVE", currentNodeName(), pc_, filepath);
+    return true;
+}
 
-    for (flatbuffers::uoffset_t ni = 0; ni < nodes->size(); ++ni) {
-        auto* node = nodes->Get(ni);
-        if (!node->name()) continue;
-
-        GraphNode gn;
-        gn.name = node->name()->c_str();
-        gn.instructionCount = node->lines() ? static_cast<int>(node->lines()->size()) : 0;
-
-        // params
-        if (node->param_ids()) {
-            for (flatbuffers::uoffset_t pi = 0; pi < node->param_ids()->size(); ++pi) {
-                gn.params.push_back(poolStr(node->param_ids()->Get(pi)));
-            }
-        }
-
-        // tags
-        if (node->tags()) {
-            for (flatbuffers::uoffset_t ti = 0; ti < node->tags()->size(); ++ti) {
-                auto* tag = node->tags()->Get(ti);
-                gn.tags.emplace_back(poolStr(tag->key_id()), poolStr(tag->value_id()));
-            }
-        }
-
-        // Walk instructions for summary + edges
-        std::set<std::string> charSet;
-        if (node->lines()) {
-            for (flatbuffers::uoffset_t li = 0; li < node->lines()->size(); ++li) {
-                auto* instr = node->lines()->Get(li);
-                switch (instr->data_type()) {
-                case OpData::Line: {
-                    auto* line = instr->data_as_Line();
-                    gn.summary.lineCount++;
-                    if (line->character_id() >= 0) {
-                        charSet.insert(poolStr(line->character_id()));
-                    }
-                    if (gn.summary.firstLine.empty()) {
-                        std::string txt = poolStr(line->text_id());
-                        if (txt.length() > 40) txt = txt.substr(0, 40) + "...";
-                        if (line->character_id() >= 0) {
-                            gn.summary.firstLine = std::string(poolStr(line->character_id())) + ": \"" + txt + "\"";
-                        } else {
-                            gn.summary.firstLine = "\"" + txt + "\"";
-                        }
-                    }
-                    break;
-                }
-                case OpData::Choice: {
-                    auto* choice = instr->data_as_Choice();
-                    gn.summary.choiceCount++;
-                    GraphEdge edge;
-                    edge.from = gn.name;
-                    edge.to = poolStr(choice->target_node_name_id());
-                    edge.type = "choice";
-                    std::string txt = poolStr(choice->text_id());
-                    if (txt.length() > 30) txt = txt.substr(0, 30) + "...";
-                    edge.label = txt;
-                    data.edges.push_back(std::move(edge));
-                    break;
-                }
-                case OpData::Jump: {
-                    auto* jump = instr->data_as_Jump();
-                    gn.summary.hasJump = true;
-                    GraphEdge edge;
-                    edge.from = gn.name;
-                    edge.to = poolStr(jump->target_node_name_id());
-                    edge.type = jump->is_call() ? "call" : "jump";
-                    data.edges.push_back(std::move(edge));
-                    break;
-                }
-                case OpData::Command:
-                    gn.summary.hasCommand = true;
-                    break;
-                case OpData::Condition: {
-                    auto* cond = instr->data_as_Condition();
-                    gn.summary.hasCondition = true;
-                    if (cond->true_jump_node_id() >= 0) {
-                        GraphEdge edge;
-                        edge.from = gn.name;
-                        edge.to = poolStr(cond->true_jump_node_id());
-                        edge.type = "condition_true";
-                        data.edges.push_back(std::move(edge));
-                    }
-                    if (cond->false_jump_node_id() >= 0) {
-                        GraphEdge edge;
-                        edge.from = gn.name;
-                        edge.to = poolStr(cond->false_jump_node_id());
-                        edge.type = "condition_false";
-                        edge.label = "else";
-                        data.edges.push_back(std::move(edge));
-                    }
-                    break;
-                }
-                case OpData::Random: {
-                    auto* random = instr->data_as_Random();
-                    gn.summary.hasRandom = true;
-                    if (random->branches()) {
-                        for (flatbuffers::uoffset_t bi = 0; bi < random->branches()->size(); ++bi) {
-                            auto* branch = random->branches()->Get(bi);
-                            GraphEdge edge;
-                            edge.from = gn.name;
-                            edge.to = poolStr(branch->target_node_name_id());
-                            edge.type = "random";
-                            edge.label = std::to_string(branch->weight());
-                            data.edges.push_back(std::move(edge));
-                        }
-                    }
-                    break;
-                }
-                case OpData::CallWithReturn: {
-                    auto* cwr = instr->data_as_CallWithReturn();
-                    GraphEdge edge;
-                    edge.from = gn.name;
-                    edge.to = poolStr(cwr->target_node_name_id());
-                    edge.type = "call_return";
-                    edge.label = "$ " + std::string(poolStr(cwr->return_var_name_id()));
-                    data.edges.push_back(std::move(edge));
-                    break;
-                }
-                default:
-                    break;
-                }
-            }
-        }
-
-        gn.summary.characters.assign(charSet.begin(), charSet.end());
-        data.nodes.push_back(std::move(gn));
+// --- loadState ---
+bool Runner::loadState(const std::string& filepath) {
+    std::ifstream ifs(filepath, std::ios::binary | std::ios::ate);
+    if (!ifs) {
+        setError("Cannot open save file: " + filepath);
+        return false;
     }
 
-    return data;
+    auto size = ifs.tellg();
+    ifs.seekg(0, std::ios::beg);
+    std::vector<uint8_t> buf(static_cast<size_t>(size));
+    if (!ifs.read(reinterpret_cast<char*>(buf.data()), size)) {
+        setError("Failed to read save file");
+        return false;
+    }
+
+    if (!deserializeStateBuffer(buf.data(), buf.size())) {
+        return false;
+    }
+
+    metrics_.loadOperations++;
+    recordTrace("LOAD", currentNodeName(), pc_, filepath);
+    return true;
+}
+
+Runner::Snapshot Runner::snapshot() const {
+    Snapshot snapshot;
+    snapshot.bytes = serializeStateBuffer();
+    if (!snapshot.bytes.empty()) {
+        metrics_.snapshotsCreated++;
+        recordTrace("SNAPSHOT", currentNodeName(), pc_, "create");
+    }
+    return snapshot;
+}
+
+bool Runner::restore(const Snapshot& snapshot) {
+    if (snapshot.bytes.empty()) {
+        setError("Snapshot is empty");
+        return false;
+    }
+    if (!deserializeStateBuffer(snapshot.bytes.data(), snapshot.bytes.size())) {
+        return false;
+    }
+
+    metrics_.snapshotsRestored++;
+    recordTrace("RESTORE", currentNodeName(), pc_, "snapshot");
+    return true;
 }
 
 } // namespace Gyeol

@@ -287,11 +287,11 @@ Returns a `PackedStringArray` containing the names of all currently defined vari
 bool load_locale(path: String)
 ```
 
-Loads a locale overlay CSV file. Translated strings replace originals at runtime. Supports `res://` and `user://` paths.
+Loads a locale overlay file (`.json` recommended, CSV supported for compatibility). Translated strings replace originals at runtime. Supports `res://` and `user://` paths.
 
 Returns `true` on success.
 
-See [Localization](../advanced/localization.md) for details on the CSV format.
+See [Localization](../advanced/localization.md) for PO/JSON workflow and CSV compatibility.
 
 ---
 
@@ -361,7 +361,7 @@ Returns a `PackedStringArray` containing all defined character IDs.
 String get_character_display_name(character_id: String)
 ```
 
-Convenience method that returns the `displayName` property of a character. Equivalent to `get_character_property(character_id, "displayName")`.
+Convenience method that returns `displayName` first, then falls back to `name`, then the character ID.
 
 ---
 

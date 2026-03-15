@@ -4,6 +4,16 @@ project(GyeolWasm LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+
+if (NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    message(FATAL_ERROR
+        "WASM build requires Emscripten toolchain. "
+        "Use: emcmake cmake -S bindings/wasm -B build_wasm -G Ninja")
+endif()
+
 # --- FlatBuffers (소스 빌드, flatc 불필요) ---
 include(FetchContent)
 
@@ -39,6 +49,8 @@ set(GENERATED_DIR "${CORE_DIR}/include/generated")
 add_library(GyeolCore STATIC
     ${CORE_DIR}/src/gyeol_story.cpp
     ${CORE_DIR}/src/gyeol_runner.cpp
+    ${CORE_DIR}/src/gyeol_runner_locale.cpp
+    ${CORE_DIR}/src/gyeol_runner_debug.cpp
 )
 
 target_include_directories(GyeolCore PUBLIC
@@ -51,6 +63,7 @@ target_link_libraries(GyeolCore PUBLIC flatbuffers)
 # --- GyeolParser 라이브러리 (Parser + Analyzer + JSON Export) ---
 add_library(GyeolParser STATIC
     ${COMPILER_DIR}/gyeol_parser.cpp
+    ${COMPILER_DIR}/gyeol_locale_tools.cpp
     ${COMPILER_DIR}/gyeol_comp_analyzer.cpp
     ${COMPILER_DIR}/gyeol_json_export.cpp
 )

@@ -35,6 +35,7 @@ public:
 
     // 번역 대상 문자열 CSV 추출
     bool exportStrings(const std::string& outputPath) const;
+    bool exportStringsPO(const std::string& outputPath) const;
 
     // StoryT 접근 (analyzer 등 외부 도구용)
     const ICPDev::Gyeol::Schema::StoryT& getStory() const { return story_; }
@@ -151,5 +152,12 @@ private:
     // 단일 파일 파싱 (state 리셋 없이, import 재귀 호출용)
     bool parseFile(const std::string& filepath);
 };
+
+namespace LocaleTools {
+bool convertPoToJson(const std::string& poPath,
+                     const std::string& outputPath,
+                     const std::string& localeHint = "",
+                     std::string* errorOut = nullptr);
+}
 
 } // namespace Gyeol

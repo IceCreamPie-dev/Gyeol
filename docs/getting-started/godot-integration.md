@@ -4,22 +4,41 @@ Gyeol provides a GDExtension for Godot 4.3 that exposes a `StoryPlayer` node wit
 
 ## Setup
 
-### 1. Build the GDExtension
+### 1. Bootstrap Local Toolchains (Windows default)
 
-```bash
-cd bindings/godot_extension
-scons platform=windows target=template_debug
+```powershell
+.\tools\dev\bootstrap-toolchains.ps1
+.\tools\dev\activate-toolchains.ps1
+```
+
+### 2. Build the GDExtension
+
+```powershell
+.\tools\dev\build-godot.ps1
 ```
 
 This produces `demo/godot/bin/libgyeol.windows.template_debug.x86_64.dll`.
 
-### 2. Compile Your Story
+If you want an ARM64 build:
+
+```powershell
+.\tools\dev\build-godot.ps1 -Arch arm64
+```
+
+> Optional direct command:
+>
+> ```bash
+> cd bindings/godot_extension
+> scons platform=windows target=template_debug
+> ```
+
+### 3. Compile Your Story
 
 ```bash
 GyeolCompiler story.gyeol -o project/story.gyb
 ```
 
-### 3. Configure the Extension
+### 4. Configure the Extension
 
 Copy the following files to your Godot project's `bin/` directory:
 
@@ -37,7 +56,7 @@ compatibility_minimum = "4.3"
 windows.debug.x86_64 = "res://bin/libgyeol.windows.template_debug.x86_64.dll"
 ```
 
-### 4. Add StoryPlayer to Your Scene
+### 5. Add StoryPlayer to Your Scene
 
 1. Open your scene in Godot
 2. Add a new `StoryPlayer` node (it inherits from `Node`)
@@ -176,8 +195,8 @@ Both `res://` and `user://` paths are supported. The `.gys` file stores:
 ## Localization
 
 ```gdscript
-# Load a translated locale CSV
-story_player.load_locale("res://locales/en.csv")
+# Load a translated locale (JSON recommended, CSV supported)
+story_player.load_locale("res://locales/en.locale.json")
 
 # Check current locale
 var locale = story_player.get_locale()
@@ -186,7 +205,7 @@ var locale = story_player.get_locale()
 story_player.clear_locale()
 ```
 
-See [Localization](../advanced/localization.md) for details on the CSV format.
+See [Localization](../advanced/localization.md) for PO/JSON workflow and CSV compatibility.
 
 ## Visit Tracking
 

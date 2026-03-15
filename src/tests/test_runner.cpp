@@ -1179,6 +1179,41 @@ static void writeLocaleCSV(const std::string& csvPath,
     }
 }
 
+static std::string escapeJsonForTest(const std::string& s) {
+    std::string out;
+    for (char c : s) {
+        switch (c) {
+            case '\\': out += "\\\\"; break;
+            case '"': out += "\\\""; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default: out += c; break;
+        }
+    }
+    return out;
+}
+
+static void writeLocaleJSON(const std::string& jsonPath,
+                            const std::unordered_map<std::string, std::string>& entries,
+                            const std::string& locale = "") {
+    std::ofstream ofs(jsonPath);
+    ofs << "{\n";
+    ofs << "  \"version\": 1,\n";
+    if (!locale.empty()) {
+        ofs << "  \"locale\": \"" << escapeJsonForTest(locale) << "\",\n";
+    }
+    ofs << "  \"entries\": {\n";
+    bool first = true;
+    for (const auto& kv : entries) {
+        if (!first) ofs << ",\n";
+        first = false;
+        ofs << "    \"" << escapeJsonForTest(kv.first) << "\": \"" << escapeJsonForTest(kv.second) << "\"";
+    }
+    ofs << "\n  }\n";
+    ofs << "}\n";
+}
+
 // line_id를 특정 pool text로 찾는 헬퍼
 static std::string findLineIdForText(const std::vector<uint8_t>& buf, const std::string& text) {
     using namespace ICPDev::Gyeol::Schema;
@@ -1218,6 +1253,139 @@ TEST(RunnerTest, LocaleOverlayBasic) {
     EXPECT_STREQ(r.line.text, "안녕하세요!");
 
     std::remove(csvPath.c_str());
+}
+
+TEST(RunnerTest, LocaleOverlayJsonBasic) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"Hello world!\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    std::string lid = findLineIdForText(buf, "Hello world!");
+    ASSERT_FALSE(lid.empty());
+
+    std::string jsonPath = "test_locale_basic.json";
+    writeLocaleJSON(jsonPath, {{lid, "안녕하세요!"}}, "ko-json");
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    ASSERT_TRUE(runner.loadLocale(jsonPath));
+    EXPECT_EQ(runner.getLocale(), "ko-json");
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "안녕하세요!");
+
+    std::remove(jsonPath.c_str());
+}
+
+TEST(RunnerTest, LocaleJsonIgnoresUnknownAndEmptyEntries) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"Line A\"\n"
+        "    \"Line B\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    std::string lidA = findLineIdForText(buf, "Line A");
+    std::string lidB = findLineIdForText(buf, "Line B");
+    ASSERT_FALSE(lidA.empty());
+    ASSERT_FALSE(lidB.empty());
+
+    std::string jsonPath = "test_locale_ignore_unknown.json";
+    writeLocaleJSON(
+        jsonPath,
+        {
+            {"unknown:line:id", "ShouldNotApply"},
+            {lidA, ""},
+            {lidB, "Translated B"}
+        },
+        "ko-json");
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    ASSERT_TRUE(runner.loadLocale(jsonPath));
+
+    auto r1 = runner.step();
+    EXPECT_EQ(r1.type, StepType::LINE);
+    EXPECT_STREQ(r1.line.text, "Line A");
+
+    auto r2 = runner.step();
+    EXPECT_EQ(r2.type, StepType::LINE);
+    EXPECT_STREQ(r2.line.text, "Translated B");
+
+    std::remove(jsonPath.c_str());
+}
+
+TEST(RunnerTest, LocaleJsonUsesFilenameWhenLocaleMissing) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"Hello\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    std::string lid = findLineIdForText(buf, "Hello");
+    ASSERT_FALSE(lid.empty());
+
+    std::string jsonPath = "test_locale_from_filename.json";
+    writeLocaleJSON(jsonPath, {{lid, "Bonjour"}});
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    ASSERT_TRUE(runner.loadLocale(jsonPath));
+    EXPECT_EQ(runner.getLocale(), "test_locale_from_filename");
+
+    auto r = runner.step();
+    EXPECT_EQ(r.type, StepType::LINE);
+    EXPECT_STREQ(r.line.text, "Bonjour");
+
+    std::remove(jsonPath.c_str());
+}
+
+TEST(RunnerTest, LocaleJsonInvalidRejected) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"Hello\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    std::string jsonPath = "test_locale_invalid.json";
+    {
+        std::ofstream ofs(jsonPath);
+        ofs << "{ \"entries\": { \"x\": \"y\" } }"; // missing version
+    }
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    EXPECT_FALSE(runner.loadLocale(jsonPath));
+    EXPECT_NE(runner.getLastError().find("Invalid locale JSON"), std::string::npos);
+
+    std::remove(jsonPath.c_str());
+}
+
+TEST(RunnerTest, LocaleJsonUnsupportedVersionRejected) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    \"Hello\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    std::string jsonPath = "test_locale_invalid_version.json";
+    {
+        std::ofstream ofs(jsonPath);
+        ofs << "{\n"
+               "  \"version\": 2,\n"
+               "  \"entries\": {}\n"
+               "}\n";
+    }
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    EXPECT_FALSE(runner.loadLocale(jsonPath));
+    EXPECT_NE(runner.getLastError().find("Unsupported locale JSON version"), std::string::npos);
+
+    std::remove(jsonPath.c_str());
 }
 
 TEST(RunnerTest, LocaleFallback) {
@@ -3579,13 +3747,18 @@ TEST(RunnerCharacterTest, GetCharacterDisplayName) {
     {
         std::ofstream ofs(path);
         ofs << "character hero:\n"
-            << "    name: \"영웅\"\n"
+            << "    displayName: \"Captain\"\n"
+            << "    name: \"HeroInternal\"\n"
             << "\n"
             << "character sidekick:\n"
+            << "    name: \"Buddy\"\n"
+            << "\n"
+            << "character npc:\n"
             << "\n"
             << "label start:\n"
             << "    hero \"Hi\"\n"
-            << "    sidekick \"Hey\"\n";
+            << "    sidekick \"Hey\"\n"
+            << "    npc \"...\"\n";
     }
 
     {
@@ -3600,9 +3773,10 @@ TEST(RunnerCharacterTest, GetCharacterDisplayName) {
     Runner runner;
     ASSERT_TRUE(runner.start(story.getBuffer(), story.getBufferSize()));
 
-    // name 속성 있으면 그 값, 없으면 ID 그대로
-    EXPECT_EQ(runner.getCharacterDisplayName("hero"), "영웅");
-    EXPECT_EQ(runner.getCharacterDisplayName("sidekick"), "sidekick");
+    // displayName 우선, 없으면 name, 그것도 없으면 ID
+    EXPECT_EQ(runner.getCharacterDisplayName("hero"), "Captain");
+    EXPECT_EQ(runner.getCharacterDisplayName("sidekick"), "Buddy");
+    EXPECT_EQ(runner.getCharacterDisplayName("npc"), "npc");
     EXPECT_EQ(runner.getCharacterDisplayName("nonexistent"), "nonexistent");
 
     std::remove(path.c_str());
@@ -3931,4 +4105,87 @@ label target:
     auto res = runner.step();
     ASSERT_EQ(res.type, StepType::CHOICES);
     ASSERT_EQ(res.choices.size(), 2u);
+}
+
+TEST(RunnerRuntimeContractTest, TraceAndMetricsCaptureVisibleEvents) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    narrator "Hello"
+    @ wait "cutscene"
+    menu:
+        "Continue" -> done
+
+label done:
+    narrator "Bye"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    runner.setTraceEnabled(true, 32);
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto res = runner.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+
+    res = runner.step();
+    ASSERT_EQ(res.type, StepType::COMMAND);
+
+    res = runner.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+
+    runner.choose(0);
+
+    res = runner.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+
+    res = runner.step();
+    ASSERT_EQ(res.type, StepType::END);
+
+    const auto& metrics = runner.getMetrics();
+    EXPECT_EQ(metrics.lineResults, 2u);
+    EXPECT_EQ(metrics.commandResults, 1u);
+    EXPECT_EQ(metrics.choiceResults, 1u);
+    EXPECT_EQ(metrics.choicesMade, 1u);
+    EXPECT_EQ(metrics.endResults, 1u);
+    EXPECT_GE(metrics.traceEvents, 6u);
+
+    const auto& trace = runner.getTrace();
+    ASSERT_FALSE(trace.empty());
+
+    bool sawStart = false;
+    bool sawCommand = false;
+    bool sawChoose = false;
+    for (const auto& event : trace) {
+        if (event.kind == "START") sawStart = true;
+        if (event.kind == "COMMAND" && event.detail == "wait") sawCommand = true;
+        if (event.kind == "CHOOSE") sawChoose = true;
+    }
+
+    EXPECT_TRUE(sawStart);
+    EXPECT_TRUE(sawCommand);
+    EXPECT_TRUE(sawChoose);
+}
+
+TEST(RunnerRuntimeContractTest, InvalidChoiceSetsLastError) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    menu:
+        "A" -> a
+
+label a:
+    narrator "done"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    auto res = runner.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+
+    runner.choose(5);
+    EXPECT_FALSE(runner.getLastError().empty());
+    EXPECT_NE(runner.getLastError().find("Invalid choice index"), std::string::npos);
+
+    runner.clearLastError();
+    EXPECT_TRUE(runner.getLastError().empty());
 }

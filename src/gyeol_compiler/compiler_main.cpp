@@ -11,11 +11,15 @@ static const char* VERSION = "0.2.0";
 static void printUsage() {
     std::cout << "Gyeol Compiler v" << VERSION << "\n"
               << "Usage: GyeolCompiler <input.gyeol> [-o output] [options]\n"
+              << "       GyeolCompiler --po-to-json <input.po> -o <output.json> [--locale <code>]\n"
               << "\n"
               << "Options:\n"
               << "  -o <path>           Output file path (default: story.gyb)\n"
               << "  --format <fmt>      Output format: gyb (default) or json\n"
               << "  --export-strings <path>  Export translatable strings to CSV\n"
+              << "  --export-strings-po <path>  Export translatable strings to POT\n"
+              << "  --po-to-json <path> Convert PO to runtime locale JSON\n"
+              << "  --locale <code>     Locale code for --po-to-json output\n"
               << "  --analyze [path]    Run analysis report (default: stdout)\n"
               << "  -O                  Apply optimizations (constant folding, dead code removal)\n"
               << "  -h, --help          Show this help message\n"
@@ -40,10 +44,57 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    if (std::strcmp(argv[1], "--po-to-json") == 0) {
+        std::string poInputPath;
+        std::string outputPath = "locale.json";
+        std::string localeHint;
+
+        for (int i = 2; i < argc; ++i) {
+            if (std::strcmp(argv[i], "-o") == 0) {
+                if (i + 1 >= argc) {
+                    std::cerr << "error: missing value for -o" << std::endl;
+                    return 1;
+                }
+                outputPath = argv[++i];
+            } else if (std::strcmp(argv[i], "--locale") == 0) {
+                if (i + 1 >= argc) {
+                    std::cerr << "error: missing value for --locale" << std::endl;
+                    return 1;
+                }
+                localeHint = argv[++i];
+            } else if (!poInputPath.empty() && argv[i][0] != '-') {
+                std::cerr << "error: unexpected extra positional argument '" << argv[i] << "'" << std::endl;
+                return 1;
+            } else if (argv[i][0] == '-') {
+                std::cerr << "error: unknown option '" << argv[i] << "'" << std::endl;
+                return 1;
+            } else if (poInputPath.empty()) {
+                poInputPath = argv[i];
+            } else {
+                std::cerr << "error: unknown argument '" << argv[i] << "'" << std::endl;
+                return 1;
+            }
+        }
+
+        if (poInputPath.empty()) {
+            std::cerr << "error: --po-to-json requires an input .po path" << std::endl;
+            return 1;
+        }
+
+        std::string error;
+        if (!Gyeol::LocaleTools::convertPoToJson(poInputPath, outputPath, localeHint, &error)) {
+            std::cerr << "error: " << error << std::endl;
+            return 1;
+        }
+        std::cout << "Converted: " << poInputPath << " -> " << outputPath << std::endl;
+        return 0;
+    }
+
     std::string inputPath = argv[1];
     std::string outputPath;
     std::string outputFormat = "gyb";
     std::string exportPath;
+    std::string exportPoPath;
     std::string analyzePath;
     bool doAnalyze = false;
     bool doOptimize = false;
@@ -51,18 +102,36 @@ int main(int argc, char* argv[]) {
 
     // 옵션 파싱
     for (int i = 2; i < argc; ++i) {
-        if (std::strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
+        if (std::strcmp(argv[i], "-o") == 0) {
+            if (i + 1 >= argc) {
+                std::cerr << "error: missing value for -o" << std::endl;
+                return 1;
+            }
             outputPath = argv[++i];
             outputPathSet = true;
-        } else if (std::strcmp(argv[i], "--format") == 0 && i + 1 < argc) {
+        } else if (std::strcmp(argv[i], "--format") == 0) {
+            if (i + 1 >= argc) {
+                std::cerr << "error: missing value for --format" << std::endl;
+                return 1;
+            }
             outputFormat = argv[++i];
             if (outputFormat != "gyb" && outputFormat != "json") {
                 std::cerr << "error: unknown format '" << outputFormat
                           << "'. Supported: gyb, json" << std::endl;
                 return 1;
             }
-        } else if (std::strcmp(argv[i], "--export-strings") == 0 && i + 1 < argc) {
+        } else if (std::strcmp(argv[i], "--export-strings") == 0) {
+            if (i + 1 >= argc) {
+                std::cerr << "error: missing value for --export-strings" << std::endl;
+                return 1;
+            }
             exportPath = argv[++i];
+        } else if (std::strcmp(argv[i], "--export-strings-po") == 0) {
+            if (i + 1 >= argc) {
+                std::cerr << "error: missing value for --export-strings-po" << std::endl;
+                return 1;
+            }
+            exportPoPath = argv[++i];
         } else if (std::strcmp(argv[i], "--analyze") == 0) {
             doAnalyze = true;
             if (i + 1 < argc && argv[i + 1][0] != '-') {
@@ -70,6 +139,18 @@ int main(int argc, char* argv[]) {
             }
         } else if (std::strcmp(argv[i], "-O") == 0) {
             doOptimize = true;
+        } else if (std::strcmp(argv[i], "--locale") == 0) {
+            std::cerr << "error: --locale is only valid with --po-to-json" << std::endl;
+            return 1;
+        } else if (std::strcmp(argv[i], "--po-to-json") == 0) {
+            std::cerr << "error: --po-to-json must be used as the primary mode" << std::endl;
+            return 1;
+        } else if (argv[i][0] == '-') {
+            std::cerr << "error: unknown option '" << argv[i] << "'" << std::endl;
+            return 1;
+        } else {
+            std::cerr << "error: unexpected positional argument '" << argv[i] << "'" << std::endl;
+            return 1;
         }
     }
 
@@ -127,6 +208,11 @@ int main(int argc, char* argv[]) {
     // CSV 추출 (--export-strings)
     if (!exportPath.empty()) {
         if (!parser.exportStrings(exportPath)) {
+            return 1;
+        }
+    }
+    if (!exportPoPath.empty()) {
+        if (!parser.exportStringsPO(exportPoPath)) {
             return 1;
         }
     }

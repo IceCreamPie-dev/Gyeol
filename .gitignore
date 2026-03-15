@@ -33,6 +33,8 @@
 
 # Build directories
 /build
+/build_wasm
+/.tools
 /bindings/godot_extension/.sconsign.dblite
 
 # Compiled story files (generated output)

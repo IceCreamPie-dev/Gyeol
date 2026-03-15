@@ -2,20 +2,12 @@
 
 ## Prerequisites
 
-| Dependency | Version | Notes |
-|-----------|---------|-------|
-| CMake | 3.15+ | Build system |
-| Ninja | any | Build backend |
-| C++17 compiler | GCC 8+ / MinGW / Clang 7+ | MSVC for GDExtension |
-| Git | any | For submodules |
+| Platform | Required |
+|---|---|
+| Windows (recommended dev flow) | CMake 3.15+, Git, Visual Studio C++ toolchain, Python 3 |
+| Linux/macOS (core build) | CMake 3.15+, Ninja, C++17 compiler, Git |
 
-All other dependencies are fetched automatically:
-
-| Library | Version | Purpose |
-|---------|---------|---------|
-| FlatBuffers | v24.3.25 | Binary serialization |
-| Google Test | v1.14.0 | Unit testing |
-| nlohmann/json | v3.11.3 | LSP server |
+Core dependencies (FlatBuffers, Google Test, nlohmann/json) are fetched automatically by CMake.
 
 ## Clone the Repository
 
@@ -24,84 +16,70 @@ git clone --recurse-submodules https://github.com/IceCreamPie-dev/Gyeol.git
 cd Gyeol
 ```
 
-> **Note:** The `--recurse-submodules` flag is required to fetch the `godot-cpp` submodule for GDExtension builds.
+`--recurse-submodules` is required for the `godot-cpp` submodule.
+
+## Local Toolchain Bootstrap (Windows default)
+
+```powershell
+.\tools\dev\bootstrap-toolchains.ps1
+.\tools\dev\activate-toolchains.ps1
+.\tools\dev\doctor-toolchains.ps1
+```
+
+If Windows ARM64 does not provide prebuilt Emscripten binaries on your machine, retry bootstrap with:
+
+```powershell
+.\tools\dev\bootstrap-toolchains.ps1 -AllowSourceBuild
+```
+
+This prepares local tools under `.tools/`:
+- `.tools/emsdk` for Emscripten
+- `.tools/venv` for SCons and Ninja
 
 ## Build Core + Tools
 
-```bash
-cmake -B build -G Ninja
+```powershell
+cmake -S . -B build -G Ninja
 cmake --build build
+ctest --test-dir build --output-on-failure
 ```
 
-This produces the following executables:
+Generated binaries include:
+- `build/src/gyeol_compiler/GyeolCompiler`
+- `build/src/gyeol_core/GyeolTest`
+- `build/src/gyeol_lsp/GyeolLSP`
+- `build/src/gyeol_debugger/GyeolDebugger`
 
-| Executable | Location | Purpose |
-|-----------|----------|---------|
-| `GyeolCompiler` | `build/src/gyeol_compiler/` | `.gyeol` to `.gyb` compiler |
-| `GyeolTest` | `build/src/gyeol_core/` | Console interactive player |
-| `GyeolLSP` | `build/src/gyeol_lsp/` | Language Server Protocol server |
-| `GyeolDebugger` | `build/src/gyeol_debugger/` | CLI interactive debugger |
-| `GyeolTests` | `build/src/tests/` | Unit test runner |
-| `GyeolLSPTests` | `build/src/tests/` | LSP test runner |
+## Build WASM
 
-## Build GDExtension (Godot)
-
-Requires MSVC (Windows) and [SCons](https://scons.org/):
-
-```bash
-cd bindings/godot_extension
-scons platform=windows target=template_debug
+```powershell
+.\tools\dev\build-wasm.ps1
 ```
 
-Output: `demo/godot/bin/libgyeol.windows.template_debug.x86_64.dll`
+Expected outputs:
+- `build_wasm/dist/gyeol.js`
+- `build_wasm/dist/*.wasm`
 
-> **Note:** The first build takes ~5 minutes as it compiles all godot-cpp bindings.
+## Build Godot GDExtension
 
-## Run Tests
-
-```bash
-cd build && ctest --output-on-failure
+```powershell
+.\tools\dev\build-godot.ps1
 ```
 
-Or run test executables directly:
+Expected output:
+- `demo/godot/bin/libgyeol.windows.template_debug.x86_64.dll`
 
-```bash
-./build/src/tests/GyeolTests       # Core + Parser + Runner
-./build/src/tests/GyeolLSPTests    # LSP Analyzer + Server
+For ARM64 artifact:
+
+```powershell
+.\tools\dev\build-godot.ps1 -Arch arm64
 ```
 
-## Verify Installation
+## Optional Global Toolchain
 
-```bash
-# Compile a test story
-./build/src/gyeol_compiler/GyeolCompiler test.gyeol -o test.gyb
-
-# Play it in console
-./build/src/gyeol_core/GyeolTest test.gyb
-```
-
-## Project Structure
-
-```
-Gyeol/
-  schemas/
-    gyeol.fbs              # FlatBuffers schema
-  src/
-    gyeol_core/            # Core engine library + Runner VM
-    gyeol_compiler/        # Parser + Compiler
-    gyeol_lsp/             # LSP server
-    gyeol_debugger/        # CLI debugger
-    tests/                 # Google Test suites
-  bindings/
-    godot_extension/       # Godot 4.3 GDExtension (SCons)
-  editors/
-    vscode/                # VS Code extension (gyeol-lang)
-  demo/
-    godot/                 # Godot demo project
-  docs/                    # This documentation
-```
+You can still use globally installed `emsdk`/`scons`, but the project default is the local `.tools/` workflow for reproducibility.
 
 ## Next Steps
 
-- [Quick Start](quick-start.md) - Write and run your first story
-- [Godot Integration](godot-integration.md) - Use Gyeol in Godot
+- [Quick Start](quick-start.md)
+- [Godot Integration](godot-integration.md)

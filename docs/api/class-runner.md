@@ -142,12 +142,14 @@ struct CommandData {
 |--------|--------|
 | `bool` | [saveState](#savestate)`(const std::string& filepath) const` |
 | `bool` | [loadState](#loadstate)`(const std::string& filepath)` |
+| `Snapshot` | [snapshot](#snapshot)`() const` |
+| `bool` | [restore](#restore)`(const Snapshot& snapshot)` |
 
 ### Locale
 
 | Return | Method |
 |--------|--------|
-| `bool` | [loadLocale](#loadlocale)`(const std::string& csvPath)` |
+| `bool` | [loadLocale](#loadlocale)`(const std::string& path)` |
 | `void` | [clearLocale](#clearlocale)`()` |
 | `std::string` | [getLocale](#getlocale)`() const` |
 
@@ -179,6 +181,20 @@ struct CommandData {
 | Return | Method |
 |--------|--------|
 | `void` | [setSeed](#setseed)`(uint32_t seed)` |
+| `uint32_t` | [getSeed](#getseed)`() const` |
+
+### Runtime Diagnostics
+
+| Return | Method |
+|--------|--------|
+| `const std::string&` | [getLastError](#getlasterror)`() const` |
+| `void` | [clearLastError](#clearlasterror)`()` |
+| `const ExecutionMetrics&` | [getMetrics](#getmetrics)`() const` |
+| `void` | [resetMetrics](#resetmetrics)`()` |
+| `void` | [setTraceEnabled](#settraceenabled)`(bool enabled, size_t maxEvents = 256)` |
+| `bool` | [isTraceEnabled](#istraceenabled)`() const` |
+| `const std::vector<TraceEvent>&` | [getTrace](#gettrace)`() const` |
+| `void` | [clearTrace](#cleartrace)`()` |
 
 ---
 
@@ -327,6 +343,8 @@ Serializes the complete runner state to a `.gys` FlatBuffers binary file. Includ
 - Pending choices (with modifiers)
 - Visit counts
 - Once-choice tracking
+- Deterministic RNG progression
+- Locale overlay and pending choice metadata trailer
 
 ---
 
@@ -340,13 +358,36 @@ Restores state from a `.gys` file. A story must already be loaded.
 
 ---
 
+### snapshot
+
+```cpp
+Snapshot snapshot() const
+```
+
+Captures the current runtime state in memory without writing a `.gys` file. The snapshot preserves the same core state as `saveState()`, plus deterministic RNG progression and pending choice metadata for rollback and replay.
+
+---
+
+### restore
+
+```cpp
+bool restore(const Snapshot& snapshot)
+```
+
+Restores a previously captured in-memory snapshot. A story must already be loaded.
+
+---
+
 ### loadLocale
 
 ```cpp
-bool loadLocale(const std::string& csvPath)
+bool loadLocale(const std::string& path)
 ```
 
-Loads a CSV locale overlay. Translated strings replace originals for Line and Choice text.
+Loads a locale overlay from path.
+Supported formats:
+- `.json` runtime locale (`version`, optional `locale`, `entries`)
+- CSV overlay (backward compatibility)
 
 ---
 
@@ -416,7 +457,7 @@ Returns all defined character IDs.
 std::string getCharacterDisplayName(const std::string& characterId) const
 ```
 
-Convenience method returning the `displayName` property.
+Convenience method returning `displayName` first, then `name`, then the character ID.
 
 ---
 
@@ -457,6 +498,96 @@ void setSeed(uint32_t seed)
 ```
 
 Sets the RNG seed for deterministic random branch selection.
+
+---
+
+### getSeed
+
+```cpp
+uint32_t getSeed() const
+```
+
+Returns the currently active runtime seed.
+
+---
+
+### getLastError
+
+```cpp
+const std::string& getLastError() const
+```
+
+Returns the most recent runner error message.
+
+---
+
+### clearLastError
+
+```cpp
+void clearLastError()
+```
+
+Clears the stored error message.
+
+---
+
+### getMetrics
+
+```cpp
+const ExecutionMetrics& getMetrics() const
+```
+
+Returns execution counters for steps, visible results, random rolls, saves, loads, restores, and errors.
+
+---
+
+### resetMetrics
+
+```cpp
+void resetMetrics()
+```
+
+Resets all execution metrics to zero.
+
+---
+
+### setTraceEnabled
+
+```cpp
+void setTraceEnabled(bool enabled, size_t maxEvents = 256)
+```
+
+Enables or disables in-memory runtime trace capture and sets its maximum buffer size.
+
+---
+
+### isTraceEnabled
+
+```cpp
+bool isTraceEnabled() const
+```
+
+Returns `true` if runtime trace capture is enabled.
+
+---
+
+### getTrace
+
+```cpp
+const std::vector<TraceEvent>& getTrace() const
+```
+
+Returns the current runtime trace log. Events include `START`, `LINE`, `COMMAND`, `CHOICES`, `CHOOSE`, `SAVE`, `LOAD`, and `RESTORE`.
+
+---
+
+### clearTrace
+
+```cpp
+void clearTrace()
+```
+
+Clears the in-memory runtime trace log.
 
 ---
 
