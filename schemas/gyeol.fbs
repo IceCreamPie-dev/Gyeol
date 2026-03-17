@@ -27,6 +27,8 @@ union OpData {
     Choice,     // 선택지
     Jump,       // 다른 노드로 이동
     Command,    // 엔진 명령 (배경 변경, 사운드 등)
+    Wait,       // 런타임 대기 (resume 필요)
+    Yield,      // 1틱 양보 이벤트
     SetVar,     // 변수 값 변경
     Condition,  // 조건 분기 (If)
     Random,         // 랜덤 분기 (가중치 기반)
@@ -86,6 +88,15 @@ table Jump {
 table Command {
     type_id:int;            // 명령 종류 (예: "bg", "sfx" 등을 String Pool에서 참조)
     params:[int];           // 파라미터 값들 (String Pool Index 배열)
+}
+
+// 런타임 대기점: WAIT 결과를 내고 resume() 호출 전까지 정지
+table Wait {
+    tag_id:int = -1;        // 선택 태그 (String Pool Index)
+}
+
+// 협력형 1틱 양보: YIELD 결과를 내고 다음 step()에서 즉시 진행 가능
+table Yield {
 }
 
 // --- 표현식 (RPN 토큰 리스트) ---
@@ -246,6 +257,8 @@ table SaveState {
     current_node_name:string;             // 현재 노드
     pc:uint32;                            // program counter
     finished:bool;                        // 종료 플래그
+    wait_blocked:bool = false;            // WAIT 상태 여부
+    wait_tag:string;                      // WAIT 태그 (없으면 빈 문자열)
     variables:[SavedVar];                 // 런타임 변수
     call_stack:[SavedCallFrame];          // 콜 스택
     pending_choices:[SavedPendingChoice]; // 대기 선택지

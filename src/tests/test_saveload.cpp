@@ -969,3 +969,47 @@ label always_path:
     ASSERT_EQ(res.choices.size(), 1u);
     EXPECT_STREQ(res.choices[0].text, "Always option");
 }
+
+TEST_F(SaveLoadTest, SaveLoadPreservesWaitState) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    wait "gate"
+    yield
+    narrator "done"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner r1;
+    ASSERT_TRUE(GyeolTest::startRunner(r1, buf));
+
+    auto res = r1.step();
+    ASSERT_EQ(res.type, StepType::WAIT);
+    ASSERT_STREQ(res.wait.tag, "gate");
+    ASSERT_TRUE(r1.saveState(SAVE_PATH));
+
+    // 원본 실행 경로
+    ASSERT_TRUE(r1.resume());
+    res = r1.step();
+    ASSERT_EQ(res.type, StepType::YIELD);
+    auto expected = r1.step();
+    ASSERT_EQ(expected.type, StepType::LINE);
+    ASSERT_STREQ(expected.line.text, "done");
+
+    // 복원 경로
+    Runner r2;
+    ASSERT_TRUE(GyeolTest::startRunner(r2, buf));
+    ASSERT_TRUE(r2.loadState(SAVE_PATH));
+
+    // WAIT 상태가 보존되므로 resume 전에는 진행 불가
+    res = r2.step();
+    ASSERT_EQ(res.type, StepType::WAIT);
+    EXPECT_NE(r2.getLastError().find("Cannot step while waiting"), std::string::npos);
+    r2.clearLastError();
+
+    ASSERT_TRUE(r2.resume());
+    res = r2.step();
+    ASSERT_EQ(res.type, StepType::YIELD);
+    auto restored = r2.step();
+    ASSERT_EQ(restored.type, StepType::LINE);
+    EXPECT_STREQ(restored.line.text, expected.line.text);
+}

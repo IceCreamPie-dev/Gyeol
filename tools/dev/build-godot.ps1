@@ -2,7 +2,8 @@ param(
     [string]$Platform = "windows",
     [string]$Target = "template_debug",
     [string]$Arch = "x86_64",
-    [switch]$SkipActivate
+    [switch]$SkipActivate,
+    [switch]$SkipDoctor
 )
 
 Set-StrictMode -Version Latest
@@ -11,6 +12,8 @@ $ErrorActionPreference = "Stop"
 if (-not $SkipActivate) {
     . (Join-Path $PSScriptRoot "activate-toolchains.ps1")
 }
+
+$DoctorScript = Join-Path $PSScriptRoot "doctor-toolchains.ps1"
 
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $FlatbuffersInclude = Join-Path $RepoRoot "build\_deps\flatbuffers-src\include"
@@ -98,6 +101,15 @@ function Ensure-MsvcCompiler {
     }
 
     throw "MSVC compiler (cl.exe) is not available. Install Visual Studio Build Tools (Desktop C++) or run from Developer PowerShell."
+}
+
+if (-not $SkipDoctor) {
+    if (-not (Test-Path $DoctorScript)) {
+        throw "doctor script not found: $DoctorScript"
+    }
+    Invoke-Checked "Validate local toolchains (doctor)" {
+        & $DoctorScript -SkipActivate
+    }
 }
 
 if (-not (Test-Path $FlatbuffersInclude)) {

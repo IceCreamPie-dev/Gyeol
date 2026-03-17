@@ -237,6 +237,35 @@ TEST(ParserTest, CommandInstruction) {
     ASSERT_EQ(cmd->params()->size(), 1u);
 }
 
+TEST(ParserTest, WaitInstructionWithTag) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    wait \"cutscene\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* instr = story->nodes()->Get(0)->lines()->Get(0);
+    EXPECT_EQ(instr->data_type(), OpData::Wait);
+    auto* wait = instr->data_as_Wait();
+    ASSERT_NE(wait, nullptr);
+    EXPECT_GE(wait->tag_id(), 0);
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(wait->tag_id()))->c_str(), "cutscene");
+}
+
+TEST(ParserTest, YieldInstruction) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    yield\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* instr = story->nodes()->Get(0)->lines()->Get(0);
+    EXPECT_EQ(instr->data_type(), OpData::Yield);
+}
+
 TEST(ParserTest, StringPoolDedup) {
     auto buf = GyeolTest::compileScript(
         "label start:\n"

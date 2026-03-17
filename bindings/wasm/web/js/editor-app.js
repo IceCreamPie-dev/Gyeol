@@ -128,6 +128,7 @@ let Module = null;
 let engine = null;
 let isPlaying = false;
 let waitingForChoice = false;
+let waitingForResume = false;
 let currentView = 'hybrid'; // 'text', 'graph', 'hybrid'
 let graphView = null;
 
@@ -192,6 +193,7 @@ function compileAndRun() {
     clearChoices();
     isPlaying = false;
     waitingForChoice = false;
+    waitingForResume = false;
 
     const result = engine.compileAndLoad(source);
 
@@ -254,6 +256,7 @@ function onGraphNodeSelect(nodeName) {
     clearChoices();
     clearError();
     waitingForChoice = false;
+    waitingForResume = false;
 
     const ok = engine.startFromNode(nodeName);
     if (!ok) {
@@ -280,6 +283,15 @@ function onGraphNodeSelect(nodeName) {
 function advanceStory() {
     if (!engine || !isPlaying || waitingForChoice) return;
 
+    if (waitingForResume) {
+        const ok = engine.resume();
+        if (!ok) {
+            addSystemLine('resume() failed');
+            return;
+        }
+        waitingForResume = false;
+    }
+
     const result = engine.step();
     updateNodeStatus();
 
@@ -296,6 +308,16 @@ function advanceStory() {
 
         case 'COMMAND':
             addCommandLine(result.commandType, result.params);
+            advanceStory();
+            return;
+
+        case 'WAIT':
+            waitingForResume = true;
+            addSystemLine(result.tag ? `WAIT "${result.tag}"` : 'WAIT');
+            return;
+
+        case 'YIELD':
+            addSystemLine('YIELD');
             advanceStory();
             return;
 

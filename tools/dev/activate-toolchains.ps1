@@ -34,6 +34,26 @@ function Import-CmdEnvironment {
     }
 }
 
+function Test-CommandUnderPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$CommandName,
+        [Parameter(Mandatory = $true)][string]$ExpectedRoot
+    )
+
+    $cmd = Get-Command $CommandName -ErrorAction SilentlyContinue
+    if (-not $cmd) {
+        return $false
+    }
+
+    if (-not (Test-Path $ExpectedRoot)) {
+        return $false
+    }
+
+    $resolvedExpected = (Resolve-Path $ExpectedRoot).Path
+    $resolvedActual = (Resolve-Path $cmd.Source).Path
+    return $resolvedActual.StartsWith($resolvedExpected, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
 if (-not (Test-Path $EmsdkDir)) {
     throw "emsdk not found. Run .\tools\dev\bootstrap-toolchains.ps1 first."
 }
@@ -45,6 +65,8 @@ Import-CmdEnvironment -BatchFilePath $EmsdkEnvBat
 
 if (Test-Path $EmbeddedConfig) {
     $env:EM_CONFIG = $EmbeddedConfig
+} elseif (-not $env:EM_CONFIG) {
+    throw "Embedded Emscripten config not found: $EmbeddedConfig. Re-run bootstrap."
 }
 
 # Make sure local venv tools are preferred.
@@ -62,14 +84,26 @@ foreach ($cmd in @("cmake", "scons", "emcmake", "em++")) {
     }
 }
 
+if (-not (Test-Path $env:EM_CONFIG)) {
+    throw @"
+Toolchain activation is incomplete. EM_CONFIG points to a missing file:
+  EM_CONFIG=$env:EM_CONFIG
+Expected:
+  $EmbeddedConfig
+
+Recovery:
+  .\tools\dev\bootstrap-toolchains.ps1
+  .\tools\dev\activate-toolchains.ps1
+"@
+}
+
 if ($missing.Count -gt 0) {
     $message = @"
 Toolchain activation is incomplete. Missing command(s): $($missing -join ", ")
 
-Check:
-  1) .\tools\dev\bootstrap-toolchains.ps1
-  2) If Windows ARM64 prebuilt SDK is unavailable:
-     .\tools\dev\bootstrap-toolchains.ps1 -AllowSourceBuild
+Recovery:
+  .\tools\dev\bootstrap-toolchains.ps1
+  .\tools\dev\activate-toolchains.ps1
 "@
 
     $emscriptenDir = Join-Path $EmsdkDir "upstream\emscripten"
@@ -78,6 +112,29 @@ Check:
     }
 
     throw $message
+}
+
+$pathMismatches = [System.Collections.Generic.List[string]]::new()
+if (-not (Test-CommandUnderPath -CommandName "scons" -ExpectedRoot $VenvScriptsDir)) {
+    $pathMismatches.Add("scons is not resolved from local venv ($VenvScriptsDir).")
+}
+
+$ExpectedEmscriptenRoot = Join-Path $EmsdkDir "upstream\emscripten"
+foreach ($cmd in @("emcmake", "em++")) {
+    if (-not (Test-CommandUnderPath -CommandName $cmd -ExpectedRoot $ExpectedEmscriptenRoot)) {
+        $pathMismatches.Add("$cmd is not resolved from local emsdk ($ExpectedEmscriptenRoot).")
+    }
+}
+
+if ($pathMismatches.Count -gt 0) {
+    throw @"
+Toolchain activation resolved commands from unexpected locations:
+$($pathMismatches -join "`n")
+
+Recovery:
+  .\tools\dev\bootstrap-toolchains.ps1
+  .\tools\dev\activate-toolchains.ps1
+"@
 }
 
 Write-Host "Toolchains activated for current shell."

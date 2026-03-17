@@ -57,6 +57,14 @@ struct Command;
 struct CommandBuilder;
 struct CommandT;
 
+struct Wait;
+struct WaitBuilder;
+struct WaitT;
+
+struct Yield;
+struct YieldBuilder;
+struct YieldT;
+
 struct ExprToken;
 struct ExprTokenBuilder;
 struct ExprTokenT;
@@ -375,22 +383,26 @@ enum class OpData : uint8_t {
   Choice = 2,
   Jump = 3,
   Command = 4,
-  SetVar = 5,
-  Condition = 6,
-  Random = 7,
-  Return = 8,
-  CallWithReturn = 9,
+  Wait = 5,
+  Yield = 6,
+  SetVar = 7,
+  Condition = 8,
+  Random = 9,
+  Return = 10,
+  CallWithReturn = 11,
   MIN = NONE,
   MAX = CallWithReturn
 };
 
-inline const OpData (&EnumValuesOpData())[10] {
+inline const OpData (&EnumValuesOpData())[12] {
   static const OpData values[] = {
     OpData::NONE,
     OpData::Line,
     OpData::Choice,
     OpData::Jump,
     OpData::Command,
+    OpData::Wait,
+    OpData::Yield,
     OpData::SetVar,
     OpData::Condition,
     OpData::Random,
@@ -401,12 +413,14 @@ inline const OpData (&EnumValuesOpData())[10] {
 }
 
 inline const char * const *EnumNamesOpData() {
-  static const char * const names[11] = {
+  static const char * const names[13] = {
     "NONE",
     "Line",
     "Choice",
     "Jump",
     "Command",
+    "Wait",
+    "Yield",
     "SetVar",
     "Condition",
     "Random",
@@ -441,6 +455,14 @@ template<> struct OpDataTraits<ICPDev::Gyeol::Schema::Jump> {
 
 template<> struct OpDataTraits<ICPDev::Gyeol::Schema::Command> {
   static const OpData enum_value = OpData::Command;
+};
+
+template<> struct OpDataTraits<ICPDev::Gyeol::Schema::Wait> {
+  static const OpData enum_value = OpData::Wait;
+};
+
+template<> struct OpDataTraits<ICPDev::Gyeol::Schema::Yield> {
+  static const OpData enum_value = OpData::Yield;
 };
 
 template<> struct OpDataTraits<ICPDev::Gyeol::Schema::SetVar> {
@@ -481,6 +503,14 @@ template<> struct OpDataUnionTraits<ICPDev::Gyeol::Schema::JumpT> {
 
 template<> struct OpDataUnionTraits<ICPDev::Gyeol::Schema::CommandT> {
   static const OpData enum_value = OpData::Command;
+};
+
+template<> struct OpDataUnionTraits<ICPDev::Gyeol::Schema::WaitT> {
+  static const OpData enum_value = OpData::Wait;
+};
+
+template<> struct OpDataUnionTraits<ICPDev::Gyeol::Schema::YieldT> {
+  static const OpData enum_value = OpData::Yield;
 };
 
 template<> struct OpDataUnionTraits<ICPDev::Gyeol::Schema::SetVarT> {
@@ -564,6 +594,22 @@ struct OpDataUnion {
   const ICPDev::Gyeol::Schema::CommandT *AsCommand() const {
     return type == OpData::Command ?
       reinterpret_cast<const ICPDev::Gyeol::Schema::CommandT *>(value) : nullptr;
+  }
+  ICPDev::Gyeol::Schema::WaitT *AsWait() {
+    return type == OpData::Wait ?
+      reinterpret_cast<ICPDev::Gyeol::Schema::WaitT *>(value) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::WaitT *AsWait() const {
+    return type == OpData::Wait ?
+      reinterpret_cast<const ICPDev::Gyeol::Schema::WaitT *>(value) : nullptr;
+  }
+  ICPDev::Gyeol::Schema::YieldT *AsYield() {
+    return type == OpData::Yield ?
+      reinterpret_cast<ICPDev::Gyeol::Schema::YieldT *>(value) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::YieldT *AsYield() const {
+    return type == OpData::Yield ?
+      reinterpret_cast<const ICPDev::Gyeol::Schema::YieldT *>(value) : nullptr;
   }
   ICPDev::Gyeol::Schema::SetVarT *AsSetVar() {
     return type == OpData::SetVar ?
@@ -1484,6 +1530,109 @@ inline ::flatbuffers::Offset<Command> CreateCommandDirect(
 }
 
 ::flatbuffers::Offset<Command> CreateCommand(::flatbuffers::FlatBufferBuilder &_fbb, const CommandT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct WaitT : public ::flatbuffers::NativeTable {
+  typedef Wait TableType;
+  int32_t tag_id = -1;
+};
+
+struct Wait FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef WaitT NativeTableType;
+  typedef WaitBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_TAG_ID = 4
+  };
+  int32_t tag_id() const {
+    return GetField<int32_t>(VT_TAG_ID, -1);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int32_t>(verifier, VT_TAG_ID, 4) &&
+           verifier.EndTable();
+  }
+  WaitT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(WaitT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<Wait> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const WaitT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct WaitBuilder {
+  typedef Wait Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_tag_id(int32_t tag_id) {
+    fbb_.AddElement<int32_t>(Wait::VT_TAG_ID, tag_id, -1);
+  }
+  explicit WaitBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<Wait> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<Wait>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<Wait> CreateWait(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    int32_t tag_id = -1) {
+  WaitBuilder builder_(_fbb);
+  builder_.add_tag_id(tag_id);
+  return builder_.Finish();
+}
+
+struct Wait::Traits {
+  using type = Wait;
+  static auto constexpr Create = CreateWait;
+};
+
+::flatbuffers::Offset<Wait> CreateWait(::flatbuffers::FlatBufferBuilder &_fbb, const WaitT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct YieldT : public ::flatbuffers::NativeTable {
+  typedef Yield TableType;
+};
+
+struct Yield FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef YieldT NativeTableType;
+  typedef YieldBuilder Builder;
+  struct Traits;
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           verifier.EndTable();
+  }
+  YieldT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(YieldT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<Yield> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const YieldT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct YieldBuilder {
+  typedef Yield Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  explicit YieldBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<Yield> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<Yield>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<Yield> CreateYield(
+    ::flatbuffers::FlatBufferBuilder &_fbb) {
+  YieldBuilder builder_(_fbb);
+  return builder_.Finish();
+}
+
+struct Yield::Traits {
+  using type = Yield;
+  static auto constexpr Create = CreateYield;
+};
+
+::flatbuffers::Offset<Yield> CreateYield(::flatbuffers::FlatBufferBuilder &_fbb, const YieldT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct ExprTokenT : public ::flatbuffers::NativeTable {
   typedef ExprToken TableType;
@@ -2497,6 +2646,12 @@ struct Instruction FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ICPDev::Gyeol::Schema::Command *data_as_Command() const {
     return data_type() == ICPDev::Gyeol::Schema::OpData::Command ? static_cast<const ICPDev::Gyeol::Schema::Command *>(data()) : nullptr;
   }
+  const ICPDev::Gyeol::Schema::Wait *data_as_Wait() const {
+    return data_type() == ICPDev::Gyeol::Schema::OpData::Wait ? static_cast<const ICPDev::Gyeol::Schema::Wait *>(data()) : nullptr;
+  }
+  const ICPDev::Gyeol::Schema::Yield *data_as_Yield() const {
+    return data_type() == ICPDev::Gyeol::Schema::OpData::Yield ? static_cast<const ICPDev::Gyeol::Schema::Yield *>(data()) : nullptr;
+  }
   const ICPDev::Gyeol::Schema::SetVar *data_as_SetVar() const {
     return data_type() == ICPDev::Gyeol::Schema::OpData::SetVar ? static_cast<const ICPDev::Gyeol::Schema::SetVar *>(data()) : nullptr;
   }
@@ -2538,6 +2693,14 @@ template<> inline const ICPDev::Gyeol::Schema::Jump *Instruction::data_as<ICPDev
 
 template<> inline const ICPDev::Gyeol::Schema::Command *Instruction::data_as<ICPDev::Gyeol::Schema::Command>() const {
   return data_as_Command();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::Wait *Instruction::data_as<ICPDev::Gyeol::Schema::Wait>() const {
+  return data_as_Wait();
+}
+
+template<> inline const ICPDev::Gyeol::Schema::Yield *Instruction::data_as<ICPDev::Gyeol::Schema::Yield>() const {
+  return data_as_Yield();
 }
 
 template<> inline const ICPDev::Gyeol::Schema::SetVar *Instruction::data_as<ICPDev::Gyeol::Schema::SetVar>() const {
@@ -3381,6 +3544,8 @@ struct SaveStateT : public ::flatbuffers::NativeTable {
   std::string current_node_name{};
   uint32_t pc = 0;
   bool finished = false;
+  bool wait_blocked = false;
+  std::string wait_tag{};
   std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::SavedVarT>> variables{};
   std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::SavedCallFrameT>> call_stack{};
   std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::SavedPendingChoiceT>> pending_choices{};
@@ -3402,11 +3567,13 @@ struct SaveState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_CURRENT_NODE_NAME = 8,
     VT_PC = 10,
     VT_FINISHED = 12,
-    VT_VARIABLES = 14,
-    VT_CALL_STACK = 16,
-    VT_PENDING_CHOICES = 18,
-    VT_VISIT_COUNTS = 20,
-    VT_CHOSEN_ONCE_CHOICES = 22
+    VT_WAIT_BLOCKED = 14,
+    VT_WAIT_TAG = 16,
+    VT_VARIABLES = 18,
+    VT_CALL_STACK = 20,
+    VT_PENDING_CHOICES = 22,
+    VT_VISIT_COUNTS = 24,
+    VT_CHOSEN_ONCE_CHOICES = 26
   };
   const ::flatbuffers::String *version() const {
     return GetPointer<const ::flatbuffers::String *>(VT_VERSION);
@@ -3422,6 +3589,12 @@ struct SaveState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   }
   bool finished() const {
     return GetField<uint8_t>(VT_FINISHED, 0) != 0;
+  }
+  bool wait_blocked() const {
+    return GetField<uint8_t>(VT_WAIT_BLOCKED, 0) != 0;
+  }
+  const ::flatbuffers::String *wait_tag() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_WAIT_TAG);
   }
   const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVar>> *variables() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVar>> *>(VT_VARIABLES);
@@ -3448,6 +3621,9 @@ struct SaveState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(current_node_name()) &&
            VerifyField<uint32_t>(verifier, VT_PC, 4) &&
            VerifyField<uint8_t>(verifier, VT_FINISHED, 1) &&
+           VerifyField<uint8_t>(verifier, VT_WAIT_BLOCKED, 1) &&
+           VerifyOffset(verifier, VT_WAIT_TAG) &&
+           verifier.VerifyString(wait_tag()) &&
            VerifyOffset(verifier, VT_VARIABLES) &&
            verifier.VerifyVector(variables()) &&
            verifier.VerifyVectorOfTables(variables()) &&
@@ -3489,6 +3665,12 @@ struct SaveStateBuilder {
   void add_finished(bool finished) {
     fbb_.AddElement<uint8_t>(SaveState::VT_FINISHED, static_cast<uint8_t>(finished), 0);
   }
+  void add_wait_blocked(bool wait_blocked) {
+    fbb_.AddElement<uint8_t>(SaveState::VT_WAIT_BLOCKED, static_cast<uint8_t>(wait_blocked), 0);
+  }
+  void add_wait_tag(::flatbuffers::Offset<::flatbuffers::String> wait_tag) {
+    fbb_.AddOffset(SaveState::VT_WAIT_TAG, wait_tag);
+  }
   void add_variables(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVar>>> variables) {
     fbb_.AddOffset(SaveState::VT_VARIABLES, variables);
   }
@@ -3522,6 +3704,8 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveState(
     ::flatbuffers::Offset<::flatbuffers::String> current_node_name = 0,
     uint32_t pc = 0,
     bool finished = false,
+    bool wait_blocked = false,
+    ::flatbuffers::Offset<::flatbuffers::String> wait_tag = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVar>>> variables = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedCallFrame>>> call_stack = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>>> pending_choices = 0,
@@ -3533,10 +3717,12 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveState(
   builder_.add_pending_choices(pending_choices);
   builder_.add_call_stack(call_stack);
   builder_.add_variables(variables);
+  builder_.add_wait_tag(wait_tag);
   builder_.add_pc(pc);
   builder_.add_current_node_name(current_node_name);
   builder_.add_story_version(story_version);
   builder_.add_version(version);
+  builder_.add_wait_blocked(wait_blocked);
   builder_.add_finished(finished);
   return builder_.Finish();
 }
@@ -3553,6 +3739,8 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveStateDirect(
     const char *current_node_name = nullptr,
     uint32_t pc = 0,
     bool finished = false,
+    bool wait_blocked = false,
+    const char *wait_tag = nullptr,
     const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVar>> *variables = nullptr,
     const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedCallFrame>> *call_stack = nullptr,
     const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>> *pending_choices = nullptr,
@@ -3561,6 +3749,7 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveStateDirect(
   auto version__ = version ? _fbb.CreateString(version) : 0;
   auto story_version__ = story_version ? _fbb.CreateString(story_version) : 0;
   auto current_node_name__ = current_node_name ? _fbb.CreateString(current_node_name) : 0;
+  auto wait_tag__ = wait_tag ? _fbb.CreateString(wait_tag) : 0;
   auto variables__ = variables ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVar>>(*variables) : 0;
   auto call_stack__ = call_stack ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedCallFrame>>(*call_stack) : 0;
   auto pending_choices__ = pending_choices ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>>(*pending_choices) : 0;
@@ -3573,6 +3762,8 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveStateDirect(
       current_node_name__,
       pc,
       finished,
+      wait_blocked,
+      wait_tag__,
       variables__,
       call_stack__,
       pending_choices__,
@@ -4067,6 +4258,55 @@ inline ::flatbuffers::Offset<Command> CreateCommand(::flatbuffers::FlatBufferBui
       _fbb,
       _type_id,
       _params);
+}
+
+inline WaitT *Wait::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<WaitT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void Wait::UnPackTo(WaitT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = tag_id(); _o->tag_id = _e; }
+}
+
+inline ::flatbuffers::Offset<Wait> Wait::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const WaitT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateWait(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<Wait> CreateWait(::flatbuffers::FlatBufferBuilder &_fbb, const WaitT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const WaitT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _tag_id = _o->tag_id;
+  return ICPDev::Gyeol::Schema::CreateWait(
+      _fbb,
+      _tag_id);
+}
+
+inline YieldT *Yield::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<YieldT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void Yield::UnPackTo(YieldT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+}
+
+inline ::flatbuffers::Offset<Yield> Yield::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const YieldT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateYield(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<Yield> CreateYield(::flatbuffers::FlatBufferBuilder &_fbb, const YieldT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const YieldT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  return ICPDev::Gyeol::Schema::CreateYield(
+      _fbb);
 }
 
 inline ExprTokenT *ExprToken::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -4744,6 +4984,8 @@ inline SaveStateT::SaveStateT(const SaveStateT &o)
         current_node_name(o.current_node_name),
         pc(o.pc),
         finished(o.finished),
+        wait_blocked(o.wait_blocked),
+        wait_tag(o.wait_tag),
         chosen_once_choices(o.chosen_once_choices) {
   variables.reserve(o.variables.size());
   for (const auto &variables_ : o.variables) { variables.emplace_back((variables_) ? new ICPDev::Gyeol::Schema::SavedVarT(*variables_) : nullptr); }
@@ -4761,6 +5003,8 @@ inline SaveStateT &SaveStateT::operator=(SaveStateT o) FLATBUFFERS_NOEXCEPT {
   std::swap(current_node_name, o.current_node_name);
   std::swap(pc, o.pc);
   std::swap(finished, o.finished);
+  std::swap(wait_blocked, o.wait_blocked);
+  std::swap(wait_tag, o.wait_tag);
   std::swap(variables, o.variables);
   std::swap(call_stack, o.call_stack);
   std::swap(pending_choices, o.pending_choices);
@@ -4783,6 +5027,8 @@ inline void SaveState::UnPackTo(SaveStateT *_o, const ::flatbuffers::resolver_fu
   { auto _e = current_node_name(); if (_e) _o->current_node_name = _e->str(); }
   { auto _e = pc(); _o->pc = _e; }
   { auto _e = finished(); _o->finished = _e; }
+  { auto _e = wait_blocked(); _o->wait_blocked = _e; }
+  { auto _e = wait_tag(); if (_e) _o->wait_tag = _e->str(); }
   { auto _e = variables(); if (_e) { _o->variables.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->variables[_i]) { _e->Get(_i)->UnPackTo(_o->variables[_i].get(), _resolver); } else { _o->variables[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::SavedVarT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->variables.resize(0); } }
   { auto _e = call_stack(); if (_e) { _o->call_stack.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->call_stack[_i]) { _e->Get(_i)->UnPackTo(_o->call_stack[_i].get(), _resolver); } else { _o->call_stack[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::SavedCallFrameT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->call_stack.resize(0); } }
   { auto _e = pending_choices(); if (_e) { _o->pending_choices.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->pending_choices[_i]) { _e->Get(_i)->UnPackTo(_o->pending_choices[_i].get(), _resolver); } else { _o->pending_choices[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::SavedPendingChoiceT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->pending_choices.resize(0); } }
@@ -4803,6 +5049,8 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveState(::flatbuffers::FlatBuffe
   auto _current_node_name = _o->current_node_name.empty() ? 0 : _fbb.CreateString(_o->current_node_name);
   auto _pc = _o->pc;
   auto _finished = _o->finished;
+  auto _wait_blocked = _o->wait_blocked;
+  auto _wait_tag = _o->wait_tag.empty() ? 0 : _fbb.CreateString(_o->wait_tag);
   auto _variables = _o->variables.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedVar>> (_o->variables.size(), [](size_t i, _VectorArgs *__va) { return CreateSavedVar(*__va->__fbb, __va->__o->variables[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _call_stack = _o->call_stack.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedCallFrame>> (_o->call_stack.size(), [](size_t i, _VectorArgs *__va) { return CreateSavedCallFrame(*__va->__fbb, __va->__o->call_stack[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _pending_choices = _o->pending_choices.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::SavedPendingChoice>> (_o->pending_choices.size(), [](size_t i, _VectorArgs *__va) { return CreateSavedPendingChoice(*__va->__fbb, __va->__o->pending_choices[i].get(), __va->__rehasher); }, &_va ) : 0;
@@ -4815,6 +5063,8 @@ inline ::flatbuffers::Offset<SaveState> CreateSaveState(::flatbuffers::FlatBuffe
       _current_node_name,
       _pc,
       _finished,
+      _wait_blocked,
+      _wait_tag,
       _variables,
       _call_stack,
       _pending_choices,
@@ -5066,6 +5316,14 @@ inline bool VerifyOpData(::flatbuffers::Verifier &verifier, const void *obj, OpD
       auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::Command *>(obj);
       return verifier.VerifyTable(ptr);
     }
+    case OpData::Wait: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::Wait *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case OpData::Yield: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::Yield *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
     case OpData::SetVar: {
       auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::SetVar *>(obj);
       return verifier.VerifyTable(ptr);
@@ -5121,6 +5379,14 @@ inline void *OpDataUnion::UnPack(const void *obj, OpData type, const ::flatbuffe
       auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::Command *>(obj);
       return ptr->UnPack(resolver);
     }
+    case OpData::Wait: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::Wait *>(obj);
+      return ptr->UnPack(resolver);
+    }
+    case OpData::Yield: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::Yield *>(obj);
+      return ptr->UnPack(resolver);
+    }
     case OpData::SetVar: {
       auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::SetVar *>(obj);
       return ptr->UnPack(resolver);
@@ -5164,6 +5430,14 @@ inline ::flatbuffers::Offset<void> OpDataUnion::Pack(::flatbuffers::FlatBufferBu
       auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::CommandT *>(value);
       return CreateCommand(_fbb, ptr, _rehasher).Union();
     }
+    case OpData::Wait: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::WaitT *>(value);
+      return CreateWait(_fbb, ptr, _rehasher).Union();
+    }
+    case OpData::Yield: {
+      auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::YieldT *>(value);
+      return CreateYield(_fbb, ptr, _rehasher).Union();
+    }
     case OpData::SetVar: {
       auto ptr = reinterpret_cast<const ICPDev::Gyeol::Schema::SetVarT *>(value);
       return CreateSetVar(_fbb, ptr, _rehasher).Union();
@@ -5204,6 +5478,14 @@ inline OpDataUnion::OpDataUnion(const OpDataUnion &u) : type(u.type), value(null
     }
     case OpData::Command: {
       value = new ICPDev::Gyeol::Schema::CommandT(*reinterpret_cast<ICPDev::Gyeol::Schema::CommandT *>(u.value));
+      break;
+    }
+    case OpData::Wait: {
+      value = new ICPDev::Gyeol::Schema::WaitT(*reinterpret_cast<ICPDev::Gyeol::Schema::WaitT *>(u.value));
+      break;
+    }
+    case OpData::Yield: {
+      value = new ICPDev::Gyeol::Schema::YieldT(*reinterpret_cast<ICPDev::Gyeol::Schema::YieldT *>(u.value));
       break;
     }
     case OpData::SetVar: {
@@ -5250,6 +5532,16 @@ inline void OpDataUnion::Reset() {
     }
     case OpData::Command: {
       auto ptr = reinterpret_cast<ICPDev::Gyeol::Schema::CommandT *>(value);
+      delete ptr;
+      break;
+    }
+    case OpData::Wait: {
+      auto ptr = reinterpret_cast<ICPDev::Gyeol::Schema::WaitT *>(value);
+      delete ptr;
+      break;
+    }
+    case OpData::Yield: {
+      auto ptr = reinterpret_cast<ICPDev::Gyeol::Schema::YieldT *>(value);
       delete ptr;
       break;
     }

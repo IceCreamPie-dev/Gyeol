@@ -1,0 +1,30 @@
+{
+  "format": "gyeol-runtime-actions",
+  "version": 2,
+  "actions": [
+    { "op": "set_seed", "seed": 77 },
+    { "op": "step" },
+    { "op": "step" },
+    { "op": "save", "path": "{temp_dir}/runtime_contract_v1.gys" },
+    { "op": "choose", "index": 0 },
+    { "op": "step" },
+    { "op": "snapshot", "name": "wait_state" },
+    { "op": "checkpoint", "label": "after_wait_once" },
+    { "op": "resume" },
+    { "op": "step" },
+    { "op": "step" },
+    { "op": "checkpoint", "label": "after_line_once" },
+    { "op": "restore", "name": "wait_state" },
+    { "op": "checkpoint", "label": "after_restore_wait" },
+    { "op": "resume" },
+    { "op": "step" },
+    { "op": "step" },
+    { "op": "checkpoint", "label": "after_restore_line" },
+    { "op": "load", "path": "{temp_dir}/runtime_contract_v1.gys" },
+    { "op": "choose", "index": 1 },
+    { "op": "step" },
+    { "op": "checkpoint", "label": "after_load_choose_end" },
+    { "op": "step" },
+    { "op": "checkpoint", "label": "finished" }
+  ]
+}

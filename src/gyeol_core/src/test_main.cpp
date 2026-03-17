@@ -71,6 +71,21 @@ int main(int argc, char* argv[]) {
                 break;
             }
 
+            case Gyeol::StepType::WAIT: {
+                std::cout << "[WAIT]";
+                if (result.wait.tag) {
+                    std::cout << " " << result.wait.tag;
+                }
+                std::cout << std::endl << std::endl;
+                runner.resume();
+                break;
+            }
+
+            case Gyeol::StepType::YIELD: {
+                std::cout << "[YIELD]" << std::endl << std::endl;
+                break;
+            }
+
             case Gyeol::StepType::END:
                 break;
         }

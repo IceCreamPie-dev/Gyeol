@@ -71,6 +71,7 @@ plugins:
               - VS Code 확장: tools/vscode.md
             - 고급:
               - 아키텍처: advanced/architecture.md
+              - Runtime Contract v1.1: advanced/runtime-contract.md
               - 세이브/로드: advanced/save-load.md
               - 다국어 지원: advanced/localization.md
               - 바이너리 포맷: advanced/binary-format.md
@@ -112,6 +113,8 @@ nav:
     - VS Code Extension: tools/vscode.md
   - Advanced:
     - Architecture: advanced/architecture.md
+    - Runtime Contract v1.1: advanced/runtime-contract.md
     - Save & Load: advanced/save-load.md
     - Localization: advanced/localization.md
     - Binary Format: advanced/binary-format.md
+    - Release & PR Policy: advanced/release-policy.md

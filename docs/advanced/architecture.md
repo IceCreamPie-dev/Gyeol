@@ -188,6 +188,40 @@ Key design:
 - Godot paths (`res://`, `user://`) converted to system paths via `FileAccess`
 - All Gyeol types map to Godot Variants (Int→int, String→String, List→Array)
 
+### External Graph Editing Contract (v1 + v2)
+
+Gyeol provides a structural graph edit contract for external Rust/Node tools:
+
+- `--export-graph-json` emits `gyeol-graph-doc` (`format: "gyeol-graph-doc"`, `version: 1`)
+- `--validate-graph-patch` validates `gyeol-graph-patch` (`version: 1` or `2`) without writing files
+- `--apply-graph-patch` applies a patch atomically, then emits canonical `.gyeol`
+- `--apply-graph-patch --preserve-line-id` emits a sidecar line-id map (`*.lineidmap.json`)
+- `--line-id-map <path>` reapplies preserved IDs during compile
+
+Supported v1 ops:
+
+- `add_node`
+- `rename_node` (all references auto-updated)
+- `delete_node` (`redirect_target` required)
+- `retarget_edge` (stable `edge_id`)
+- `set_start_node`
+
+Additional v2 ops:
+
+- `update_line_text`
+- `update_choice_text`
+- `update_command`
+- `update_expression`
+- `insert_instruction`
+- `delete_instruction`
+- `move_instruction`
+
+Instruction references in v2 use patch-start snapshot IDs (`instruction_id`). Newly inserted instructions in the same patch are not referable by `instruction_id`.
+
+Layout metadata is editor-only and should be stored in a sidecar file (for example `*.graph.layout.json`), not consumed by Runner.
+
+Runtime execution/event/state guarantees are versioned in [Runtime Contract v1.1](runtime-contract.md).
+
 ## Data Flow
 
 ### Compilation

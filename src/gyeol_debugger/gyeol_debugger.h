@@ -32,6 +32,7 @@ private:
     void cmdNodes();
     void cmdInfo(const std::string& args);
     void cmdChoose(const std::string& args);
+    void cmdResume();
     void cmdRestart();
 
     // Helpers

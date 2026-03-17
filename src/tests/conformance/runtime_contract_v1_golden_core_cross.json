@@ -1,0 +1,222 @@
+{
+  "checkpoints": [
+    {
+      "label": "after_intro",
+      "state": {
+        "current_node": "start",
+        "finished": false,
+        "variables": {
+          "flag": {
+            "type": "int",
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "label": "after_wait",
+      "state": {
+        "current_node": "next",
+        "finished": false,
+        "variables": {
+          "flag": {
+            "type": "int",
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "label": "after_next_line",
+      "state": {
+        "current_node": "next",
+        "finished": false,
+        "variables": {
+          "flag": {
+            "type": "int",
+            "value": 2
+          }
+        }
+      }
+    },
+    {
+      "label": "finished",
+      "state": {
+        "current_node": "next",
+        "finished": true,
+        "variables": {
+          "flag": {
+            "type": "int",
+            "value": 2
+          }
+        }
+      }
+    }
+  ],
+  "engine": "core",
+  "format": "gyeol-runtime-transcript",
+  "steps": [
+    {
+      "action": "set_seed",
+      "seed": 77,
+      "state": {
+        "current_node": "start",
+        "finished": false,
+        "variables": {
+          "flag": {
+            "type": "int",
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "action": "step",
+      "result": {
+        "line": {
+          "character": "",
+          "tags": {},
+          "text": "intro"
+        },
+        "type": "LINE"
+      },
+      "state": {
+        "current_node": "start",
+        "finished": false,
+        "variables": {
+          "flag": {
+            "type": "int",
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "action": "step",
+      "result": {
+        "choices": [
+          {
+            "index": 0,
+            "text": "go"
+          },
+          {
+            "index": 1,
+            "text": "stop"
+          }
+        ],
+        "type": "CHOICES"
+      },
+      "state": {
+        "current_node": "start",
+        "finished": false,
+        "variables": {
+          "flag": {
+            "type": "int",
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "action": "choose",
+      "index": 0,
+      "state": {
+        "current_node": "next",
+        "finished": false,
+        "variables": {
+          "flag": {
+            "type": "int",
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "action": "step",
+      "result": {
+        "type": "WAIT",
+        "wait": {
+          "tag": "cutscene"
+        }
+      },
+      "state": {
+        "current_node": "next",
+        "finished": false,
+        "variables": {
+          "flag": {
+            "type": "int",
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "action": "resume",
+      "ok": true,
+      "state": {
+        "current_node": "next",
+        "finished": false,
+        "variables": {
+          "flag": {
+            "type": "int",
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "action": "step",
+      "result": {
+        "type": "YIELD"
+      },
+      "state": {
+        "current_node": "next",
+        "finished": false,
+        "variables": {
+          "flag": {
+            "type": "int",
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "action": "step",
+      "result": {
+        "line": {
+          "character": "",
+          "tags": {},
+          "text": "next line"
+        },
+        "type": "LINE"
+      },
+      "state": {
+        "current_node": "next",
+        "finished": false,
+        "variables": {
+          "flag": {
+            "type": "int",
+            "value": 2
+          }
+        }
+      }
+    },
+    {
+      "action": "step",
+      "result": {
+        "type": "END"
+      },
+      "state": {
+        "current_node": "next",
+        "finished": true,
+        "variables": {
+          "flag": {
+            "type": "int",
+            "value": 2
+          }
+        }
+      }
+    }
+  ],
+  "version": 2
+}

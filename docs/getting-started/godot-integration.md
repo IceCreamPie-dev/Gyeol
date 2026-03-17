@@ -9,7 +9,10 @@ Gyeol provides a GDExtension for Godot 4.3 that exposes a `StoryPlayer` node wit
 ```powershell
 .\tools\dev\bootstrap-toolchains.ps1
 .\tools\dev\activate-toolchains.ps1
+.\tools\dev\doctor-toolchains.ps1
 ```
+
+`bootstrap-toolchains.ps1` uses pinned Emscripten first and automatically falls back to source-build when prebuilt SDKs are unavailable (common on Windows ARM64).
 
 ### 2. Build the GDExtension
 
@@ -76,6 +79,8 @@ func _ready():
     story_player.dialogue_line.connect(_on_dialogue_line)
     story_player.choices_presented.connect(_on_choices_presented)
     story_player.command_received.connect(_on_command_received)
+    story_player.wait_requested.connect(_on_wait_requested)
+    story_player.yield_emitted.connect(_on_yield_emitted)
     story_player.story_ended.connect(_on_story_ended)
 
     # Load and start
@@ -107,6 +112,15 @@ func _on_command_received(type: String, params: Array):
     # Auto-advance after handling command
     story_player.advance()
 
+func _on_wait_requested(tag: String):
+    # External async/cutscene sync point.
+    # Call resume() when your host-side wait condition is satisfied.
+    story_player.resume()
+
+func _on_yield_emitted():
+    # 1-tick cooperative yield. Advance again to continue.
+    story_player.advance()
+
 func _on_story_ended():
     dialogue_label.text = "[i]--- END ---[/i]"
 
@@ -124,6 +138,8 @@ func _on_choice_selected(index: int):
 | `dialogue_line` | `character: String, text: String, tags: Dictionary` | A dialogue line is ready to display |
 | `choices_presented` | `choices: Array[String]` | A menu with choices is presented |
 | `command_received` | `type: String, params: Array[String]` | An `@` command is encountered |
+| `wait_requested` | `tag: String` | Runtime emitted `WAIT`; call `resume()` to continue |
+| `yield_emitted` | *(none)* | Runtime emitted `YIELD`; call `advance()` again |
 | `story_ended` | *(none)* | The story has finished |
 
 ### dialogue_line

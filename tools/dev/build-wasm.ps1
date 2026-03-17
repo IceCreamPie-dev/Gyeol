@@ -1,7 +1,8 @@
 param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
-    [switch]$SkipActivate
+    [switch]$SkipActivate,
+    [switch]$SkipDoctor
 )
 
 Set-StrictMode -Version Latest
@@ -10,6 +11,8 @@ $ErrorActionPreference = "Stop"
 if (-not $SkipActivate) {
     . (Join-Path $PSScriptRoot "activate-toolchains.ps1")
 }
+
+$DoctorScript = Join-Path $PSScriptRoot "doctor-toolchains.ps1"
 
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $BuildDir = Join-Path $RepoRoot "build_wasm"
@@ -24,6 +27,15 @@ function Invoke-Checked {
     & $Script
     if ($LASTEXITCODE -ne 0) {
         throw "Command failed ($LASTEXITCODE): $Message"
+    }
+}
+
+if (-not $SkipDoctor) {
+    if (-not (Test-Path $DoctorScript)) {
+        throw "doctor script not found: $DoctorScript"
+    }
+    Invoke-Checked "Validate local toolchains (doctor)" {
+        & $DoctorScript -SkipActivate
     }
 }
 

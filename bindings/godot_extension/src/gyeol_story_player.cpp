@@ -1,4 +1,5 @@
 #include "gyeol_story_player.h"
+#include "gyeol_story_player_adapter.h"
 
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
@@ -16,6 +17,7 @@ void StoryPlayer::_bind_methods() {
     ClassDB::bind_method(D_METHOD("load_story", "path"), &StoryPlayer::load_story);
     ClassDB::bind_method(D_METHOD("start"), &StoryPlayer::start);
     ClassDB::bind_method(D_METHOD("advance"), &StoryPlayer::advance);
+    ClassDB::bind_method(D_METHOD("resume"), &StoryPlayer::resume);
     ClassDB::bind_method(D_METHOD("choose", "index"), &StoryPlayer::choose);
     ClassDB::bind_method(D_METHOD("is_finished"), &StoryPlayer::is_finished);
     ClassDB::bind_method(D_METHOD("save_state", "path"), &StoryPlayer::save_state);
@@ -49,6 +51,11 @@ void StoryPlayer::_bind_methods() {
     ADD_SIGNAL(MethodInfo("command_received",
         PropertyInfo(Variant::STRING, "type"),
         PropertyInfo(Variant::ARRAY, "params")));
+
+    ADD_SIGNAL(MethodInfo("wait_requested",
+        PropertyInfo(Variant::STRING, "tag")));
+
+    ADD_SIGNAL(MethodInfo("yield_emitted"));
 
     ADD_SIGNAL(MethodInfo("story_ended"));
 }
@@ -91,45 +98,64 @@ void StoryPlayer::advance() {
     }
 
     Gyeol::StepResult result = runner_.step();
+    const auto signalEvent = GyeolGodotAdapter::toSignalEvent(result);
 
-    switch (result.type) {
-        case Gyeol::StepType::LINE: {
-            String character = result.line.character ? String::utf8(result.line.character) : String("");
-            String text = result.line.text ? String::utf8(result.line.text) : String("");
+    switch (signalEvent.type) {
+        case GyeolGodotAdapter::SignalType::DialogueLine: {
+            String character = String::utf8(signalEvent.character.c_str());
+            String text = String::utf8(signalEvent.text.c_str());
             Dictionary tags;
-            for (const auto& tag : result.line.tags) {
-                String key = tag.first ? String::utf8(tag.first) : String("");
-                String value = tag.second ? String::utf8(tag.second) : String("");
+            for (const auto& tag : signalEvent.tags) {
+                String key = String::utf8(tag.first.c_str());
+                String value = String::utf8(tag.second.c_str());
                 tags[key] = value;
             }
             emit_signal("dialogue_line", character, text, tags);
             break;
         }
 
-        case Gyeol::StepType::CHOICES: {
+        case GyeolGodotAdapter::SignalType::ChoicesPresented: {
             Array choices;
-            for (const auto &choice : result.choices) {
-                choices.append(String::utf8(choice.text ? choice.text : ""));
+            for (const auto& choice : signalEvent.choices) {
+                choices.append(String::utf8(choice.c_str()));
             }
             emit_signal("choices_presented", choices);
             break;
         }
 
-        case Gyeol::StepType::COMMAND: {
-            String type = result.command.type ? String::utf8(result.command.type) : String("");
+        case GyeolGodotAdapter::SignalType::CommandReceived: {
+            String type = String::utf8(signalEvent.commandType.c_str());
             Array params;
-            for (const auto &param : result.command.params) {
-                params.append(String::utf8(param ? param : ""));
+            for (const auto& param : signalEvent.commandParams) {
+                params.append(String::utf8(param.c_str()));
             }
             emit_signal("command_received", type, params);
             break;
         }
 
-        case Gyeol::StepType::END: {
+        case GyeolGodotAdapter::SignalType::WaitRequested: {
+            emit_signal("wait_requested", String::utf8(signalEvent.waitTag.c_str()));
+            break;
+        }
+
+        case GyeolGodotAdapter::SignalType::YieldEmitted: {
+            emit_signal("yield_emitted");
+            break;
+        }
+
+        case GyeolGodotAdapter::SignalType::StoryEnded: {
             emit_signal("story_ended");
             break;
         }
     }
+}
+
+void StoryPlayer::resume() {
+    if (!runner_.resume()) {
+        UtilityFunctions::printerr("[Gyeol] resume() failed.");
+        return;
+    }
+    advance();
 }
 
 void StoryPlayer::choose(int index) {

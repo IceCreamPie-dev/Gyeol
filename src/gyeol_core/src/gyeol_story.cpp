@@ -135,6 +135,19 @@ void Story::printStory() const {
                     std::cout << ")" << std::endl;
                     break;
                 }
+                case OpData::Wait: {
+                    const auto* wait = instr->data_as_Wait();
+                    std::cout << "[Wait]";
+                    if (wait && wait->tag_id() >= 0) {
+                        std::cout << " \"" << poolStr(pool, wait->tag_id()) << "\"";
+                    }
+                    std::cout << std::endl;
+                    break;
+                }
+                case OpData::Yield: {
+                    std::cout << "[Yield]" << std::endl;
+                    break;
+                }
                 case OpData::SetVar: {
                     const auto* setvar = instr->data_as_SetVar();
                     std::cout << "[SetVar] " << poolStr(pool, setvar->var_name_id()) << " = ";

@@ -26,10 +26,17 @@ cd Gyeol
 .\tools\dev\doctor-toolchains.ps1
 ```
 
-If Windows ARM64 does not provide prebuilt Emscripten binaries on your machine, retry bootstrap with:
+`bootstrap-toolchains.ps1` first attempts pinned Emscripten (`4.0.23`) and then automatically falls back to source-build (`sdk-main-64bit`) when prebuilt binaries are unavailable.
+
+On Windows ARM64, source-build fallback is often the normal path and can take 30-90+ minutes depending on CPU/disk.
+Required tools for fallback:
+- Visual Studio Build Tools (Desktop C++)
+- Ninja (auto-detected from local venv or Visual Studio)
+
+Disable automatic source-build fallback only when explicitly needed:
 
 ```powershell
-.\tools\dev\bootstrap-toolchains.ps1 -AllowSourceBuild
+.\tools\dev\bootstrap-toolchains.ps1 -DisableSourceBuildFallback
 ```
 
 This prepares local tools under `.tools/`:
@@ -78,6 +85,19 @@ For ARM64 artifact:
 ## Optional Global Toolchain
 
 You can still use globally installed `emsdk`/`scons`, but the project default is the local `.tools/` workflow for reproducibility.
+
+## Local Standard Validation Gate
+
+Use this one-shot sequence to match CI intent on your local machine:
+
+```powershell
+.\tools\dev\bootstrap-toolchains.ps1
+.\tools\dev\activate-toolchains.ps1
+.\tools\dev\doctor-toolchains.ps1
+.\tools\dev\build-wasm.ps1
+.\tools\dev\build-godot.ps1
+.\tools\dev\check-runtime-contract.ps1
+```
 
 ## Next Steps
 

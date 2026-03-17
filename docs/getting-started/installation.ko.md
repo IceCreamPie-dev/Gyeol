@@ -4,10 +4,10 @@
 
 | 플랫폼 | 필요 항목 |
 |---|---|
-| Windows (권장 개발 흐름) | CMake 3.15+, Git, Visual Studio C++ 툴체인, Python 3 |
+| Windows (권장 개발 흐름) | CMake 3.15+, Git, Visual Studio C++ 도구체인, Python 3 |
 | Linux/macOS (Core 빌드) | CMake 3.15+, Ninja, C++17 컴파일러, Git |
 
-Core 의존성(FlatBuffers, Google Test, nlohmann/json)은 CMake가 자동으로 내려받습니다.
+Core 의존성(FlatBuffers, Google Test, nlohmann/json)은 CMake가 자동으로 가져옵니다.
 
 ## 저장소 클론
 
@@ -16,7 +16,7 @@ git clone --recurse-submodules https://github.com/IceCreamPie-dev/Gyeol.git
 cd Gyeol
 ```
 
-`godot-cpp` 서브모듈이 필요하므로 `--recurse-submodules`를 사용해야 합니다.
+`godot-cpp` 서브모듈 때문에 `--recurse-submodules`가 필요합니다.
 
 ## 로컬 툴체인 부트스트랩 (Windows 기본)
 
@@ -26,13 +26,21 @@ cd Gyeol
 .\tools\dev\doctor-toolchains.ps1
 ```
 
-Windows ARM64 환경에서 prebuilt Emscripten 바이너리가 없으면 다음 fallback으로 다시 실행하세요:
+`bootstrap-toolchains.ps1`는 먼저 고정 버전 Emscripten(`4.0.23`) 설치를 시도하고,
+prebuilt가 없으면 source-build(`sdk-main-64bit`)로 자동 fallback합니다.
+
+Windows ARM64에서는 source-build가 일반 경로이며, 환경에 따라 30~90분 이상 소요될 수 있습니다.
+fallback 필수 도구:
+- Visual Studio Build Tools (Desktop C++)
+- Ninja (로컬 venv 또는 Visual Studio 경로에서 자동 탐색)
+
+자동 fallback을 명시적으로 끄고 싶다면:
 
 ```powershell
-.\tools\dev\bootstrap-toolchains.ps1 -AllowSourceBuild
+.\tools\dev\bootstrap-toolchains.ps1 -DisableSourceBuildFallback
 ```
 
-이 과정에서 `.tools/` 아래에 로컬 툴체인이 준비됩니다:
+이 과정은 `.tools/` 아래 로컬 도구를 준비합니다:
 - `.tools/emsdk` (Emscripten)
 - `.tools/venv` (SCons, Ninja)
 
@@ -69,15 +77,28 @@ ctest --test-dir build --output-on-failure
 기대 산출물:
 - `demo/godot/bin/libgyeol.windows.template_debug.x86_64.dll`
 
-ARM64 아티팩트가 필요하면:
+ARM64 산출물이 필요하면:
 
 ```powershell
 .\tools\dev\build-godot.ps1 -Arch arm64
 ```
 
-## 전역 툴체인 (선택)
+## 선택: 전역 툴체인
 
 전역 `emsdk`/`scons`를 계속 사용할 수 있지만, 재현성을 위해 기본 권장 흐름은 로컬 `.tools/` 방식입니다.
+
+## 로컬 표준 검증 게이트
+
+CI 의도와 동일하게 로컬에서 점검하려면 아래 순서를 사용하세요:
+
+```powershell
+.\tools\dev\bootstrap-toolchains.ps1
+.\tools\dev\activate-toolchains.ps1
+.\tools\dev\doctor-toolchains.ps1
+.\tools\dev\build-wasm.ps1
+.\tools\dev\build-godot.ps1
+.\tools\dev\check-runtime-contract.ps1
+```
 
 ## 다음 단계
 

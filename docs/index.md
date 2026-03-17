@@ -41,6 +41,8 @@ Gyeol is a high-performance interactive storytelling engine built in C++17. Writ
 ### Advanced
 
 - [Architecture](advanced/architecture.md) - Engine internals overview
+- [Runtime Contract v1.1](advanced/runtime-contract.md) - Execution/event/state conformance rules
 - [Save & Load](advanced/save-load.md) - State serialization
 - [Localization](advanced/localization.md) - Multi-language support
 - [Binary Format](advanced/binary-format.md) - `.gyb` / `.gys` FlatBuffers schema
+- [Release & PR Policy](advanced/release-policy.md) - Branch protection, CI gates, SemVer tags

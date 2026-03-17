@@ -135,6 +135,19 @@ public:
             }
             break;
 
+        case StepType::WAIT:
+            obj.set("type", std::string("WAIT"));
+            if (result.wait.tag) {
+                obj.set("tag", std::string(result.wait.tag));
+            } else {
+                obj.set("tag", val::null());
+            }
+            break;
+
+        case StepType::YIELD:
+            obj.set("type", std::string("YIELD"));
+            break;
+
         case StepType::END:
             obj.set("type", std::string("END"));
             break;
@@ -144,6 +157,7 @@ public:
     }
 
     void choose(int index) { runner_.choose(index); }
+    bool resume() { return runner_.resume(); }
     bool isFinished() const { return runner_.isFinished(); }
 
     // Variable API
@@ -336,6 +350,7 @@ EMSCRIPTEN_BINDINGS(gyeol) {
         // Runner
         .function("step", &GyeolEngine::step)
         .function("choose", &GyeolEngine::choose)
+        .function("resume", &GyeolEngine::resume)
         .function("isFinished", &GyeolEngine::isFinished)
         // Variables
         .function("getVariable", &GyeolEngine::getVariable)

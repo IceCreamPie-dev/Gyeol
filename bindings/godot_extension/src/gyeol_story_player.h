@@ -30,6 +30,7 @@ public:
     bool load_story(const String &path);
     void start();
     void advance();
+    void resume();
     void choose(int index);
     bool is_finished() const;
 

@@ -126,6 +126,8 @@ void Debugger::run() {
             cmdInfo(args);
         } else if (cmd == "ch" || cmd == "choose") {
             cmdChoose(args);
+        } else if (cmd == "resume") {
+            cmdResume();
         } else if (cmd == "r" || cmd == "restart") {
             cmdRestart();
         } else if (cmd == "q" || cmd == "quit" || cmd == "exit") {
@@ -149,6 +151,7 @@ void Debugger::cmdHelp() {
     std::cout << "  " << CYAN << "d, delete NODE [PC]" << RESET << " Remove breakpoint" << std::endl;
     std::cout << "  " << CYAN << "bp, breakpoints" << RESET << " List all breakpoints" << std::endl;
     std::cout << "  " << CYAN << "ch, choose N  " << RESET << "  Choose option N (0-based)" << std::endl;
+    std::cout << "  " << CYAN << "resume       " << RESET << "  Resume WAIT state" << std::endl;
     std::cout << "  " << CYAN << "l, locals     " << RESET << "  Show all variables" << std::endl;
     std::cout << "  " << CYAN << "p, print VAR  " << RESET << "  Print variable value" << std::endl;
     std::cout << "  " << CYAN << "set VAR VALUE " << RESET << "  Set variable value" << std::endl;
@@ -207,12 +210,21 @@ void Debugger::cmdContinue() {
         }
 
         // LINE/COMMAND 결과가 있으면 출력
-        if (result.type == StepType::LINE || result.type == StepType::COMMAND) {
+        if (result.type == StepType::LINE ||
+            result.type == StepType::COMMAND ||
+            result.type == StepType::YIELD) {
             printStepResult(result);
         }
 
         // CHOICES → 사용자 입력 필요, 멈춤
         if (result.type == StepType::CHOICES) {
+            printStepResult(result);
+            runner_.setStepMode(true);
+            printLocation();
+            return;
+        }
+
+        if (result.type == StepType::WAIT) {
             printStepResult(result);
             runner_.setStepMode(true);
             printLocation();
@@ -465,6 +477,18 @@ void Debugger::cmdChoose(const std::string& args) {
     }
 }
 
+void Debugger::cmdResume() {
+    if (!runner_.resume()) {
+        std::cout << RED << "resume failed: " << runner_.getLastError() << RESET << std::endl;
+        return;
+    }
+
+    std::cout << GREEN << "Resumed." << RESET << std::endl;
+    if (!runner_.isFinished()) {
+        printLocation();
+    }
+}
+
 void Debugger::cmdRestart() {
     if (storyBuffer_.empty()) {
         std::cout << RED << "No story loaded." << RESET << std::endl;
@@ -525,6 +549,18 @@ void Debugger::printStepResult(const StepResult& result) {
                 std::cout << " " << param;
             }
             std::cout << RESET << std::endl;
+            break;
+        }
+        case StepType::WAIT: {
+            std::cout << YELLOW << "[WAIT]";
+            if (result.wait.tag && result.wait.tag[0] != '\0') {
+                std::cout << " " << result.wait.tag;
+            }
+            std::cout << RESET << std::endl;
+            break;
+        }
+        case StepType::YIELD: {
+            std::cout << DIM << "[YIELD]" << RESET << std::endl;
             break;
         }
         case StepType::END: {

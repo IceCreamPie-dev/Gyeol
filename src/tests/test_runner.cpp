@@ -4111,7 +4111,8 @@ TEST(RunnerRuntimeContractTest, TraceAndMetricsCaptureVisibleEvents) {
     auto buf = GyeolTest::compileScript(R"(
 label start:
     narrator "Hello"
-    @ wait "cutscene"
+    wait "cutscene"
+    yield
     menu:
         "Continue" -> done
 
@@ -4128,7 +4129,13 @@ label done:
     ASSERT_EQ(res.type, StepType::LINE);
 
     res = runner.step();
-    ASSERT_EQ(res.type, StepType::COMMAND);
+    ASSERT_EQ(res.type, StepType::WAIT);
+    ASSERT_STREQ(res.wait.tag, "cutscene");
+
+    ASSERT_TRUE(runner.resume());
+
+    res = runner.step();
+    ASSERT_EQ(res.type, StepType::YIELD);
 
     res = runner.step();
     ASSERT_EQ(res.type, StepType::CHOICES);
@@ -4143,27 +4150,99 @@ label done:
 
     const auto& metrics = runner.getMetrics();
     EXPECT_EQ(metrics.lineResults, 2u);
-    EXPECT_EQ(metrics.commandResults, 1u);
+    EXPECT_EQ(metrics.commandResults, 0u);
     EXPECT_EQ(metrics.choiceResults, 1u);
     EXPECT_EQ(metrics.choicesMade, 1u);
     EXPECT_EQ(metrics.endResults, 1u);
-    EXPECT_GE(metrics.traceEvents, 6u);
+    EXPECT_GE(metrics.traceEvents, 7u);
 
     const auto& trace = runner.getTrace();
     ASSERT_FALSE(trace.empty());
 
     bool sawStart = false;
-    bool sawCommand = false;
+    bool sawWait = false;
+    bool sawYield = false;
+    bool sawResume = false;
     bool sawChoose = false;
     for (const auto& event : trace) {
         if (event.kind == "START") sawStart = true;
-        if (event.kind == "COMMAND" && event.detail == "wait") sawCommand = true;
+        if (event.kind == "WAIT" && event.detail == "cutscene") sawWait = true;
+        if (event.kind == "YIELD") sawYield = true;
+        if (event.kind == "RESUME") sawResume = true;
         if (event.kind == "CHOOSE") sawChoose = true;
     }
 
     EXPECT_TRUE(sawStart);
-    EXPECT_TRUE(sawCommand);
+    EXPECT_TRUE(sawWait);
+    EXPECT_TRUE(sawYield);
+    EXPECT_TRUE(sawResume);
     EXPECT_TRUE(sawChoose);
+}
+
+TEST(RunnerRuntimeContractTest, WaitRequiresResumeBeforeProgress) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    wait "gate"
+    yield
+    narrator "done"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto res = runner.step();
+    ASSERT_EQ(res.type, StepType::WAIT);
+    ASSERT_STREQ(res.wait.tag, "gate");
+
+    // WAIT 중 step()은 진행 금지 + 오류
+    res = runner.step();
+    EXPECT_EQ(res.type, StepType::WAIT);
+    EXPECT_NE(runner.getLastError().find("Cannot step while waiting"), std::string::npos);
+
+    runner.clearLastError();
+    EXPECT_TRUE(runner.resume());
+
+    res = runner.step();
+    EXPECT_EQ(res.type, StepType::YIELD);
+
+    res = runner.step();
+    EXPECT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "done");
+
+    res = runner.step();
+    EXPECT_EQ(res.type, StepType::END);
+}
+
+TEST(RunnerRuntimeContractTest, ChooseWhileWaitingSetsError) {
+    auto buf = GyeolTest::compileScript(R"(
+label start:
+    wait
+    menu:
+        "A" -> a
+label a:
+    narrator "ok"
+)");
+    ASSERT_FALSE(buf.empty());
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+
+    auto res = runner.step();
+    ASSERT_EQ(res.type, StepType::WAIT);
+
+    runner.choose(0);
+    EXPECT_NE(runner.getLastError().find("Cannot choose while waiting"), std::string::npos);
+
+    runner.clearLastError();
+    EXPECT_TRUE(runner.resume());
+
+    res = runner.step();
+    ASSERT_EQ(res.type, StepType::CHOICES);
+    runner.choose(0);
+    res = runner.step();
+    ASSERT_EQ(res.type, StepType::LINE);
+    EXPECT_STREQ(res.line.text, "ok");
 }
 
 TEST(RunnerRuntimeContractTest, InvalidChoiceSetsLastError) {

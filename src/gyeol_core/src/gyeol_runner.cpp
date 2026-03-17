@@ -944,6 +944,8 @@ bool Runner::start(const uint8_t* buffer, size_t size) {
     chosenOnceChoices_.clear();
     visitCounts_.clear();
     hasPendingReturn_ = false;
+    waitBlocked_ = false;
+    waitTag_.clear();
     hitBreakpoint_ = false;
     seedRngForStart();
     finished_ = false;
@@ -986,6 +988,14 @@ StepResult Runner::step() {
     auto* pool = asPool(pool_);
 
     while (true) {
+        if (waitBlocked_) {
+            result.type = StepType::WAIT;
+            result.wait.tag = waitTag_.empty() ? nullptr : waitTag_.c_str();
+            setError("Cannot step while waiting; call resume() first");
+            recordTrace("WAIT_BLOCKED", nodeNameFromPtr(currentNode_), pc_, waitTag_);
+            return result;
+        }
+
         // 노드 끝 도달
         if (!node || !node->lines() || pc_ >= node->lines()->size()) {
             // call stack에서 복귀
@@ -1352,6 +1362,26 @@ StepResult Runner::step() {
                 return result;
             }
 
+            case OpData::Wait: {
+                auto* wait = instr->data_as_Wait();
+                waitBlocked_ = true;
+                waitTag_.clear();
+                if (wait && wait->tag_id() >= 0) {
+                    waitTag_ = poolStr(wait->tag_id());
+                }
+
+                result.type = StepType::WAIT;
+                result.wait.tag = waitTag_.empty() ? nullptr : waitTag_.c_str();
+                recordTrace("WAIT", nodeNameFromPtr(currentNode_), pc_ - 1, waitTag_);
+                return result;
+            }
+
+            case OpData::Yield: {
+                result.type = StepType::YIELD;
+                recordTrace("YIELD", nodeNameFromPtr(currentNode_), pc_ - 1, "");
+                return result;
+            }
+
             case OpData::Return: {
                 auto* ret = instr->data_as_Return();
                 metrics_.returns++;
@@ -1436,8 +1466,25 @@ StepResult Runner::step() {
     }
 }
 
+bool Runner::resume() {
+    if (!waitBlocked_) {
+        setError("Cannot resume when runner is not waiting");
+        return false;
+    }
+
+    waitBlocked_ = false;
+    waitTag_.clear();
+    recordTrace("RESUME", nodeNameFromPtr(currentNode_), pc_, "");
+    return true;
+}
+
 // --- choose ---
 void Runner::choose(int index) {
+    if (waitBlocked_) {
+        setError("Cannot choose while waiting; call resume() first");
+        return;
+    }
+
     if (index < 0 || index >= static_cast<int>(pendingChoices_.size())) {
         setError("Invalid choice index: " + std::to_string(index));
         return;
@@ -1610,6 +1657,8 @@ std::vector<uint8_t> Runner::serializeStateBuffer() const {
     state.current_node_name = currentNodeName();
     state.pc = pc_;
     state.finished = finished_;
+    state.wait_blocked = waitBlocked_;
+    state.wait_tag = waitTag_;
 
     for (const auto& pair : variables_) {
         auto sv = std::make_unique<SavedVarT>();
@@ -1774,6 +1823,8 @@ bool Runner::deserializeStateBuffer(const uint8_t* data, size_t size) {
 
     finished_ = saveState->finished();
     pc_ = saveState->pc();
+    waitBlocked_ = saveState->wait_blocked();
+    waitTag_ = saveState->wait_tag() ? saveState->wait_tag()->c_str() : "";
     hitBreakpoint_ = false;
 
     if (saveState->current_node_name()) {

@@ -22,6 +22,7 @@ Runner가 관리하는 항목:
 
 - [빠른 시작](../getting-started/quick-start.md)
 - [아키텍처](../advanced/architecture.md)
+- [Runtime Contract v1.1](../advanced/runtime-contract.md)
 
 ---
 
@@ -54,7 +55,7 @@ Variant::List({"item1", "item2"})
 ### StepType
 
 ```cpp
-enum class StepType { LINE, CHOICES, COMMAND, END };
+enum class StepType { LINE, CHOICES, COMMAND, WAIT, YIELD, END };
 ```
 
 | 값 | 설명 |
@@ -62,6 +63,8 @@ enum class StepType { LINE, CHOICES, COMMAND, END };
 | `LINE` | 대사 또는 나레이션 라인 |
 | `CHOICES` | 선택지가 있는 메뉴 (계속하려면 `choose()` 호출) |
 | `COMMAND` | 엔진 명령 (계속하려면 `step()` 호출) |
+| `WAIT` | `resume()` 전까지 실행이 멈춘 상태 |
+| `YIELD` | 1틱 양보 이벤트 (다음 `step()`에서 즉시 진행) |
 | `END` | 스토리 종료 |
 
 ---
@@ -74,6 +77,7 @@ struct StepResult {
     LineData line;                    // Valid when type == LINE
     std::vector<ChoiceData> choices;  // Valid when type == CHOICES
     CommandData command;              // Valid when type == COMMAND
+    WaitData wait;                    // Valid when type == WAIT
 };
 ```
 
@@ -123,6 +127,7 @@ struct CommandData {
 |--------|--------|
 | `bool` | [start](#start)`(const uint8_t* buffer, size_t size)` |
 | `StepResult` | [step](#step)`()` |
+| `bool` | [resume](#resume)`()` |
 | `void` | [choose](#choose)`(int index)` |
 | `bool` | [isFinished](#isfinished)`() const` |
 | `bool` | [hasStory](#hasstory)`() const` |
@@ -217,6 +222,8 @@ StepResult step()
 | `LINE` | 대사를 표시하고 `step()`을 다시 호출 |
 | `CHOICES` | 선택지를 표시하고 `choose(index)`를 호출 |
 | `COMMAND` | 명령을 처리하고 `step()`을 다시 호출 |
+| `WAIT` | 일시정지 상태, `resume()` 후 `step()` 재호출 |
+| `YIELD` | 1틱 양보 이벤트, `step()` 재호출 |
 | `END` | 스토리 종료 |
 
 ```cpp
@@ -242,7 +249,17 @@ switch (result.type) {
 void choose(int index)
 ```
 
-0부터 시작하는 인덱스로 선택지를 선택하고 자동으로 스토리를 진행합니다. `step()`이 `StepType::CHOICES`를 반환한 후 호출해야 합니다.
+0부터 시작하는 인덱스로 선택지를 선택하고 자동으로 스토리를 진행합니다. `step()`이 `StepType::CHOICES`를 반환한 후 호출해야 합니다. WAIT 상태에서 `choose()`를 호출하면 `last_error`가 설정됩니다.
+
+---
+
+### resume
+
+```cpp
+bool resume()
+```
+
+WAIT 상태를 해제하고 다음 실행을 허용합니다. WAIT 상태가 아닐 때 호출하면 실패하고 `last_error`를 설정합니다.
 
 ---
 

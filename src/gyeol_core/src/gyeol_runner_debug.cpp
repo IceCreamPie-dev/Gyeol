@@ -59,6 +59,8 @@ Runner::DebugLocation Runner::getLocation() const {
             case OpData::Choice:          loc.instructionType = "Choice"; break;
             case OpData::Jump:            loc.instructionType = "Jump"; break;
             case OpData::Command:         loc.instructionType = "Command"; break;
+            case OpData::Wait:            loc.instructionType = "Wait"; break;
+            case OpData::Yield:           loc.instructionType = "Yield"; break;
             case OpData::SetVar:          loc.instructionType = "SetVar"; break;
             case OpData::Condition:       loc.instructionType = "Condition"; break;
             case OpData::Random:          loc.instructionType = "Random"; break;
@@ -200,6 +202,15 @@ std::string Runner::getInstructionInfo(const std::string& nodeName, uint32_t pc)
             }
             return info;
         }
+        case OpData::Wait: {
+            auto* wait = instr->data_as_Wait();
+            if (wait && wait->tag_id() >= 0) {
+                return "Wait: \"" + std::string(poolStr(wait->tag_id())) + "\"";
+            }
+            return "Wait";
+        }
+        case OpData::Yield:
+            return "Yield";
         case OpData::SetVar: {
             auto* sv = instr->data_as_SetVar();
             return "SetVar: $ " + std::string(poolStr(sv->var_name_id())) + " = ...";

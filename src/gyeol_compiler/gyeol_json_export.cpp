@@ -217,6 +217,21 @@ json JsonExport::serializeInstruction(const InstructionT& instr,
         break;
     }
 
+    case OpData::Wait: {
+        auto* wait = data.AsWait();
+        if (!wait) break;
+        obj["type"] = "Wait";
+        if (wait->tag_id >= 0) {
+            obj["tag"] = poolStr(pool, wait->tag_id);
+        }
+        break;
+    }
+
+    case OpData::Yield: {
+        obj["type"] = "Yield";
+        break;
+    }
+
     case OpData::SetVar: {
         auto* sv = data.AsSetVar();
         if (!sv) break;

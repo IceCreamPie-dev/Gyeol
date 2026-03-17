@@ -1,19 +1,40 @@
 param(
-    [switch]$AllowSourceBuild
+    [switch]$AllowSourceBuild,
+    [switch]$DisableSourceBuildFallback
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+$VersionScript = Join-Path $PSScriptRoot "toolchain-versions.ps1"
+if (-not (Test-Path $VersionScript)) {
+    throw "Version script not found: $VersionScript"
+}
+. $VersionScript
+$ToolchainVersions = Get-GyeolToolchainVersions
 
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $ToolsDir = Join-Path $RepoRoot ".tools"
 $EmsdkDir = Join-Path $ToolsDir "emsdk"
 $VenvDir = Join-Path $ToolsDir "venv"
 
-# Keep versions in sync with CI.
-$EmscriptenVersion = "4.0.23"
-$SConsVersion = "4.8.1"
-$NinjaVersion = "1.11.1.1"
+$EmscriptenVersion = $ToolchainVersions.EMSCRIPTEN_VERSION
+$SConsVersion = $ToolchainVersions.SCONS_VERSION
+$NinjaVersion = $ToolchainVersions.NINJA_VERSION
+$EnableSourceBuildFallback = -not $DisableSourceBuildFallback
+$IsArm64Host = ($env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq "ARM64")
+
+if ($AllowSourceBuild) {
+    Write-Host "Note: -AllowSourceBuild is now implied (automatic fallback is enabled by default)."
+}
+
+Write-Host "Toolchain versions:"
+Write-Host "  Emscripten : $EmscriptenVersion"
+Write-Host "  SCons      : $SConsVersion"
+Write-Host "  Ninja      : $NinjaVersion"
+if ($IsArm64Host) {
+    Write-Host "Host architecture: ARM64 (source-build fallback may take 30-90+ minutes)."
+}
 
 function Invoke-Checked {
     param(
@@ -137,7 +158,7 @@ function Ensure-NinjaForSourceBuild {
         throw @"
 Ninja is required for emsdk source-build fallback on Windows.
 Install Ninja or ensure one of the Visual Studio Ninja paths exists, then retry:
-  .\tools\dev\bootstrap-toolchains.ps1 -AllowSourceBuild
+  .\tools\dev\bootstrap-toolchains.ps1
 "@
     }
 }
@@ -194,22 +215,41 @@ try {
     Write-Host "==> Install Emscripten $EmscriptenVersion"
     .\emsdk.bat install $EmscriptenVersion
     if ($LASTEXITCODE -ne 0) {
-        if ($AllowSourceBuild) {
-            Ensure-MsvcForNinjaSourceBuild
-            Ensure-NinjaForSourceBuild
-            Clear-EmsdkSourceBuildCache -EmsdkRoot $EmsdkDir
-            Invoke-Checked "Fallback install (source build): sdk-main-64bit" {
-                .\emsdk.bat install sdk-main-64bit --generator=Ninja
+        if ($EnableSourceBuildFallback) {
+            Write-Host "Pinned Emscripten install failed. Switching to source-build fallback (sdk-main-64bit)."
+            try {
+                Ensure-MsvcForNinjaSourceBuild
+                Ensure-NinjaForSourceBuild
+                Clear-EmsdkSourceBuildCache -EmsdkRoot $EmsdkDir
+                Invoke-Checked "Fallback install (source build): sdk-main-64bit" {
+                    .\emsdk.bat install sdk-main-64bit --generator=Ninja
+                }
+                $EmscriptenTarget = "sdk-main-64bit"
+            } catch {
+                $armHint = ""
+                if ($IsArm64Host) {
+                    $armHint = "`nARM64 note: source-build is expected on this platform and can require substantial disk/time."
+                }
+                throw @"
+Failed to install pinned Emscripten version '$EmscriptenVersion', and automatic source-build fallback also failed.
+Cause: $($_.Exception.Message)
+
+Required for source-build fallback:
+  - Visual Studio Build Tools with Desktop C++ workload (cl.exe available)
+  - Ninja available in PATH
+$armHint
+"@
             }
-            $EmscriptenTarget = "sdk-main-64bit"
         } else {
             throw @"
 Failed to install pinned Emscripten version '$EmscriptenVersion'.
 If you are on Windows ARM64, precompiled SDKs may be unavailable.
 Options:
   1) Run this script on Windows x64.
-  2) Retry with source-build fallback:
-     .\tools\dev\bootstrap-toolchains.ps1 -AllowSourceBuild
+  2) Retry with source-build fallback (default behavior):
+     .\tools\dev\bootstrap-toolchains.ps1
+  3) Remove explicit fallback disable flag if used:
+     .\tools\dev\bootstrap-toolchains.ps1 -DisableSourceBuildFallback:$false
 "@
         }
     }

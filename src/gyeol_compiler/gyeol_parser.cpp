@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
+#include <nlohmann/json.hpp>
 
 using namespace ICPDev::Gyeol::Schema;
 
@@ -1880,6 +1881,60 @@ bool Parser::parseCommandLine(const std::string& content, int lineNum) {
     return true;
 }
 
+// --- wait / wait "tag" ---
+bool Parser::parseWaitLine(const std::string& content, int lineNum) {
+    if (!currentNode_) {
+        addError(lineNum, "wait outside of label");
+        return false;
+    }
+
+    size_t pos = 4; // skip "wait"
+    skipSpaces(content, pos);
+
+    auto wait = std::make_unique<WaitT>();
+    wait->tag_id = -1;
+
+    if (pos < content.size()) {
+        if (content[pos] != '"') {
+            addError(lineNum, "wait tag must be a quoted string");
+            return false;
+        }
+        std::string tag = parseQuotedString(content, pos);
+        wait->tag_id = addString(tag);
+        skipSpaces(content, pos);
+        if (pos < content.size()) {
+            addError(lineNum, "unexpected token after wait tag");
+            return false;
+        }
+    }
+
+    auto instr = std::make_unique<InstructionT>();
+    instr->data.Set(*wait);
+    currentNode_->lines.push_back(std::move(instr));
+    return true;
+}
+
+// --- yield ---
+bool Parser::parseYieldLine(const std::string& content, int lineNum) {
+    if (!currentNode_) {
+        addError(lineNum, "yield outside of label");
+        return false;
+    }
+
+    size_t pos = 5; // skip "yield"
+    skipSpaces(content, pos);
+    if (pos < content.size()) {
+        addError(lineNum, "yield does not accept arguments");
+        return false;
+    }
+
+    auto y = std::make_unique<YieldT>();
+    auto instr = std::make_unique<InstructionT>();
+    instr->data.Set(*y);
+    currentNode_->lines.push_back(std::move(instr));
+    return true;
+}
+
 // --- return [expr] ---
 bool Parser::parseReturnLine(const std::string& content, int lineNum) {
     if (!currentNode_) {
@@ -2123,6 +2178,7 @@ bool Parser::parse(const std::string& filepath) {
         validateCharacters();
     }
 
+    story_.line_ids = lineIds_;
     return !hasErrors();
 }
 
@@ -2265,6 +2321,22 @@ bool Parser::parseString(const std::string& source, const std::string& filename)
                 continue;
             }
 
+            // wait / wait "tag"
+            if (trimmed.size() >= 4 && trimmed.substr(0, 4) == "wait" &&
+                (trimmed.size() == 4 || trimmed[4] == ' ')) {
+                parseWaitLine(trimmed, lineNum);
+                prevLineType_ = PrevLineType::NONE;
+                continue;
+            }
+
+            // yield
+            if (trimmed.size() >= 5 && trimmed.substr(0, 5) == "yield" &&
+                (trimmed.size() == 5 || trimmed[5] == ' ')) {
+                parseYieldLine(trimmed, lineNum);
+                prevLineType_ = PrevLineType::NONE;
+                continue;
+            }
+
             // $ 변수
             if (trimmed[0] == '$') {
                 parseSetVarLine(trimmed, lineNum);
@@ -2352,6 +2424,7 @@ bool Parser::parseString(const std::string& source, const std::string& filename)
         validateCharacters();
     }
 
+    story_.line_ids = lineIds_;
     return !hasErrors();
 }
 
@@ -2531,6 +2604,22 @@ bool Parser::parseFile(const std::string& filepath) {
             if (trimmed.size() >= 6 && trimmed.substr(0, 6) == "return" &&
                 (trimmed.size() == 6 || trimmed[6] == ' ')) {
                 parseReturnLine(trimmed, lineNum);
+                prevLineType_ = PrevLineType::NONE;
+                continue;
+            }
+
+            // wait / wait "tag"
+            if (trimmed.size() >= 4 && trimmed.substr(0, 4) == "wait" &&
+                (trimmed.size() == 4 || trimmed[4] == ' ')) {
+                parseWaitLine(trimmed, lineNum);
+                prevLineType_ = PrevLineType::NONE;
+                continue;
+            }
+
+            // yield
+            if (trimmed.size() >= 5 && trimmed.substr(0, 5) == "yield" &&
+                (trimmed.size() == 5 || trimmed[5] == ' ')) {
+                parseYieldLine(trimmed, lineNum);
                 prevLineType_ = PrevLineType::NONE;
                 continue;
             }
@@ -2739,6 +2828,75 @@ bool Parser::exportStrings(const std::string& outputPath) const {
 
     ofs.close();
     std::cout << "Exported: " << outputPath << std::endl;
+    return true;
+}
+
+static std::string makeInstructionId(size_t nodeIndex, size_t instrIndex) {
+    return "n" + std::to_string(nodeIndex) + ":i" + std::to_string(instrIndex);
+}
+
+bool Parser::applyLineIdMap(const std::string& mapPath, std::string* errorOut) {
+    using json = nlohmann::json;
+
+    std::ifstream ifs(mapPath);
+    if (!ifs.is_open()) {
+        if (errorOut) *errorOut = "Failed to open line-id map: " + mapPath;
+        return false;
+    }
+
+    json j;
+    try {
+        ifs >> j;
+    } catch (const std::exception& e) {
+        if (errorOut) *errorOut = std::string("Invalid line-id map JSON: ") + e.what();
+        return false;
+    }
+
+    if (!j.is_object() ||
+        j.value("format", "") != "gyeol-line-id-map" ||
+        !j.contains("version") || !j["version"].is_number_integer() || j["version"].get<int>() != 1 ||
+        !j.contains("entries") || !j["entries"].is_object()) {
+        if (errorOut) *errorOut = "Invalid line-id map schema. Expected format=gyeol-line-id-map, version=1, entries(object).";
+        return false;
+    }
+
+    if (lineIds_.size() < story_.string_pool.size()) {
+        lineIds_.resize(story_.string_pool.size(), "");
+    }
+
+    const auto& entries = j["entries"];
+    for (size_t ni = 0; ni < story_.nodes.size(); ++ni) {
+        const auto& node = story_.nodes[ni];
+        if (!node) continue;
+        for (size_t ii = 0; ii < node->lines.size(); ++ii) {
+            const auto& instr = node->lines[ii];
+            if (!instr) continue;
+
+            int32_t textId = -1;
+            if (instr->data.type == OpData::Line) {
+                auto* line = instr->data.AsLine();
+                if (line) textId = line->text_id;
+            } else if (instr->data.type == OpData::Choice) {
+                auto* choice = instr->data.AsChoice();
+                if (choice) textId = choice->text_id;
+            } else {
+                continue;
+            }
+
+            if (textId < 0 || static_cast<size_t>(textId) >= lineIds_.size()) continue;
+
+            const std::string instructionId = makeInstructionId(ni, ii);
+            auto it = entries.find(instructionId);
+            if (it == entries.end() || !it->is_string()) continue;
+
+            const std::string lid = it->get<std::string>();
+            if (!lid.empty()) {
+                lineIds_[static_cast<size_t>(textId)] = lid;
+            }
+        }
+    }
+
+    story_.line_ids = lineIds_;
     return true;
 }
 

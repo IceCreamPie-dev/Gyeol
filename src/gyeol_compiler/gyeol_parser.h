@@ -36,6 +36,7 @@ public:
     // 번역 대상 문자열 CSV 추출
     bool exportStrings(const std::string& outputPath) const;
     bool exportStringsPO(const std::string& outputPath) const;
+    bool applyLineIdMap(const std::string& mapPath, std::string* errorOut = nullptr);
 
     // StoryT 접근 (analyzer 등 외부 도구용)
     const ICPDev::Gyeol::Schema::StoryT& getStory() const { return story_; }
@@ -104,6 +105,8 @@ private:
     bool parseRandomBranchLine(const std::string& content, int lineNum);
     void flushRandomBlock(int lineNum);
     bool parseCommandLine(const std::string& content, int lineNum);
+    bool parseWaitLine(const std::string& content, int lineNum);
+    bool parseYieldLine(const std::string& content, int lineNum);
     bool parseReturnLine(const std::string& content, int lineNum);
 
     // 캐릭터 정의 블록

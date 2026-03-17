@@ -1,0 +1,16 @@
+$ flag = 1
+
+label start:
+    "intro"
+    menu:
+        "go" -> next
+        "stop" -> end
+
+label next:
+    wait "cutscene"
+    yield
+    $ flag = flag + 1
+    "next line"
+
+label end:
+    "bye"

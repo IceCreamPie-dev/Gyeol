@@ -1,0 +1,19 @@
+{
+  "format": "gyeol-runtime-actions",
+  "version": 2,
+  "actions": [
+    { "op": "set_seed", "seed": 77 },
+    { "op": "step" },
+    { "op": "checkpoint", "label": "after_intro" },
+    { "op": "step" },
+    { "op": "choose", "index": 0 },
+    { "op": "step" },
+    { "op": "checkpoint", "label": "after_wait" },
+    { "op": "resume" },
+    { "op": "step" },
+    { "op": "step" },
+    { "op": "checkpoint", "label": "after_next_line" },
+    { "op": "step" },
+    { "op": "checkpoint", "label": "finished" }
+  ]
+}

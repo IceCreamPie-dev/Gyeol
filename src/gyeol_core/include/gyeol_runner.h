@@ -31,7 +31,7 @@ struct Variant {
 };
 
 // --- step() 결과 ---
-enum class StepType { LINE, CHOICES, COMMAND, END };
+enum class StepType { LINE, CHOICES, COMMAND, WAIT, YIELD, END };
 
 struct LineData {
     const char* character = nullptr; // nullptr이면 narration
@@ -49,11 +49,16 @@ struct CommandData {
     std::vector<const char*> params;
 };
 
+struct WaitData {
+    const char* tag = nullptr; // nullptr이면 태그 없음
+};
+
 struct StepResult {
     StepType type = StepType::END;
     LineData line;
     std::vector<ChoiceData> choices;
     CommandData command;
+    WaitData wait;
     // 보간된 문자열의 소유권 (const char*가 이 버퍼를 가리킴)
     std::vector<std::string> ownedStrings_;
 };
@@ -96,6 +101,7 @@ public:
     bool start(const uint8_t* buffer, size_t size);
     bool startAtNode(const uint8_t* buffer, size_t size, const std::string& nodeName);
     StepResult step();
+    bool resume();
     void choose(int index);
     bool isFinished() const;
 
@@ -256,6 +262,10 @@ private:
     // Pending return value (set by explicit 'return expr', consumed after call stack pop)
     bool hasPendingReturn_ = false;
     Variant pendingReturnValue_;
+
+    // WAIT 상태
+    bool waitBlocked_ = false;
+    std::string waitTag_;
 
     // RNG for random branches
     std::mt19937 rng_;

@@ -7,10 +7,47 @@ on:
     branches: [main]
 
 env:
+  # Keep these pinned versions in sync with tools/dev/toolchain-versions.ps1
   EMSCRIPTEN_VERSION: "4.0.23"
   SCONS_VERSION: "4.8.1"
+  NINJA_VERSION: "1.11.1.1"
 
 jobs:
+  policy:
+    name: Policy Gate (PR)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate forbidden demo binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          echo "Comparing changed files between:"
+          echo "  base: ${BASE_SHA}"
+          echo "  head: ${HEAD_SHA}"
+
+          changed_files="$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")"
+          echo "Changed files:"
+          echo "${changed_files}"
+
+          forbidden_files="$(echo "${changed_files}" | grep -E '^demo/godot/bin/libgyeol.*\.(dll|lib|exp)$' || true)"
+          if [[ -n "${forbidden_files}" ]]; then
+            echo "::error::Forbidden demo binaries detected in PR (release-only policy):"
+            echo "${forbidden_files}"
+            exit 1
+          fi
+
+          echo "Policy gate passed: no forbidden demo binaries in PR."
+
   core:
     strategy:
       fail-fast: false
@@ -46,6 +83,69 @@ jobs:
           cmake --build build 2>&1 | tee logs/core-build.log
           ctest --test-dir build --output-on-failure 2>&1 | tee logs/core-test.log
 
+      - name: Graph Patch CLI E2E (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'label start:\n    "hello"\nlabel end:\n    "end"\n' > logs/graph_smoke_story.gyeol
+
+          cat > logs/graph_smoke_patch.json <<'JSON'
+          {
+            "format": "gyeol-graph-patch",
+            "version": 2,
+            "ops": [
+              {
+                "op": "insert_instruction",
+                "node": "start",
+                "index": 0,
+                "instruction": {
+                  "type": "Line",
+                  "text": "intro"
+                }
+              },
+              {
+                "op": "update_line_text",
+                "instruction_id": "n0:i0",
+                "text": "hello-updated"
+              }
+            ]
+          }
+          JSON
+
+          COMPILER="build/src/gyeol_compiler/GyeolCompiler"
+          "$COMPILER" logs/graph_smoke_story.gyeol --export-graph-json logs/graph_smoke.graph.json
+          "$COMPILER" logs/graph_smoke_story.gyeol --validate-graph-patch logs/graph_smoke_patch.json
+          "$COMPILER" logs/graph_smoke_story.gyeol --apply-graph-patch logs/graph_smoke_patch.json --preserve-line-id -o logs/graph_smoke.patched.gyeol
+          test -f logs/graph_smoke.patched.gyeol.lineidmap.json
+          "$COMPILER" logs/graph_smoke.patched.gyeol --line-id-map logs/graph_smoke.patched.gyeol.lineidmap.json -o logs/graph_smoke.patched.gyb
+
+      - name: Runtime Contract Conformance (Core/Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p logs/conformance
+
+          CLI="build/src/tests/GyeolRuntimeContractCLI"
+          STORY="src/tests/conformance/runtime_contract_v1_story.gyeol"
+          ACTIONS="src/tests/conformance/runtime_contract_v1_actions_cross.json"
+          GOLDEN="src/tests/conformance/runtime_contract_v1_golden_core_cross.json"
+
+          "$CLI" generate --engine core --story "$STORY" --actions "$ACTIONS" --output logs/conformance/core.actual.json
+          "$CLI" compare --expected "$GOLDEN" --actual logs/conformance/core.actual.json \
+            --expected-engine core \
+            --expected-out logs/conformance/core.expected.json \
+            --actual-out logs/conformance/core.actual.json \
+            --diff-out logs/conformance/core.diff.json
+
+          "$CLI" generate --engine godot_adapter --story "$STORY" --actions "$ACTIONS" --output logs/conformance/godot_adapter.actual.json
+          "$CLI" compare --expected "$GOLDEN" --actual logs/conformance/godot_adapter.actual.json \
+            --expected-engine godot_adapter \
+            --expected-out logs/conformance/godot_adapter.expected.json \
+            --actual-out logs/conformance/godot_adapter.actual.json \
+            --diff-out logs/conformance/godot_adapter.diff.json
+
       - name: Configure + Build + Test (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -57,12 +157,81 @@ jobs:
           ctest --test-dir build --output-on-failure 2>&1 | Tee-Object -FilePath logs/core-test.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Graph Patch CLI E2E (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          @(
+            'label start:'
+            '    "hello"'
+            'label end:'
+            '    "end"'
+          ) | Set-Content -Path logs/graph_smoke_story.gyeol -Encoding UTF8
+
+          $patch = @'
+          {
+            "format": "gyeol-graph-patch",
+            "version": 2,
+            "ops": [
+              {
+                "op": "insert_instruction",
+                "node": "start",
+                "index": 0,
+                "instruction": {
+                  "type": "Line",
+                  "text": "intro"
+                }
+              },
+              {
+                "op": "update_line_text",
+                "instruction_id": "n0:i0",
+                "text": "hello-updated"
+              }
+            ]
+          }
+          '@
+          $patch | Set-Content -Path logs/graph_smoke_patch.json -Encoding UTF8
+
+          $compiler = "build/src/gyeol_compiler/GyeolCompiler.exe"
+          & $compiler logs/graph_smoke_story.gyeol --export-graph-json logs/graph_smoke.graph.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $compiler logs/graph_smoke_story.gyeol --validate-graph-patch logs/graph_smoke_patch.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $compiler logs/graph_smoke_story.gyeol --apply-graph-patch logs/graph_smoke_patch.json --preserve-line-id -o logs/graph_smoke.patched.gyeol
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path logs/graph_smoke.patched.gyeol.lineidmap.json)) {
+            throw "line-id map artifact missing"
+          }
+          & $compiler logs/graph_smoke.patched.gyeol --line-id-map logs/graph_smoke.patched.gyeol.lineidmap.json -o logs/graph_smoke.patched.gyb
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Runtime Contract Conformance (Core/Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path logs/conformance -Force | Out-Null
+
+          $cli = ".\build\src\tests\GyeolRuntimeContractCLI.exe"
+          $story = "src/tests/conformance/runtime_contract_v1_story.gyeol"
+          $actions = "src/tests/conformance/runtime_contract_v1_actions_cross.json"
+          $golden = "src/tests/conformance/runtime_contract_v1_golden_core_cross.json"
+
+          & $cli generate --engine core --story $story --actions $actions --output logs/conformance/core.actual.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $cli compare --expected $golden --actual logs/conformance/core.actual.json --expected-engine core --expected-out logs/conformance/core.expected.json --actual-out logs/conformance/core.actual.json --diff-out logs/conformance/core.diff.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          & $cli generate --engine godot_adapter --story $story --actions $actions --output logs/conformance/godot_adapter.actual.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $cli compare --expected $golden --actual logs/conformance/godot_adapter.actual.json --expected-engine godot_adapter --expected-out logs/conformance/godot_adapter.expected.json --actual-out logs/conformance/godot_adapter.actual.json --diff-out logs/conformance/godot_adapter.diff.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Upload core logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: core-logs-${{ runner.os }}
-          path: logs/*
+          path: logs/**
 
   wasm:
     name: WASM (Emscripten)
@@ -98,12 +267,26 @@ jobs:
           test -f build_wasm/dist/gyeol.js
           ls build_wasm/dist/*.wasm
 
+      - name: Runtime Contract Conformance (WASM/Node)
+        shell: bash
+        run: |
+          mkdir -p logs/conformance
+          node bindings/wasm/tests/runtime_contract_conformance.js \
+            build_wasm/dist/gyeol.js \
+            src/tests/conformance/runtime_contract_v1_story.gyeol \
+            src/tests/conformance/runtime_contract_v1_actions_cross.json \
+            src/tests/conformance/runtime_contract_v1_golden_core_cross.json \
+            --expected-engine wasm \
+            --expected-out logs/conformance/wasm.expected.json \
+            --actual-out logs/conformance/wasm.actual.json \
+            --diff-out logs/conformance/wasm.diff.json
+
       - name: Upload wasm logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: wasm-logs
-          path: logs/*
+          path: logs/**
 
   godot-extension:
     name: Godot Extension (Windows)
@@ -145,6 +328,23 @@ jobs:
           Pop-Location
           if ($code -ne 0) { exit $code }
 
+      - name: Runtime Contract Conformance (Godot Adapter)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path logs/conformance -Force | Out-Null
+          cmake --build build --target GyeolRuntimeContractCLI --config Release 2>&1 | Tee-Object -FilePath logs/godot-core-tests-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $cli = ".\build\src\tests\Release\GyeolRuntimeContractCLI.exe"
+          $story = "src/tests/conformance/runtime_contract_v1_story.gyeol"
+          $actions = "src/tests/conformance/runtime_contract_v1_actions_cross.json"
+          $golden = "src/tests/conformance/runtime_contract_v1_golden_core_cross.json"
+
+          & $cli generate --engine godot_adapter --story $story --actions $actions --output logs/conformance/godot_adapter.actual.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $cli compare --expected $golden --actual logs/conformance/godot_adapter.actual.json --expected-engine godot_adapter --expected-out logs/conformance/godot_adapter.expected.json --actual-out logs/conformance/godot_adapter.actual.json --diff-out logs/conformance/godot_adapter.diff.json 2>&1 | Tee-Object -FilePath logs/godot-runtime-contract.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Verify Godot artifact
         shell: pwsh
         run: |
@@ -159,4 +359,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: godot-logs
-          path: logs/*
+          path: logs/**

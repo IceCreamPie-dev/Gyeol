@@ -95,7 +95,7 @@ set_target_properties(gyeol PROPERTIES
         -s MODULARIZE=1 \
         -s EXPORT_NAME='createGyeolModule' \
         -s ALLOW_MEMORY_GROWTH=1 \
-        -s ENVIRONMENT=web,worker \
+        -s ENVIRONMENT=web,worker,node \
         -s NO_EXIT_RUNTIME=1 \
         -s SINGLE_FILE=0 \
         -s WASM=1 \

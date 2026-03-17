@@ -6,6 +6,9 @@
 
 ```bash
 GyeolCompiler <input.gyeol> [options]
+GyeolCompiler <input.gyeol> --export-graph-json <output.graph.json>
+GyeolCompiler <input.gyeol> --validate-graph-patch <patch.json>
+GyeolCompiler <input.gyeol> --apply-graph-patch <patch.json> -o <output.gyeol>
 ```
 
 ## Options
@@ -17,6 +20,11 @@ GyeolCompiler <input.gyeol> [options]
 | `--export-strings-po <path>` | Export translatable strings to POT (`msgctxt = line_id`) |
 | `--po-to-json <path>` | Convert PO translations to runtime locale JSON |
 | `--locale <code>` | Locale code override for `--po-to-json` |
+| `--export-graph-json <path>` | Export graph contract JSON (`gyeol-graph-doc`, v1) |
+| `--validate-graph-patch <path>` | Validate graph patch JSON (`gyeol-graph-patch`, v1/v2) |
+| `--apply-graph-patch <path>` | Apply graph patch (v1/v2) and emit canonical `.gyeol` |
+| `--preserve-line-id` | With `--apply-graph-patch`, emit `<output>.lineidmap.json` |
+| `--line-id-map <path>` | Apply `gyeol-line-id-map` v1 during compile |
 | `--analyze [path]` | Run static analysis (print to stdout or file) |
 | `-O` | Enable optimizations (constant folding, dead code removal) |
 | `-h`, `--help` | Show help message |
@@ -81,6 +89,67 @@ GyeolCompiler my_story.gyeol --analyze
 # Write analysis to file
 GyeolCompiler my_story.gyeol --analyze report.txt
 ```
+
+### Graph Contract / Patch Workflow
+
+```bash
+# Export graph doc
+GyeolCompiler my_story.gyeol --export-graph-json story.graph.json
+
+# Validate patch
+GyeolCompiler my_story.gyeol --validate-graph-patch patch.json
+
+# Apply patch (atomic: no output written on failure)
+GyeolCompiler my_story.gyeol --apply-graph-patch patch.json -o story.patched.gyeol
+
+# Apply patch + preserve existing line_id for unchanged instructions
+GyeolCompiler my_story.gyeol --apply-graph-patch patch.json --preserve-line-id -o story.patched.gyeol
+
+# Recompile patched script with preserved IDs
+GyeolCompiler story.patched.gyeol --line-id-map story.patched.gyeol.lineidmap.json -o story.patched.gyb
+```
+
+Graph doc header:
+
+```json
+{
+  "format": "gyeol-graph-doc",
+  "version": 1,
+  "start_node": "start"
+}
+```
+
+`gyeol-graph-doc` includes deterministic `edge_id` and per-node `instructions[]` entries with stable snapshot IDs (`instruction_id`, e.g. `n0:i3`) for v2 patching.
+
+Graph patch header:
+
+```json
+{
+  "format": "gyeol-graph-patch",
+  "version": 2,
+  "ops": []
+}
+```
+
+Supported patch ops in v1:
+- `add_node`
+- `rename_node` (updates all references automatically)
+- `delete_node` (`redirect_target` required)
+- `retarget_edge` (`edge_id` required)
+- `set_start_node`
+
+Additional ops in v2:
+- `update_line_text`
+- `update_choice_text`
+- `update_command`
+- `update_expression`
+- `insert_instruction`
+- `delete_instruction`
+- `move_instruction`
+
+Instruction reference rule in v2:
+- `instruction_id` is resolved against the patch-start snapshot.
+- Instructions inserted by the same patch cannot be referenced by `instruction_id` in that patch.
 
 ## Error Handling
 

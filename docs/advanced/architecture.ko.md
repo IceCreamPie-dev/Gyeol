@@ -188,6 +188,40 @@ StoryPlayer (Node)
 - Godot 경로(`res://`, `user://`)는 `FileAccess`를 통해 시스템 경로로 변환
 - 모든 Gyeol 타입은 Godot Variant로 매핑 (Int->int, String->String, List->Array)
 
+### 외부 그래프 편집 계약 (v1 + v2)
+
+Gyeol은 외부 Rust/Node 툴을 위한 구조 편집 계약을 제공합니다.
+
+- `--export-graph-json`: `gyeol-graph-doc` 출력 (`format: "gyeol-graph-doc"`, `version: 1`)
+- `--validate-graph-patch`: `gyeol-graph-patch` (`version: 1` 또는 `2`) 검증
+- `--apply-graph-patch`: 패치를 원자적으로 적용한 뒤 canonical `.gyeol` 재출력
+- `--apply-graph-patch --preserve-line-id`: `*.lineidmap.json` 사이드카 생성
+- `--line-id-map <path>`: 재컴파일 시 line_id 복원
+
+v1 지원 연산:
+
+- `add_node`
+- `rename_node` (모든 참조 자동 갱신)
+- `delete_node` (`redirect_target` 필수)
+- `retarget_edge` (stable `edge_id`)
+- `set_start_node`
+
+v2 연산:
+
+- `update_line_text`
+- `update_choice_text`
+- `update_command`
+- `update_expression`
+- `insert_instruction`
+- `delete_instruction`
+- `move_instruction`
+
+v2의 `instruction_id`는 patch 시작 스냅샷 기준으로 해석되며, 같은 patch에서 삽입된 instruction은 `instruction_id`로 재참조할 수 없습니다.
+
+레이아웃 메타데이터는 Runner에서 읽지 않으며, `*.graph.layout.json` 같은 사이드카 파일로 관리합니다.
+
+실행/이벤트/상태 보장 규약은 [Runtime Contract v1.1](runtime-contract.md) 문서에서 버전 고정합니다.
+
 ## 데이터 흐름
 
 ### 컴파일

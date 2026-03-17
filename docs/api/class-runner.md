@@ -22,6 +22,7 @@ The Runner manages:
 
 - [Quick Start](../getting-started/quick-start.md)
 - [Architecture](../advanced/architecture.md)
+- [Runtime Contract v1.1](../advanced/runtime-contract.md)
 
 ---
 
@@ -54,7 +55,7 @@ See [Variant](class-variant.md) for details.
 ### StepType
 
 ```cpp
-enum class StepType { LINE, CHOICES, COMMAND, END };
+enum class StepType { LINE, CHOICES, COMMAND, WAIT, YIELD, END };
 ```
 
 | Value | Description |
@@ -62,6 +63,8 @@ enum class StepType { LINE, CHOICES, COMMAND, END };
 | `LINE` | A dialogue or narration line |
 | `CHOICES` | A menu with choices (call `choose()` to continue) |
 | `COMMAND` | An engine command (call `step()` to continue) |
+| `WAIT` | Execution is blocked until `resume()` is called |
+| `YIELD` | One-tick cooperative yield; call `step()` again |
 | `END` | Story has finished |
 
 ---
@@ -74,6 +77,7 @@ struct StepResult {
     LineData line;                    // Valid when type == LINE
     std::vector<ChoiceData> choices;  // Valid when type == CHOICES
     CommandData command;              // Valid when type == COMMAND
+    WaitData wait;                    // Valid when type == WAIT
 };
 ```
 
@@ -123,6 +127,7 @@ struct CommandData {
 |--------|--------|
 | `bool` | [start](#start)`(const uint8_t* buffer, size_t size)` |
 | `StepResult` | [step](#step)`()` |
+| `bool` | [resume](#resume)`()` |
 | `void` | [choose](#choose)`(int index)` |
 | `bool` | [isFinished](#isfinished)`() const` |
 | `bool` | [hasStory](#hasstory)`() const` |
@@ -233,6 +238,8 @@ Executes the next instruction and returns a `StepResult`. The result's `type` fi
 | `LINE` | Display dialogue, then call `step()` again |
 | `CHOICES` | Display choices, then call `choose(index)` |
 | `COMMAND` | Handle command, then call `step()` again |
+| `WAIT` | Pause game flow, call `resume()`, then call `step()` |
+| `YIELD` | 1-tick yield event, call `step()` again |
 | `END` | Story is finished |
 
 ```cpp
@@ -258,7 +265,17 @@ switch (result.type) {
 void choose(int index)
 ```
 
-Selects a choice by 0-based index and automatically advances the story. Must be called after `step()` returns `StepType::CHOICES`.
+Selects a choice by 0-based index and automatically advances the story. Must be called after `step()` returns `StepType::CHOICES`. Calling `choose()` during `WAIT` sets `last_error`.
+
+---
+
+### resume
+
+```cpp
+bool resume()
+```
+
+Resumes execution from `WAIT` state. Calling `resume()` when not waiting fails and sets `last_error`.
 
 ---
 
