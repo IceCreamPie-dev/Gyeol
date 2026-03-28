@@ -45,8 +45,11 @@ public:
 
     // Locale (다국어)
     bool load_locale(const String &path);
+    bool load_locale_catalog(const String &path);
+    bool set_locale(const String &locale_code);
     void clear_locale();
     String get_locale() const;
+    String get_resolved_locale() const;
 
     // Visit tracking
     int get_visit_count(const String &node_name) const;

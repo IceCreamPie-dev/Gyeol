@@ -1,10 +1,10 @@
-# Godot Integration
+# Godot 연동
 
-Gyeol provides a GDExtension for Godot 4.3 that exposes a `StoryPlayer` node with a signal-based API.
+Gyeol은 Godot 4.3용 GDExtension을 제공하며, 시그널 기반 API를 가진 `StoryPlayer` 노드를 사용할 수 있습니다.
 
-## Setup
+## 설정
 
-### 1. Bootstrap Local Toolchains (Windows default)
+### 1. 로컬 툴체인 준비 (Windows 기본)
 
 ```powershell
 .\tools\dev\bootstrap-toolchains.ps1
@@ -12,43 +12,43 @@ Gyeol provides a GDExtension for Godot 4.3 that exposes a `StoryPlayer` node wit
 .\tools\dev\doctor-toolchains.ps1
 ```
 
-`bootstrap-toolchains.ps1` uses pinned Emscripten first and automatically falls back to source-build when prebuilt SDKs are unavailable (common on Windows ARM64).
+`bootstrap-toolchains.ps1`는 고정 버전 Emscripten 설치를 먼저 시도하고, prebuilt SDK가 없으면 source-build fallback으로 자동 전환합니다(Windows ARM64에서 일반적).
 
-### 2. Build the GDExtension
+### 2. GDExtension 빌드
 
 ```powershell
 .\tools\dev\build-godot.ps1
 ```
 
-This produces `demo/godot/bin/libgyeol.windows.template_debug.x86_64.dll`.
+산출물: `demo/godot/bin/libgyeol.windows.template_debug.x86_64.dll`
 
-If you want an ARM64 build:
+ARM64 빌드가 필요하면:
 
 ```powershell
 .\tools\dev\build-godot.ps1 -Arch arm64
 ```
 
-> Optional direct command:
->
-> ```bash
-> cd bindings/godot_extension
-> scons platform=windows target=template_debug
-> ```
-
-### 3. Compile Your Story
+직접 빌드(선택):
 
 ```bash
-GyeolCompiler story.gyeol -o project/story.gyb
+cd bindings/godot_extension
+scons platform=windows target=template_debug
 ```
 
-### 4. Configure the Extension
+### 3. 스토리 컴파일
 
-Copy the following files to your Godot project's `bin/` directory:
+```bash
+GyeolCompiler --compile-json-ir story.json -o project/story.gyb
+```
+
+### 4. Extension 설정
+
+Godot 프로젝트 `bin/` 폴더에 아래 파일을 배치합니다.
 
 - `libgyeol.windows.template_debug.x86_64.dll`
 - `gyeol.gdextension`
 
-The `.gdextension` file tells Godot how to load the plugin:
+`.gdextension` 예시:
 
 ```ini
 [configuration]
@@ -59,13 +59,13 @@ compatibility_minimum = "4.3"
 windows.debug.x86_64 = "res://bin/libgyeol.windows.template_debug.x86_64.dll"
 ```
 
-### 5. Add StoryPlayer to Your Scene
+### 5. Scene에 StoryPlayer 추가
 
-1. Open your scene in Godot
-2. Add a new `StoryPlayer` node (it inherits from `Node`)
-3. Connect its signals in the editor or via code
+1. Godot에서 Scene 열기
+2. `StoryPlayer` 노드 추가 (`Node` 상속)
+3. 시그널 연결
 
-## Basic Usage
+## 기본 사용 예시
 
 ```gdscript
 extends Control
@@ -75,7 +75,6 @@ extends Control
 @onready var choices_container: VBoxContainer = $ChoicesContainer
 
 func _ready():
-    # Connect signals
     story_player.dialogue_line.connect(_on_dialogue_line)
     story_player.choices_presented.connect(_on_choices_presented)
     story_player.command_received.connect(_on_command_received)
@@ -83,16 +82,15 @@ func _ready():
     story_player.yield_emitted.connect(_on_yield_emitted)
     story_player.story_ended.connect(_on_story_ended)
 
-    # Load and start
     if story_player.load_story("res://story.gyb"):
         story_player.start()
         story_player.advance()
 
 func _on_dialogue_line(character: String, text: String, tags: Dictionary):
     if character.is_empty():
-        dialogue_label.text = text                              # Narration
+        dialogue_label.text = text
     else:
-        dialogue_label.text = "[b]%s[/b]: %s" % [character, text]  # Character dialogue
+        dialogue_label.text = "[b]%s[/b]: %s" % [character, text]
 
 func _on_choices_presented(choices: Array):
     for i in choices.size():
@@ -102,173 +100,59 @@ func _on_choices_presented(choices: Array):
         choices_container.add_child(btn)
 
 func _on_command_received(type: String, args: Array):
-    match type:
-        "bg":
-            # Change background
-            pass
-        "sfx":
-            # Play sound effect
-            pass
-    # args item shape: { "kind": "String|Int|Float|Bool|Identifier", "value": ... }
-    # Auto-advance after handling command
+    # args 항목 형태: { "kind": "String|Int|Float|Bool|Identifier", "value": ... }
+    # 커맨드 처리 후 계속 진행
     story_player.advance()
 
 func _on_wait_requested(tag: String):
-    # External async/cutscene sync point.
-    # Call resume() when your host-side wait condition is satisfied.
+    # 비동기 연출/컷신 완료 시점에 resume()
     story_player.resume()
 
 func _on_yield_emitted():
-    # 1-tick cooperative yield. Advance again to continue.
+    # 1틱 양보 이벤트, 다시 advance()
     story_player.advance()
 
 func _on_story_ended():
     dialogue_label.text = "[i]--- END ---[/i]"
 
 func _on_choice_selected(index: int):
-    # Clear choice buttons
     for child in choices_container.get_children():
         child.queue_free()
     story_player.choose(index)
 ```
 
-## Signals
+## 시그널
 
-| Signal | Parameters | When |
-|--------|-----------|------|
-| `dialogue_line` | `character: String, text: String, tags: Dictionary` | A dialogue line is ready to display |
-| `choices_presented` | `choices: Array[String]` | A menu with choices is presented |
-| `command_received` | `type: String, args: Array[Dictionary]` | An `@` command is encountered |
-| `wait_requested` | `tag: String` | Runtime emitted `WAIT`; call `resume()` to continue |
-| `yield_emitted` | *(none)* | Runtime emitted `YIELD`; call `advance()` again |
-| `story_ended` | *(none)* | The story has finished |
+| 시그널 | 파라미터 | 의미 |
+|---|---|---|
+| `dialogue_line` | `character: String, text: String, tags: Dictionary` | 대사/내레이션 라인 표시 |
+| `choices_presented` | `choices: Array[String]` | 선택지 메뉴 표시 |
+| `command_received` | `type: String, args: Array[Dictionary]` | `@` 커맨드 수신 |
+| `wait_requested` | `tag: String` | `WAIT` 이벤트 발생, `resume()` 필요 |
+| `yield_emitted` | *(없음)* | `YIELD` 이벤트 발생, `advance()` 재호출 |
+| `story_ended` | *(없음)* | 스토리 종료 |
 
-### dialogue_line
-
-Emitted for every `Line` instruction. The `character` parameter is empty for narration lines. The `tags` dictionary contains metadata from `#key` / `#key=value` tags on the line.
+## 저장/로드 (Save/Load)
 
 ```gdscript
-func _on_dialogue_line(character: String, text: String, tags: Dictionary):
-    # Check for mood tag
-    if tags.has("mood"):
-        update_character_expression(character, tags["mood"])
-
-    # Check for voice tag
-    if tags.has("voice"):
-        play_voice(tags["voice"])
-```
-
-### choices_presented
-
-Emitted when a `menu:` block is reached. You must call `choose(index)` to continue. The choices array contains the display text for each option.
-
-### command_received
-
-Emitted for `@` commands. You **must** call `advance()` after handling the command to continue the story.
-
-### story_ended
-
-Emitted when the story reaches its end (no more instructions to execute).
-
-## Working with Variables
-
-```gdscript
-# Get a variable
-var hp = story_player.get_variable("hp")        # Returns Variant (int, float, bool, String, Array)
-
-# Set a variable
-story_player.set_variable("player_name", "Hero")
-story_player.set_variable("hp", 100)
-story_player.set_variable("has_key", true)
-
-# Check existence
-if story_player.has_variable("gold"):
-    var gold = story_player.get_variable("gold")
-
-# List all variables
-var names: PackedStringArray = story_player.get_variable_names()
-for name in names:
-    print("%s = %s" % [name, story_player.get_variable(name)])
-```
-
-## Save and Load
-
-```gdscript
-# Save current state
 story_player.save_state("user://save1.gys")
-
-# Load saved state (story must already be loaded)
 story_player.load_state("user://save1.gys")
 ```
 
-Both `res://` and `user://` paths are supported. The `.gys` file stores:
-- Current position (node + program counter)
-- All variables
-- Call stack
-- Pending choices
-- Visit counts
-- Once-choice tracking
-
-## Localization
+## 로컬라이징
 
 ```gdscript
-# Load a translated locale (JSON recommended, CSV supported)
-story_player.load_locale("res://locales/en.locale.json")
+# 로케일 카탈로그(catalog) 로드 + 런타임 언어 전환
+story_player.load_locale_catalog("res://locales/locales.catalog.json")
+story_player.set_locale("ko-KR")
 
-# Check current locale
-var locale = story_player.get_locale()
-
-# Clear locale (revert to original)
+var requested = story_player.get_locale()
+var resolved = story_player.get_resolved_locale()
 story_player.clear_locale()
 ```
 
-See [Localization](../advanced/localization.md) for PO/JSON workflow and CSV compatibility.
+PO + Direct JSON 워크플로와 폴백 규칙은 [로컬라이징](../advanced/localization.md)을 참고하세요.
 
-## Visit Tracking
+## 전체 API
 
-```gdscript
-# Check how many times a node was visited
-var count = story_player.get_visit_count("shop")
-
-# Check if ever visited
-if story_player.has_visited("secret_room"):
-    # Unlock something
-    pass
-```
-
-## Character API
-
-```gdscript
-# Get all defined character IDs
-var characters: PackedStringArray = story_player.get_character_names()
-
-# Get display name
-var display_name = story_player.get_character_display_name("hero")
-
-# Get any character property
-var color = story_player.get_character_property("hero", "color")
-```
-
-## Node Tags
-
-```gdscript
-# Check if a node has a tag
-if story_player.has_node_tag("boss_fight", "difficulty"):
-    var diff = story_player.get_node_tag("boss_fight", "difficulty")
-
-# Get all tags on a node
-var tags: Dictionary = story_player.get_node_tags("shop")
-for key in tags:
-    print("%s = %s" % [key, tags[key]])
-```
-
-## Deterministic Testing
-
-```gdscript
-# Set RNG seed for reproducible random branches
-story_player.set_seed(42)
-```
-
-## Full API Reference
-
-See [StoryPlayer Class Reference](../api/class-story-player.md) for the complete API.
+전체 메서드 목록은 [StoryPlayer API](../api/class-story-player.md)에서 확인할 수 있습니다.

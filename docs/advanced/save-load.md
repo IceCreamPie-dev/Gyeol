@@ -1,22 +1,22 @@
-# Save & Load
+# 저장 및 로드
 
-Gyeol provides complete state serialization for saving and loading game progress.
+Gyeol은 게임 진행 상황의 저장과 로드를 위한 완전한 상태 직렬화를 제공합니다.
 
-## Overview
+## 개요
 
-Save files (`.gys`) are FlatBuffers binary files that capture the entire runner state:
+세이브 파일(`.gys`)은 Runner의 전체 상태를 캡처하는 FlatBuffers 바이너리 파일입니다:
 
-| Data | Description |
+| 데이터 | 설명 |
 |------|-------------|
-| Current node + PC | Where in the story we are |
-| Variables | All runtime variables with values |
-| Call stack | Active function calls and shadowed variables |
-| Pending choices | Currently displayed menu choices |
-| Visit counts | How many times each node was visited |
-| Once-choice tracking | Which once-choices have been selected |
-| Finished flag | Whether the story has ended |
+| 현재 노드 + PC | 스토리에서 현재 위치 |
+| 변수 | 값이 포함된 모든 런타임 변수 |
+| 콜 스택 | 활성 함수 호출과 섀도된 변수 |
+| 대기 중인 선택지 | 현재 표시된 메뉴 선택지 |
+| 방문 횟수 | 각 노드가 방문된 횟수 |
+| Once 선택지 추적 | 선택된 once 선택지 목록 |
+| 종료 플래그 | 스토리 종료 여부 |
 
-## Usage
+## 사용법
 
 ### C++ (Runner)
 
@@ -24,85 +24,85 @@ Save files (`.gys`) are FlatBuffers binary files that capture the entire runner 
 // Save
 runner.saveState("save1.gys");
 
-// Load (story must already be started)
+// Load (스토리가 이미 시작되어 있어야 함)
 runner.loadState("save1.gys");
 ```
 
 ### GDScript (StoryPlayer)
 
 ```gdscript
-# Save - supports res:// and user:// paths
+# Save - `res://`, `user://` 경로 지원
 story_player.save_state("user://saves/slot1.gys")
 
-# Load - story must be loaded first
+# Load - 먼저 스토리가 로드되어 있어야 함
 story_player.load_story("res://story.gyb")
 story_player.load_state("user://saves/slot1.gys")
 ```
 
-## Requirements
+## 요구 사항
 
-- **For saving:** A story must be loaded (`hasStory() == true`)
-- **For loading:** The **same** story must be loaded before restoring state
-- The `.gys` file format is tied to the story version
+- **저장 시:** 스토리가 로드되어 있어야 합니다 (`hasStory() == true`)
+- **로드 시:** 상태를 복원하기 전에 **동일한** 스토리가 로드되어 있어야 합니다
+- `.gys` 파일 형식은 스토리 버전에 종속됩니다
 
-## What Gets Saved
+## 저장되는 항목
 
-### Variables
+### 변수
 
-All runtime variables including their types:
+타입을 포함한 모든 런타임 변수:
 
 ```gyeol
-$ hp = 100        # Saved as Int
-$ name = "Hero"   # Saved as String
-$ alive = true    # Saved as Bool
-$ items += "key"  # Saved as List
+$ hp = 100        # Int로 저장
+$ name = "Hero"   # String으로 저장
+$ alive = true    # Bool로 저장
+$ items += "key"  # List로 저장
 ```
 
-### Call Stack
+### 콜 스택
 
-If the save happens during a function call, the entire call stack is preserved:
+함수 호출 중에 저장하면 전체 콜 스택이 보존됩니다:
 
 ```gyeol
 label start:
-    call helper       # If saved here...
-    hero "Back!"      # ...this resumes after load
+    call helper       # 여기서 저장하면...
+    hero "Back!"      # ...로드 후 이 지점에서 재개
 
 label helper:
     hero "Inside!"    # Save point
 ```
 
-The save captures:
-- Each frame's node name and program counter
-- Return variable name (for `$ x = call ...`)
-- Shadowed variables (parameters that override globals)
-- Parameter names
+저장 내용:
+- 각 프레임의 노드 이름과 프로그램 카운터
+- 반환 변수 이름 (`$ x = call ...`용)
+- 섀도된 변수 (전역 변수를 덮어쓴 매개변수)
+- 매개변수 이름
 
-### Visit Counts
+### 방문 횟수
 
-Every node's visit count is serialized:
+모든 노드의 방문 횟수가 직렬화됩니다:
 
 ```
-# If shop was visited 3 times before save...
-# After load, visit_count("shop") == 3
+# 저장 전 `shop`을 3번 방문했다면...
+# 로드 후에도 visit_count("shop") == 3
 ```
 
-### Once-Choice Tracking
+### Once 선택지 추적
 
-Once-choices that were already selected remain hidden after load:
+이미 선택된 once 선택지는 로드 후에도 숨겨진 상태를 유지합니다:
 
 ```gyeol
 menu:
-    "One-time offer" -> deal #once    # If selected before save, stays hidden after load
+    "One-time offer" -> deal #once    # 저장 전에 선택했다면 로드 후에도 숨김 유지
     "Browse" -> browse
 ```
 
-### Pending Choices
+### 대기 중인 선택지
 
-If the save happens while a menu is displayed, the pending choices (including their modifiers) are preserved.
+메뉴가 표시된 상태에서 저장하면 대기 중인 선택지(수식어 포함)가 보존됩니다.
 
-## Save File Format
+## 세이브 파일 형식
 
-The `.gys` file follows the `SaveState` schema in `schemas/gyeol.fbs`:
+`.gys` 파일은 `schemas/gyeol.fbs`의 `SaveState` 스키마를 따릅니다:
 
 ```
 SaveState
@@ -118,15 +118,15 @@ SaveState
   chosen_once_choices: [string]          # Once-choice keys
 ```
 
-## Backward Compatibility
+## 하위 호환성
 
-The save/load system handles missing fields gracefully:
+저장/로드 시스템은 누락된 필드를 우아하게 처리합니다:
 
-- Loading saves from older versions (without newer fields) works correctly
-- Missing fields use their default values (empty arrays, zero counts, etc.)
-- New features (once-choices, choice modifiers, function parameters) degrade gracefully
+- 이전 버전의 세이브(새로운 필드가 없는)를 로드해도 정상 동작합니다
+- 누락된 필드는 기본값(빈 배열, 0 카운트 등)을 사용합니다
+- 새로운 기능(once 선택지, 선택지 수식어, 함수 매개변수)은 우아하게 성능 저하됩니다
 
-## Error Handling
+## 에러 처리
 
 ```cpp
 // Returns false on error
@@ -147,9 +147,9 @@ if not story_player.load_state("user://save.gys"):
     print("Load failed!")
 ```
 
-## Multiple Save Slots
+## 다중 세이브 슬롯
 
-Implement multiple save slots by using different file paths:
+다른 파일 경로를 사용하여 다중 세이브 슬롯을 구현합니다:
 
 ```gdscript
 func save_game(slot: int):
@@ -162,7 +162,7 @@ func load_game(slot: int):
         story_player.load_state(path)
 ```
 
-## Auto-save Pattern
+## 자동 저장 패턴
 
 ```gdscript
 func _on_dialogue_line(character, text, tags):

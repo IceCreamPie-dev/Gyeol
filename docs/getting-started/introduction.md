@@ -1,57 +1,57 @@
-# Introduction
+# 소개
 
-## What is Gyeol?
+## Gyeol이란?
 
-Gyeol (결) is an interactive storytelling middleware engine built in C++17. It provides a complete pipeline for writing, compiling, and running branching narratives in games.
+Gyeol (결)은 C++17로 구축된 인터랙티브 스토리텔링 미들웨어 엔진입니다. 게임에서 분기형 내러티브를 작성, 컴파일, 실행하기 위한 완전한 파이프라인을 제공합니다.
 
-The name "결" means "texture" or "grain" in Korean, reflecting the engine's goal of weaving rich narrative threads into any game.
+"결"이라는 이름은 한국어로 "결(texture, grain)"을 의미하며, 어떤 게임에든 풍부한 내러티브 줄기를 엮어 넣겠다는 엔진의 목표를 담고 있습니다.
 
-### Design Philosophy
+### 설계 철학
 
-Gyeol combines the best of three popular narrative tools:
+Gyeol은 세 가지 인기 있는 내러티브 도구의 장점을 결합합니다:
 
-| Feature | Inspired By |
-|---------|-------------|
-| Character-driven dialogue syntax | Ren'Py |
-| Structural node/graph system | Ink |
-| Engine-agnostic middleware design | Yarn Spinner |
+| 특징 | 영감을 받은 도구 |
+|------|-----------------|
+| 캐릭터 중심 대사 문법 | Ren'Py |
+| 구조적 노드/그래프 시스템 | Ink |
+| 엔진 독립적 미들웨어 설계 | Yarn Spinner |
 
-### Key Features
+### 주요 기능
 
-- **Single-script authoring** - Write `.gyeol` text files with Ren'Py-style syntax
-- **Binary compilation** - Compile to `.gyb` FlatBuffers format for zero-copy loading
-- **Engine-agnostic VM** - The Runner VM is pure C++ with no engine dependencies
-- **Expression engine** - Full arithmetic, logic, string interpolation, inline conditions
-- **Function system** - Labels as functions with parameters, return values, local scope
-- **Visit tracking** - Automatic node visit counting with `visit_count()` / `visited()`
-- **Localization** - Auto-generated Line IDs, CSV-based locale overlays
-- **Save/Load** - Complete state serialization (variables, call stack, visit counts)
-- **Random branching** - Weighted probability branches with deterministic seeding
-- **Dev tools** - LSP server, CLI debugger, VS Code extension
+- **Canonical JSON IR** - `gyeol-json-ir` (`format_version: 2`)를 정식 소스 산출물로 사용
+- **바이너리 컴파일** - FlatBuffers 포맷의 `.gyb`로 컴파일하여 zero-copy 로딩
+- **엔진 독립적 VM** - Runner VM은 엔진 의존성 없는 순수 C++
+- **표현식 엔진** - 산술, 논리, 문자열 보간, 인라인 조건 완벽 지원
+- **함수 시스템** - 매개변수, 반환값, 로컬 스코프를 갖춘 Label 함수
+- **방문 추적** - `visit_count()` / `visited()`로 노드 방문 횟수 자동 추적
+- **다국어 지원** - Line/Choice + 캐릭터 속성(property) 번역, locale catalog 폴백 체인
+- **저장/불러오기** - 완전한 상태 직렬화 (변수, 콜 스택, 방문 횟수)
+- **랜덤 분기** - 가중치 기반 확률 분기 및 결정적 시드 설정
+- **개발 도구** - 컴파일러 CLI, 그래프 패치, CLI 디버거
 
-### Supported Platforms
+### 지원 플랫폼
 
-| Platform | Status | Binding |
-|----------|--------|---------|
-| Godot 4.3 | Available | GDExtension (`StoryPlayer` node) |
-| Unity | Planned | Native Plugin |
-| WebAssembly | Planned | Emscripten build |
-| Console (CLI) | Available | `GyeolTest` player |
+| 플랫폼 | 상태 | 바인딩 |
+|--------|------|--------|
+| Godot 4.3 | 사용 가능 | GDExtension (`StoryPlayer` 노드) |
+| Unity | 계획 중 | Native Plugin |
+| WebAssembly | 계획 중 | Emscripten 빌드 |
+| 콘솔 (CLI) | 사용 가능 | `GyeolTest` 플레이어 |
 
-### How It Works
+### 동작 방식
 
 ```
-.gyeol script  -->  GyeolCompiler  -->  .gyb binary  -->  Runner VM  -->  Game Engine
-  (text)              (parser)          (FlatBuffers)      (C++ VM)        (Godot/Unity/...)
+story.json (JSON IR)  -->  GyeolCompiler  -->  .gyb binary  -->  Runner VM  -->  Game Engine
+       (canonical)           (검증/패킹)          (FlatBuffers)      (C++ VM)        (Godot/Unity/...)
 ```
 
-1. **Write** a `.gyeol` script with dialogue, choices, variables, and logic
-2. **Compile** it to a `.gyb` binary using the CLI compiler
-3. **Load** the binary into the Runner VM via your game engine's binding
-4. **Play** the story using the event-driven `step()`/`choose()` API
+1. canonical JSON IR(`story.json`)을 **작성/편집**합니다
+2. `--compile-json-ir`로 `.gyb` 바이너리로 **컴파일**합니다
+3. 게임 엔진의 바인딩을 통해 Runner VM에 바이너리를 **로드**합니다
+4. 이벤트 기반 `step()`/`choose()` API로 스토리를 **플레이**합니다
 
-### Next Steps
+### 다음 단계
 
-- [Installation](installation.md) - Build Gyeol from source
-- [Quick Start](quick-start.md) - Write your first story
-- [Script Syntax](../scripting/syntax.md) - Full language reference
+- [설치](installation.md) - 소스에서 Gyeol 빌드하기
+- [빠른 시작](quick-start.md) - 첫 스토리 작성하기
+- [JSON IR 편집 흐름](json-ir-workflow.md) - 작성/검증/패치/번역 흐름 한 번에 보기

@@ -1,23 +1,23 @@
-# StoryPlayer
+# StoryPlayer API
 
-**Inherits:** [Node](https://docs.godotengine.org/en/stable/classes/class_node.html)
+**상속:** [Node](https://docs.godotengine.org/en/stable/classes/class_node.html)
 
-GDExtension node for playing Gyeol stories in Godot 4.3.
+Godot 4.3에서 Gyeol 스토리를 재생하기 위한 GDExtension 노드입니다.
 
-## Description
+## 설명
 
-`StoryPlayer` is the main interface for running Gyeol stories in Godot. It wraps the core C++ Runner VM and exposes a signal-based API for dialogue, choices, commands, and story flow.
+`StoryPlayer`는 Godot에서 Gyeol 스토리를 실행하기 위한 주요 인터페이스입니다. 핵심 C++ Runner VM을 래핑하며, 대화, 선택지, 명령, 스토리 흐름을 위한 시그널 기반 API를 제공합니다.
 
-Add a `StoryPlayer` node to your scene, load a compiled `.gyb` story file, connect the signals, and call `advance()` to step through the story.
+씬에 `StoryPlayer` 노드를 추가하고, 컴파일된 `.gyb` 스토리 파일을 로드한 후, 시그널을 연결하고, `advance()`를 호출하여 스토리를 진행합니다.
 
-## Tutorials
+## 튜토리얼
 
-- [Godot Integration Guide](../getting-started/godot-integration.md)
-- [Quick Start](../getting-started/quick-start.md)
+- [Godot 연동 가이드](../getting-started/godot-integration.md)
+- [빠른 시작](../getting-started/quick-start.md)
 
 ---
 
-## Signals
+## 시그널
 
 ### dialogue_line
 
@@ -25,7 +25,7 @@ Add a `StoryPlayer` node to your scene, load a compiled `.gyb` story file, conne
 dialogue_line(character: String, text: String, tags: Dictionary)
 ```
 
-Emitted when a dialogue line is encountered. `character` is the character ID (empty string for narration). `text` is the dialogue text with interpolation already applied. `tags` contains metadata from `#key` / `#key=value` tags.
+대사 라인을 만나면 발생합니다. `character`는 캐릭터 ID(나레이션의 경우 빈 문자열)입니다. `text`는 보간이 적용된 대사 텍스트입니다. `tags`는 `#key` / `#key=value` 태그 메타데이터를 포함합니다.
 
 ---
 
@@ -35,7 +35,7 @@ Emitted when a dialogue line is encountered. `character` is the character ID (em
 choices_presented(choices: Array)
 ```
 
-Emitted when a `menu:` block is reached. `choices` is an Array of String containing the display text for each available option. Call [choose](#choose) to select one and continue.
+`menu:` 블록에 도달하면 발생합니다. `choices`는 각 선택지의 표시 텍스트를 담은 String Array입니다. [choose](#choose)를 호출하여 하나를 선택하고 계속 진행합니다.
 
 ---
 
@@ -45,7 +45,7 @@ Emitted when a `menu:` block is reached. `choices` is an Array of String contain
 command_received(type: String, args: Array)
 ```
 
-Emitted when an `@` command is encountered. `type` is the command name, `args` is an Array of Dictionary items (`{ kind, value }`). You **must** call [advance](#advance) after handling the command.
+`@` 명령을 만나면 발생합니다. `type`은 명령 이름이고, `args`는 `{ kind, value }` Dictionary의 Array입니다. 명령을 처리한 후 반드시 [advance](#advance)를 호출해야 합니다.
 
 ---
 
@@ -55,15 +55,15 @@ Emitted when an `@` command is encountered. `type` is the command name, `args` i
 story_ended()
 ```
 
-Emitted when the story reaches its end.
+스토리가 끝에 도달하면 발생합니다.
 
 ---
 
-## Methods
+## 메서드
 
-### Core
+### 핵심
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `bool` | [load_story](#load_story)`(path: String)` |
 | `void` | [start](#start)`()` |
@@ -71,62 +71,65 @@ Emitted when the story reaches its end.
 | `void` | [choose](#choose)`(index: int)` |
 | `bool` | [is_finished](#is_finished)`()` |
 
-### Save / Load
+### 저장 / 로드
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `bool` | [save_state](#save_state)`(path: String)` |
 | `bool` | [load_state](#load_state)`(path: String)` |
 
-### Variables
+### 변수
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `Variant` | [get_variable](#get_variable)`(name: String)` |
 | `void` | [set_variable](#set_variable)`(name: String, value: Variant)` |
 | `bool` | [has_variable](#has_variable)`(name: String)` |
 | `PackedStringArray` | [get_variable_names](#get_variable_names)`()` |
 
-### Localization
+### 로컬라이제이션
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `bool` | [load_locale](#load_locale)`(path: String)` |
+| `bool` | [load_locale_catalog](#load_locale_catalog)`(path: String)` |
+| `bool` | [set_locale](#set_locale)`(locale_code: String)` |
 | `void` | [clear_locale](#clear_locale)`()` |
 | `String` | [get_locale](#get_locale)`()` |
+| `String` | [get_resolved_locale](#get_resolved_locale)`()` |
 
-### Visit Tracking
+### 방문 추적
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `int` | [get_visit_count](#get_visit_count)`(node_name: String)` |
 | `bool` | [has_visited](#has_visited)`(node_name: String)` |
 
-### Characters
+### 캐릭터
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `String` | [get_character_property](#get_character_property)`(character_id: String, key: String)` |
 | `PackedStringArray` | [get_character_names](#get_character_names)`()` |
 | `String` | [get_character_display_name](#get_character_display_name)`(character_id: String)` |
 
-### Node Tags
+### 노드 태그
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `String` | [get_node_tag](#get_node_tag)`(node_name: String, key: String)` |
 | `Dictionary` | [get_node_tags](#get_node_tags)`(node_name: String)` |
 | `bool` | [has_node_tag](#has_node_tag)`(node_name: String, key: String)` |
 
-### Testing
+### 테스트
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `void` | [set_seed](#set_seed)`(seed: int)` |
 
 ---
 
-## Method Descriptions
+## 메서드 설명
 
 ### load_story
 
@@ -134,11 +137,11 @@ Emitted when the story reaches its end.
 bool load_story(path: String)
 ```
 
-Loads a compiled `.gyb` story file from the given path. Supports `res://` and `user://` paths.
+지정된 경로에서 컴파일된 `.gyb` 스토리 파일을 로드합니다. `res://` 및 `user://` 경로를 지원합니다.
 
-Returns `true` on success, `false` if the file could not be opened.
+성공 시 `true`를 반환하고, 파일을 열 수 없으면 `false`를 반환합니다.
 
-> **Note:** This only loads the binary data into memory. Call [start](#start) to initialize the Runner VM.
+> **참고:** 이 메서드는 바이너리 데이터를 메모리에 로드하기만 합니다. Runner VM을 초기화하려면 [start](#start)를 호출하세요.
 
 ---
 
@@ -148,9 +151,9 @@ Returns `true` on success, `false` if the file could not be opened.
 void start()
 ```
 
-Initializes the Runner VM and jumps to the story's start node. Global variables are initialized and visit counts are reset.
+Runner VM을 초기화하고 스토리의 시작 노드로 이동합니다. 전역 변수가 초기화되고 방문 횟수가 리셋됩니다.
 
-Must be called after [load_story](#load_story) and before [advance](#advance).
+[load_story](#load_story) 이후, [advance](#advance) 이전에 호출해야 합니다.
 
 ---
 
@@ -160,18 +163,18 @@ Must be called after [load_story](#load_story) and before [advance](#advance).
 void advance()
 ```
 
-Executes the next instruction in the story. Depending on the instruction type, one of the following signals will be emitted:
+스토리의 다음 인스트럭션을 실행합니다. 인스트럭션 타입에 따라 다음 시그널 중 하나가 발생합니다:
 
-| Instruction | Signal |
+| 인스트럭션 | 시그널 |
 |-------------|--------|
-| Line (dialogue/narration) | [dialogue_line](#dialogue_line) |
-| Menu (choices) | [choices_presented](#choices_presented) |
+| Line (대사/나레이션) | [dialogue_line](#dialogue_line) |
+| Menu (선택지) | [choices_presented](#choices_presented) |
 | Command (`@`) | [command_received](#command_received) |
-| End of story | [story_ended](#story_ended) |
+| 스토리 종료 | [story_ended](#story_ended) |
 
-If the story is finished, emits [story_ended](#story_ended).
+스토리가 끝났으면 [story_ended](#story_ended)를 발생시킵니다.
 
-> **Note:** After receiving [command_received](#command_received), you must call `advance()` again to continue. After [choices_presented](#choices_presented), call [choose](#choose) instead.
+> **참고:** [command_received](#command_received) 수신 후에는 `advance()`를 다시 호출해야 합니다. [choices_presented](#choices_presented) 수신 후에는 [choose](#choose)를 호출하세요.
 
 ---
 
@@ -181,7 +184,7 @@ If the story is finished, emits [story_ended](#story_ended).
 void choose(index: int)
 ```
 
-Selects a choice by its 0-based index and automatically advances the story. Call this after receiving the [choices_presented](#choices_presented) signal.
+0부터 시작하는 인덱스로 선택지를 선택하고 자동으로 스토리를 진행합니다. [choices_presented](#choices_presented) 시그널을 수신한 후 호출합니다.
 
 ---
 
@@ -191,7 +194,7 @@ Selects a choice by its 0-based index and automatically advances the story. Call
 bool is_finished()
 ```
 
-Returns `true` if the story has reached its end.
+스토리가 끝에 도달했으면 `true`를 반환합니다.
 
 ---
 
@@ -201,13 +204,13 @@ Returns `true` if the story has reached its end.
 bool save_state(path: String)
 ```
 
-Saves the complete story state to a `.gys` file. Supports `res://` and `user://` paths.
+완전한 스토리 상태를 `.gys` 파일에 저장합니다. `res://` 및 `user://` 경로를 지원합니다.
 
-The save includes: current position, all variables, call stack, pending choices, visit counts, and once-choice tracking.
+저장 내용: 현재 위치, 모든 변수, 콜 스택, 대기 중인 선택지, 방문 횟수, once 선택지 추적 상태.
 
-Returns `true` on success.
+성공 시 `true`를 반환합니다.
 
-> **Note:** A story must be loaded before saving.
+> **참고:** 저장하기 전에 스토리가 로드되어 있어야 합니다.
 
 ---
 
@@ -217,9 +220,9 @@ Returns `true` on success.
 bool load_state(path: String)
 ```
 
-Restores a previously saved state from a `.gys` file. The same story must already be loaded via [load_story](#load_story).
+`.gys` 파일에서 이전에 저장한 상태를 복원합니다. [load_story](#load_story)를 통해 동일한 스토리가 이미 로드되어 있어야 합니다.
 
-Returns `true` on success.
+성공 시 `true`를 반환합니다.
 
 ---
 
@@ -229,9 +232,9 @@ Returns `true` on success.
 Variant get_variable(name: String)
 ```
 
-Returns the current value of the named variable. The return type depends on the variable's type:
+지정된 이름의 변수의 현재 값을 반환합니다. 반환 타입은 변수의 타입에 따라 달라집니다:
 
-| Gyeol Type | Godot Type |
+| Gyeol 타입 | Godot 타입 |
 |-----------|------------|
 | Bool | `bool` |
 | Int | `int` |
@@ -239,7 +242,7 @@ Returns the current value of the named variable. The return type depends on the 
 | String | `String` |
 | List | `Array[String]` |
 
-Returns `null` if the variable does not exist.
+변수가 존재하지 않으면 `null`을 반환합니다.
 
 ---
 
@@ -249,15 +252,15 @@ Returns `null` if the variable does not exist.
 void set_variable(name: String, value: Variant)
 ```
 
-Sets a story variable from GDScript. Supported Godot types:
+GDScript에서 스토리 변수를 설정합니다. 지원하는 Godot 타입:
 
-| Godot Type | Gyeol Type |
+| Godot 타입 | Gyeol 타입 |
 |-----------|-----------|
 | `bool` | Bool |
 | `int` | Int |
 | `float` | Float |
 | `String` | String |
-| `Array` | List (elements converted to String) |
+| `Array` | List (요소가 String으로 변환됨) |
 
 ---
 
@@ -267,7 +270,7 @@ Sets a story variable from GDScript. Supported Godot types:
 bool has_variable(name: String)
 ```
 
-Returns `true` if the named variable exists in the story state.
+해당 이름의 변수가 스토리 상태에 존재하면 `true`를 반환합니다.
 
 ---
 
@@ -277,7 +280,7 @@ Returns `true` if the named variable exists in the story state.
 PackedStringArray get_variable_names()
 ```
 
-Returns a `PackedStringArray` containing the names of all currently defined variables.
+현재 정의된 모든 변수의 이름을 담은 `PackedStringArray`를 반환합니다.
 
 ---
 
@@ -287,11 +290,41 @@ Returns a `PackedStringArray` containing the names of all currently defined vari
 bool load_locale(path: String)
 ```
 
-Loads a locale overlay file (`.json` recommended, CSV supported for compatibility). Translated strings replace originals at runtime. Supports `res://` and `user://` paths.
+단일 로케일 오버레이 파일을 로드합니다.
+지원 포맷:
+- JSON locale v2 (`format: "gyeol-locale"`, `version: 2`)
+- JSON locale v1 (`version: 1`) 하위 호환
+- CSV 오버레이 하위 호환
 
-Returns `true` on success.
+성공 시 `true`를 반환합니다.
 
-See [Localization](../advanced/localization.md) for PO/JSON workflow and CSV compatibility.
+PO + Direct JSON 워크플로는 [로컬라이제이션](../advanced/localization.md)을 참고하세요.
+
+---
+
+### load_locale_catalog
+
+```
+bool load_locale_catalog(path: String)
+```
+
+런타임 핫스위치/폴백을 위한 locale catalog v2 (`format: "gyeol-locale-catalog"`, `version: 2`)를 로드합니다.
+
+---
+
+### set_locale
+
+```
+bool set_locale(locale_code: String)
+```
+
+런타임 진행 상태를 유지한 채 로케일 전환을 요청합니다. 폴백 체인:
+- exact locale (예: `ko-KR`)
+- base locale (`ko`)
+- catalog `default_locale`
+- 원본 JSON IR 텍스트/속성(property)
+
+체인 내 적용 가능한 로케일이 없으면 `false`를 반환합니다.
 
 ---
 
@@ -301,7 +334,7 @@ See [Localization](../advanced/localization.md) for PO/JSON workflow and CSV com
 void clear_locale()
 ```
 
-Removes the locale overlay, reverting all text to the original language.
+로케일 오버레이를 제거하여 모든 텍스트를 원본 언어로 되돌립니다.
 
 ---
 
@@ -311,7 +344,17 @@ Removes the locale overlay, reverting all text to the original language.
 String get_locale()
 ```
 
-Returns the currently loaded locale identifier, or an empty string if no locale is active.
+요청된 로케일 코드를 반환하거나, 활성 로케일이 없으면 빈 문자열을 반환합니다.
+
+---
+
+### get_resolved_locale
+
+```
+String get_resolved_locale()
+```
+
+폴백 체인에서 실제로 적용된 로케일 코드를 반환합니다.
 
 ---
 
@@ -321,7 +364,7 @@ Returns the currently loaded locale identifier, or an empty string if no locale 
 int get_visit_count(node_name: String)
 ```
 
-Returns the number of times the specified node has been entered during this playthrough.
+현재 플레이에서 지정된 노드에 진입한 횟수를 반환합니다.
 
 ---
 
@@ -331,7 +374,7 @@ Returns the number of times the specified node has been entered during this play
 bool has_visited(node_name: String)
 ```
 
-Returns `true` if the specified node has been visited at least once.
+지정된 노드를 최소 한 번 방문했으면 `true`를 반환합니다.
 
 ---
 
@@ -341,7 +384,7 @@ Returns `true` if the specified node has been visited at least once.
 String get_character_property(character_id: String, key: String)
 ```
 
-Returns the value of a character property (from `character` definitions in the script). Returns an empty string if not found.
+캐릭터 속성의 값을 반환합니다(스크립트의 `character` 정의에서). 찾을 수 없으면 빈 문자열을 반환합니다.
 
 ---
 
@@ -351,7 +394,7 @@ Returns the value of a character property (from `character` definitions in the s
 PackedStringArray get_character_names()
 ```
 
-Returns a `PackedStringArray` containing all defined character IDs.
+정의된 모든 캐릭터 ID를 담은 `PackedStringArray`를 반환합니다.
 
 ---
 
@@ -361,7 +404,7 @@ Returns a `PackedStringArray` containing all defined character IDs.
 String get_character_display_name(character_id: String)
 ```
 
-Convenience method that returns `displayName` first, then falls back to `name`, then the character ID.
+`displayName`을 우선 사용하고, 없으면 `name`, 그것도 없으면 캐릭터 ID를 반환하는 편의 메서드입니다.
 
 ---
 
@@ -371,7 +414,7 @@ Convenience method that returns `displayName` first, then falls back to `name`, 
 String get_node_tag(node_name: String, key: String)
 ```
 
-Returns the value of a metadata tag on a node. Returns an empty string if the tag doesn't exist.
+노드의 메타데이터 태그 값을 반환합니다. 태그가 존재하지 않으면 빈 문자열을 반환합니다.
 
 ```gdscript
 var difficulty = story_player.get_node_tag("boss_fight", "difficulty")  # "hard"
@@ -385,7 +428,7 @@ var difficulty = story_player.get_node_tag("boss_fight", "difficulty")  # "hard"
 Dictionary get_node_tags(node_name: String)
 ```
 
-Returns all metadata tags on a node as a Dictionary (String keys, String values).
+노드의 모든 메타데이터 태그를 Dictionary(String 키, String 값)로 반환합니다.
 
 ```gdscript
 var tags = story_player.get_node_tags("boss_fight")
@@ -400,7 +443,7 @@ var tags = story_player.get_node_tags("boss_fight")
 bool has_node_tag(node_name: String, key: String)
 ```
 
-Returns `true` if the specified node has the given metadata tag.
+지정된 노드에 해당 메타데이터 태그가 있으면 `true`를 반환합니다.
 
 ```gdscript
 if story_player.has_node_tag("shop", "repeatable"):
@@ -416,7 +459,7 @@ if story_player.has_node_tag("shop", "repeatable"):
 void set_seed(seed: int)
 ```
 
-Sets the RNG seed for deterministic random branch selection. Useful for testing and replay systems.
+결정적 랜덤 분기 선택을 위한 RNG 시드를 설정합니다. 테스트 및 리플레이 시스템에 유용합니다.
 
 ```gdscript
 story_player.set_seed(42)  # Same seed = same random sequence every time

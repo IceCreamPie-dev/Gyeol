@@ -22,7 +22,7 @@ asPool(const void* p) {
 namespace {
 
 constexpr char kStateExtensionMagic[] = {'G', 'Y', 'E', 'X'};
-constexpr uint32_t kStateExtensionVersion = 1;
+constexpr uint32_t kStateExtensionVersion = 2;
 
 struct RuntimeExtensionState {
     uint32_t seed = 0;
@@ -30,6 +30,7 @@ struct RuntimeExtensionState {
     std::string rngState;
     std::vector<std::string> pendingOnceKeys;
     std::string currentLocale;
+    std::string resolvedLocale;
     std::vector<std::string> localePool;
 };
 
@@ -88,6 +89,7 @@ std::vector<uint8_t> serializeExtensionState(const RuntimeExtensionState& ext) {
     }
 
     appendString(payload, ext.currentLocale);
+    appendString(payload, ext.resolvedLocale);
     appendUint32(payload, static_cast<uint32_t>(ext.localePool.size()));
     for (const auto& value : ext.localePool) {
         appendString(payload, value);
@@ -99,7 +101,7 @@ std::vector<uint8_t> serializeExtensionState(const RuntimeExtensionState& ext) {
 bool deserializeExtensionState(const uint8_t* data, size_t size, RuntimeExtensionState& ext) {
     size_t offset = 0;
     uint32_t version = 0;
-    if (!readUint32(data, size, offset, version) || version != kStateExtensionVersion) {
+    if (!readUint32(data, size, offset, version) || (version != 1 && version != 2)) {
         return false;
     }
     if (!readUint32(data, size, offset, ext.seed)) return false;
@@ -117,6 +119,11 @@ bool deserializeExtensionState(const uint8_t* data, size_t size, RuntimeExtensio
     }
 
     if (!readString(data, size, offset, ext.currentLocale)) return false;
+    if (version >= 2) {
+        if (!readString(data, size, offset, ext.resolvedLocale)) return false;
+    } else {
+        ext.resolvedLocale = ext.currentLocale;
+    }
 
     uint32_t localeCount = 0;
     if (!readUint32(data, size, offset, localeCount)) return false;
@@ -886,6 +893,12 @@ bool Runner::start(const uint8_t* buffer, size_t size) {
     // 로케일 초기화
     localePool_.clear();
     currentLocale_.clear();
+    resolvedLocale_.clear();
+    localeCharacterProps_.clear();
+    hasLocaleCatalog_ = false;
+    catalogDefaultLocale_.clear();
+    catalogLineEntriesByLocale_.clear();
+    catalogCharacterEntriesByLocale_.clear();
 
     // global_vars 초기화
     variables_.clear();
@@ -1586,6 +1599,12 @@ bool Runner::hasVisited(const std::string& nodeName) const {
 
 // --- Character API ---
 std::string Runner::getCharacterProperty(const std::string& characterId, const std::string& key) const {
+    auto overlayIt = localeCharacterProps_.find(characterId);
+    if (overlayIt != localeCharacterProps_.end()) {
+        auto propIt = overlayIt->second.find(key);
+        if (propIt != overlayIt->second.end()) return propIt->second;
+    }
+
     auto it = characterProps_.find(characterId);
     if (it == characterProps_.end()) return "";
     for (const auto& prop : it->second) {
@@ -1596,9 +1615,14 @@ std::string Runner::getCharacterProperty(const std::string& characterId, const s
 
 std::vector<std::string> Runner::getCharacterNames() const {
     std::vector<std::string> names;
-    names.reserve(characterProps_.size());
+    names.reserve(characterProps_.size() + localeCharacterProps_.size());
     for (const auto& pair : characterProps_) {
         names.push_back(pair.first);
+    }
+    for (const auto& pair : localeCharacterProps_) {
+        if (std::find(names.begin(), names.end(), pair.first) == names.end()) {
+            names.push_back(pair.first);
+        }
     }
     return names;
 }
@@ -1818,6 +1842,7 @@ std::vector<uint8_t> Runner::serializeStateBuffer() const {
         ext.pendingOnceKeys.push_back(pc.once_key);
     }
     ext.currentLocale = currentLocale_;
+    ext.resolvedLocale = resolvedLocale_;
     ext.localePool = localePool_;
 
     return attachExtensionToState(baseState, ext);
@@ -1997,7 +2022,12 @@ bool Runner::deserializeStateBuffer(const uint8_t* data, size_t size) {
     }
 
     currentLocale_ = ext.currentLocale;
+    resolvedLocale_ = ext.resolvedLocale;
     localePool_ = ext.localePool;
+    localeCharacterProps_.clear();
+    if (hasLocaleCatalog_ && !currentLocale_.empty()) {
+        applyLocaleSelection(currentLocale_, false);
+    }
 
     return true;
 }

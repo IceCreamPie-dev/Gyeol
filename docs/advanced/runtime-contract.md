@@ -1,31 +1,31 @@
-# Runtime Contract v1.1
+# 런타임 계약 (Runtime Contract) v1.1
 
-`Runtime Contract v1.1` is a strict-breaking runtime contract that adds `WAIT`/`YIELD` and `resume()` semantics across Core, WASM, and Godot adapter conformance.
+`Runtime Contract v1.1`은 `WAIT`/`YIELD`와 `resume()`을 정식 도입한 하위 비호환(strict-breaking) 런타임 계약입니다. Core, WASM, Godot 어댑터가 동일 규약을 따릅니다.
 
-## Scope
+## 범위
 
-- Public runtime API changes:
-- `StepType` expands to `LINE`, `CHOICES`, `COMMAND`, `WAIT`, `YIELD`, `END`.
-- `Runner::resume()` is added.
-- Contract is enforced by docs + conformance tests + CI gates.
+- 공개 런타임 API 변경:
+- `StepType`이 `LINE`, `CHOICES`, `COMMAND`, `WAIT`, `YIELD`, `END`로 확장됩니다.
+- `Runner::resume()`이 추가됩니다.
+- 계약 고정은 문서 + 합치(Conformance) 테스트 + CI 게이트로 수행합니다.
 
-## Execution Rules
+## 실행 규칙
 
-- `step()` returns one of `LINE`, `CHOICES`, `COMMAND`, `WAIT`, `YIELD`, `END`.
-- `WAIT` blocks progression; `resume()` must be called before execution can continue.
-- Calling `step()` or `choose()` while waiting is invalid and must set `last_error`.
-- `YIELD` is a one-tick cooperative yield event; next `step()` proceeds immediately.
-- `choose(index)` is only valid when the previous visible result is `CHOICES`.
+- `step()`은 `LINE`, `CHOICES`, `COMMAND`, `WAIT`, `YIELD`, `END` 중 하나를 반환합니다.
+- `WAIT` 이후에는 `resume()` 전까지 진행이 금지됩니다.
+- WAIT 상태에서 `step()`/`choose()` 호출은 오류이며 `last_error`를 설정해야 합니다.
+- `YIELD`는 1틱 양보 이벤트이며 다음 `step()`에서 즉시 진행됩니다.
+- `choose(index)`는 직전 가시 결과가 `CHOICES`일 때만 유효합니다.
 
-## Determinism and State
+## 결정론과 상태
 
-- `setSeed(seed)` must produce deterministic random branching.
-- `saveState/loadState` and `snapshot/restore` must preserve equivalent continuation state, including WAIT state (`wait_blocked`, `wait_tag`).
-- Locale overlays may change text payloads, but must not change control-flow result types.
+- `setSeed(seed)`는 랜덤 분기를 결정론적으로 고정해야 합니다.
+- `saveState/loadState`, `snapshot/restore`는 WAIT 상태(`wait_blocked`, `wait_tag`)를 포함해 동치 상태를 복원해야 합니다.
+- locale 오버레이는 텍스트만 바꿔야 하며 제어 흐름 타입은 변경하면 안 됩니다.
 
-## Conformance Transcript Schema (v1.1)
+## 합치 Transcript 스키마 (Conformance, v1.1)
 
-`v1.1` uses transcript/action schema version `2`.
+`v1.1`은 action/transcript 스키마 버전 `2`를 사용합니다.
 
 ```json
 {
@@ -46,12 +46,12 @@
 }
 ```
 
-## Conformance CLI
+## 합치 검증 CLI (Conformance)
 
 ```bash
 GyeolRuntimeContractCLI generate \
   --engine core \
-  --story src/tests/conformance/runtime_contract_v1_story.gyeol \
+  --story <story.json> \
   --actions src/tests/conformance/runtime_contract_v1_actions_cross.json \
   --output logs/conformance/core.actual.json
 
@@ -64,11 +64,11 @@ GyeolRuntimeContractCLI compare \
   --diff-out logs/conformance/core.diff.json
 ```
 
-WASM conformance uses `bindings/wasm/tests/runtime_contract_conformance.js` with the same `expected/actual/diff` artifact contract.
+WASM 합치 검증은 `bindings/wasm/tests/runtime_contract_conformance.js`를 사용하며 동일하게 `expected/actual/diff` 아티팩트를 생성합니다.
 
-## Local Standard Gate
+## 로컬 표준 게이트
 
-Use this sequence to reproduce the CI verification flow on a Windows dev machine:
+Windows 개발 환경에서 CI 검증 순서를 로컬에서 재현하려면 아래 순서를 사용합니다.
 
 ```powershell
 .\tools\dev\bootstrap-toolchains.ps1
@@ -79,9 +79,9 @@ Use this sequence to reproduce the CI verification flow on a Windows dev machine
 .\tools\dev\check-runtime-contract.ps1
 ```
 
-## Golden Policy
+## 기준 골든(Golden) 운영 규칙
 
-- Single source of truth: `src/tests/conformance/runtime_contract_v1_golden_core_cross.json`
-- Golden updates are allowed only for intentional contract changes.
-- Refactor-only PRs must keep golden unchanged.
-- Golden updates must include transcript diff evidence and rationale.
+- 단일 기준 파일: `src/tests/conformance/runtime_contract_v1_golden_core_cross.json`
+- 계약이 의도적으로 바뀌는 경우에만 golden 갱신을 허용합니다.
+- 리팩터링 전용 PR에서는 golden 변경을 금지합니다.
+- golden 갱신 시 transcript diff 근거와 변경 의도를 함께 남깁니다.

@@ -6,6 +6,8 @@
 #include <string>
 
 #include "gyeol_graph_tools.h"
+#include "gyeol_json_export.h"
+#include "gyeol_json_ir_reader.h"
 #include "gyeol_parser.h"
 
 using json = nlohmann::json;
@@ -424,4 +426,42 @@ TEST(GraphToolsTest, PreserveLineIdGeneratesMapAndCompileRestoresIds) {
     std::remove(patchedPath.c_str());
     std::remove(mapPath.c_str());
     std::remove(outPath.c_str());
+}
+
+TEST(GraphToolsTest, JsonIrPatchUpdateLinePreservesExistingLineId) {
+    auto parser = parseScript(
+        "label start:\n"
+        "    \"Hello\"\n"
+        "label end:\n"
+        "    \"End\"\n");
+
+    const auto& baseStory = parser.getStory();
+    ASSERT_FALSE(baseStory.nodes.empty());
+    auto* line = baseStory.nodes[0]->lines[0]->data.AsLine();
+    ASSERT_NE(line, nullptr);
+    ASSERT_GE(line->text_id, 0);
+    ASSERT_LT(static_cast<size_t>(line->text_id), baseStory.line_ids.size());
+    const std::string originalLineId = baseStory.line_ids[static_cast<size_t>(line->text_id)];
+    ASSERT_FALSE(originalLineId.empty());
+
+    const std::string jsonText = Gyeol::JsonExport::toJsonString(baseStory);
+    ICPDev::Gyeol::Schema::StoryT imported;
+    std::string error;
+    ASSERT_TRUE(Gyeol::JsonIrReader::fromJsonString(jsonText, imported, &error)) << error;
+
+    json patch = {
+        {"format", "gyeol-graph-patch"},
+        {"version", 2},
+        {"ops", json::array({
+            {{"op", "update_line_text"}, {"instruction_id", "n0:i0"}, {"text", "Hello Edited"}}
+        })}
+    };
+
+    ASSERT_TRUE(Gyeol::GraphTools::applyGraphPatchJson(imported, patch, &error)) << error;
+
+    auto* updatedLine = imported.nodes[0]->lines[0]->data.AsLine();
+    ASSERT_NE(updatedLine, nullptr);
+    ASSERT_GE(updatedLine->text_id, 0);
+    ASSERT_LT(static_cast<size_t>(updatedLine->text_id), imported.line_ids.size());
+    EXPECT_EQ(imported.line_ids[static_cast<size_t>(updatedLine->text_id)], originalLineId);
 }

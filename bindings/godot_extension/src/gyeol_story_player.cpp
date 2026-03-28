@@ -26,8 +26,11 @@ void StoryPlayer::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_variable", "name", "value"), &StoryPlayer::set_variable);
     ClassDB::bind_method(D_METHOD("has_variable", "name"), &StoryPlayer::has_variable);
     ClassDB::bind_method(D_METHOD("load_locale", "path"), &StoryPlayer::load_locale);
+    ClassDB::bind_method(D_METHOD("load_locale_catalog", "path"), &StoryPlayer::load_locale_catalog);
+    ClassDB::bind_method(D_METHOD("set_locale", "locale_code"), &StoryPlayer::set_locale);
     ClassDB::bind_method(D_METHOD("clear_locale"), &StoryPlayer::clear_locale);
     ClassDB::bind_method(D_METHOD("get_locale"), &StoryPlayer::get_locale);
+    ClassDB::bind_method(D_METHOD("get_resolved_locale"), &StoryPlayer::get_resolved_locale);
     ClassDB::bind_method(D_METHOD("get_visit_count", "node_name"), &StoryPlayer::get_visit_count);
     ClassDB::bind_method(D_METHOD("has_visited", "node_name"), &StoryPlayer::has_visited);
     ClassDB::bind_method(D_METHOD("get_variable_names"), &StoryPlayer::get_variable_names);
@@ -328,12 +331,50 @@ bool StoryPlayer::load_locale(const String &path) {
     return ok;
 }
 
+bool StoryPlayer::load_locale_catalog(const String &path) {
+    if (!runner_.hasStory()) {
+        UtilityFunctions::printerr("[Gyeol] No story loaded for locale catalog.");
+        return false;
+    }
+
+    String global_path = path;
+    if (path.begins_with("res://") || path.begins_with("user://")) {
+        if (!FileAccess::file_exists(path)) {
+            UtilityFunctions::printerr("[Gyeol] Locale catalog file not found: ", path);
+            return false;
+        }
+        Ref<FileAccess> probe = FileAccess::open(path, FileAccess::READ);
+        if (probe.is_null()) {
+            UtilityFunctions::printerr("[Gyeol] Cannot open locale catalog file: ", path);
+            return false;
+        }
+        global_path = probe->get_path_absolute();
+        probe->close();
+    }
+
+    bool ok = runner_.loadLocaleCatalog(global_path.utf8().get_data());
+    if (ok) {
+        UtilityFunctions::print("[Gyeol] Locale catalog loaded: ", path);
+    } else {
+        UtilityFunctions::printerr("[Gyeol] Failed to load locale catalog: ", path);
+    }
+    return ok;
+}
+
+bool StoryPlayer::set_locale(const String &locale_code) {
+    return runner_.setLocale(locale_code.utf8().get_data());
+}
+
 void StoryPlayer::clear_locale() {
     runner_.clearLocale();
 }
 
 String StoryPlayer::get_locale() const {
     return String::utf8(runner_.getLocale().c_str());
+}
+
+String StoryPlayer::get_resolved_locale() const {
+    return String::utf8(runner_.getResolvedLocale().c_str());
 }
 
 int StoryPlayer::get_visit_count(const String &node_name) const {

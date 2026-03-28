@@ -6,6 +6,10 @@ add_library(GyeolParser
     gyeol_parser.h
     gyeol_parser.cpp
     gyeol_locale_tools.cpp
+    gyeol_json_ir_reader.h
+    gyeol_json_ir_reader.cpp
+    gyeol_json_ir_tooling.h
+    gyeol_json_ir_tooling.cpp
     gyeol_graph_tools.h
     gyeol_graph_tools.cpp
     gyeol_comp_analyzer.h

@@ -1,12 +1,12 @@
-site_name: Gyeol Documentation
-site_description: "Write Once, Run Everywhere Story Engine"
+site_name: Gyeol 문서
+site_description: "한번 작성하고 어디서든 실행하는 스토리 엔진"
 site_url: https://icecreampie-dev.github.io/Gyeol/
 repo_url: https://github.com/IceCreamPie-dev/Gyeol
 repo_name: IceCreamPie-dev/Gyeol
 
 theme:
   name: material
-  language: en
+  language: ko
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -14,14 +14,14 @@ theme:
       accent: amber
       toggle:
         icon: material/brightness-7
-        name: Switch to dark mode
+        name: 다크 모드로 전환
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: deep purple
       accent: amber
       toggle:
         icon: material/brightness-4
-        name: Switch to light mode
+        name: 라이트 모드로 전환
   features:
     - navigation.sections
     - navigation.expand
@@ -35,46 +35,6 @@ theme:
 
 plugins:
   - search
-  - i18n:
-      docs_structure: suffix
-      languages:
-        - locale: en
-          name: English
-          default: true
-          build: true
-        - locale: ko
-          name: 한국어
-          build: true
-          theme:
-            language: ko
-          nav:
-            - 홈: index.md
-            - 시작하기:
-              - 소개: getting-started/introduction.md
-              - 설치: getting-started/installation.md
-              - 빠른 시작: getting-started/quick-start.md
-              - Godot 연동: getting-started/godot-integration.md
-            - 스크립팅:
-              - 스크립트 문법: scripting/syntax.md
-              - 변수와 표현식: scripting/variables-and-expressions.md
-              - 흐름 제어: scripting/flow-control.md
-              - 함수: scripting/functions.md
-              - 고급 기능: scripting/advanced-features.md
-            - API 레퍼런스:
-              - StoryPlayer (Godot): api/class-story-player.md
-              - Runner (C++): api/class-runner.md
-              - Variant: api/class-variant.md
-            - 도구:
-              - 컴파일러 CLI: tools/compiler.md
-              - 디버거: tools/debugger.md
-              - LSP 서버: tools/lsp.md
-              - VS Code 확장: tools/vscode.md
-            - 고급:
-              - 아키텍처: advanced/architecture.md
-              - Runtime Contract v1.1: advanced/runtime-contract.md
-              - 세이브/로드: advanced/save-load.md
-              - 다국어 지원: advanced/localization.md
-              - 바이너리 포맷: advanced/binary-format.md
 
 markdown_extensions:
   - tables
@@ -90,31 +50,25 @@ markdown_extensions:
       permalink: true
 
 nav:
-  - Home: index.md
-  - Getting Started:
-    - Introduction: getting-started/introduction.md
-    - Installation: getting-started/installation.md
-    - Quick Start: getting-started/quick-start.md
-    - Godot Integration: getting-started/godot-integration.md
-  - Scripting:
-    - Script Syntax: scripting/syntax.md
-    - Variables & Expressions: scripting/variables-and-expressions.md
-    - Flow Control: scripting/flow-control.md
-    - Functions: scripting/functions.md
-    - Advanced Features: scripting/advanced-features.md
-  - API Reference:
+  - 홈: index.md
+  - 문서 스타일 가이드: style-guide.md
+  - 시작하기:
+    - 소개: getting-started/introduction.md
+    - 설치: getting-started/installation.md
+    - 빠른 시작: getting-started/quick-start.md
+    - JSON IR 편집 흐름: getting-started/json-ir-workflow.md
+    - Godot 연동: getting-started/godot-integration.md
+  - API 레퍼런스:
     - StoryPlayer (Godot): api/class-story-player.md
     - Runner (C++): api/class-runner.md
     - Variant: api/class-variant.md
-  - Tools:
-    - Compiler CLI: tools/compiler.md
-    - Debugger: tools/debugger.md
-    - LSP Server: tools/lsp.md
-    - VS Code Extension: tools/vscode.md
-  - Advanced:
-    - Architecture: advanced/architecture.md
+  - 도구:
+    - 컴파일러 CLI: tools/compiler.md
+    - 디버거: tools/debugger.md
+  - 고급:
+    - 아키텍처: advanced/architecture.md
     - Runtime Contract v1.1: advanced/runtime-contract.md
-    - Save & Load: advanced/save-load.md
-    - Localization: advanced/localization.md
-    - Binary Format: advanced/binary-format.md
-    - Release & PR Policy: advanced/release-policy.md
+    - 저장/로드: advanced/save-load.md
+    - 다국어 지원: advanced/localization.md
+    - 바이너리 포맷: advanced/binary-format.md
+    - 릴리스 & PR 정책: advanced/release-policy.md

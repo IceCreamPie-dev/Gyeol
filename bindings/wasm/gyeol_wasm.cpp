@@ -246,6 +246,14 @@ public:
         return runner_.hasNodeTag(nodeName, key);
     }
 
+    // Locale API
+    bool loadLocale(const std::string& path) { return runner_.loadLocale(path); }
+    bool loadLocaleCatalog(const std::string& path) { return runner_.loadLocaleCatalog(path); }
+    bool setLocale(const std::string& localeCode) { return runner_.setLocale(localeCode); }
+    void clearLocale() { runner_.clearLocale(); }
+    std::string getLocale() const { return runner_.getLocale(); }
+    std::string getResolvedLocale() const { return runner_.getResolvedLocale(); }
+
     // RNG seed
     void setSeed(unsigned int seed) { runner_.setSeed(seed); }
 
@@ -393,6 +401,13 @@ EMSCRIPTEN_BINDINGS(gyeol) {
         // Node tags
         .function("getNodeTag", &GyeolEngine::getNodeTag)
         .function("hasNodeTag", &GyeolEngine::hasNodeTag)
+        // Locale
+        .function("loadLocale", &GyeolEngine::loadLocale)
+        .function("loadLocaleCatalog", &GyeolEngine::loadLocaleCatalog)
+        .function("setLocale", &GyeolEngine::setLocale)
+        .function("clearLocale", &GyeolEngine::clearLocale)
+        .function("getLocale", &GyeolEngine::getLocale)
+        .function("getResolvedLocale", &GyeolEngine::getResolvedLocale)
         // RNG
         .function("setSeed", &GyeolEngine::setSeed)
         // Graph (비주얼 에디터)

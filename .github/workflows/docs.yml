@@ -34,10 +34,13 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install MkDocs + Material + i18n + Gyeol lexer
+      - name: Install MkDocs + Material + Gyeol lexer
         run: |
-          pip install mkdocs-material "mkdocs-static-i18n[material]"
+          pip install mkdocs-material
           pip install ./tools/pygments-gyeol
+
+      - name: Check docs policy
+        run: python tools/dev/check-docs-policy.py
 
       - name: Build site
         run: mkdocs build --strict

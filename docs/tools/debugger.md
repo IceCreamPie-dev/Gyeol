@@ -1,14 +1,14 @@
-# Debugger
+# 디버거
 
-`GyeolDebugger` is a CLI interactive debugger for stepping through compiled stories instruction by instruction.
+`GyeolDebugger`는 컴파일된 스토리를 인스트럭션 단위로 단계별 실행할 수 있는 CLI 인터랙티브 디버거입니다.
 
-## Usage
+## 사용법
 
 ```bash
 GyeolDebugger <story.gyb> [--help] [--version]
 ```
 
-## Getting Started
+## 시작하기
 
 ```bash
 $ GyeolDebugger story.gyb
@@ -20,60 +20,60 @@ $ GyeolDebugger story.gyb
 (gyeol)
 ```
 
-The debugger starts in **step mode** (pauses after each instruction). Type commands at the `(gyeol)` prompt.
+디버거는 **스텝 모드**(각 인스트럭션 후 일시 정지)로 시작합니다. `(gyeol)` 프롬프트에서 커맨드를 입력합니다.
 
-## Commands
+## 커맨드
 
-### Execution Control
+### 실행 제어
 
-| Command | Aliases | Arguments | Description |
+| 커맨드 | 약어 | 인자 | 설명 |
 |---------|---------|-----------|-------------|
-| `step` | `s` | - | Execute one instruction |
-| `continue` | `c` | - | Run until breakpoint or END |
-| `choose` | `ch` | `INDEX` | Select a choice (0-based) |
-| `restart` | `r` | - | Restart from start node |
+| `step` | `s` | - | 인스트럭션 하나 실행 |
+| `continue` | `c` | - | 브레이크포인트 또는 END까지 실행 |
+| `choose` | `ch` | `INDEX` | 선택지 선택 (0부터 시작) |
+| `restart` | `r` | - | 시작 노드에서 다시 시작 |
 
-### Breakpoints
+### 브레이크포인트
 
-| Command | Aliases | Arguments | Description |
+| 커맨드 | 약어 | 인자 | 설명 |
 |---------|---------|-----------|-------------|
-| `break` | `b` | `NODE [PC]` | Set breakpoint (PC defaults to 0) |
-| `delete` | `d` | `[NODE [PC]]` | Remove breakpoint, or clear all |
-| `breakpoints` | `bp` | - | List all breakpoints |
+| `break` | `b` | `NODE [PC]` | 브레이크포인트 설정 (PC 기본값은 0) |
+| `delete` | `d` | `[NODE [PC]]` | 브레이크포인트 제거 또는 전체 삭제 |
+| `breakpoints` | `bp` | - | 모든 브레이크포인트 나열 |
 
-### Inspection
+### 검사
 
-| Command | Aliases | Arguments | Description |
+| 커맨드 | 약어 | 인자 | 설명 |
 |---------|---------|-----------|-------------|
-| `locals` | `l` | - | Show all variables with values |
-| `print` | `p` | `VARIABLE` | Print a single variable |
-| `set` | - | `VARIABLE VALUE` | Set variable (int/float/bool/"string") |
-| `where` | `w` | - | Show location + call stack + visit counts |
+| `locals` | `l` | - | 모든 변수와 값 표시 |
+| `print` | `p` | `VARIABLE` | 단일 변수 출력 |
+| `set` | - | `VARIABLE VALUE` | 변수 설정 (int/float/bool/"string") |
+| `where` | `w` | - | 위치 + 콜 스택 + 방문 횟수 표시 |
 
-### Node Information
+### 노드 정보
 
-| Command | Aliases | Arguments | Description |
+| 커맨드 | 약어 | 인자 | 설명 |
 |---------|---------|-----------|-------------|
-| `nodes` | `n` | - | List all nodes with instruction counts |
-| `info` | `i` | `NODE` | Show all instructions in a node |
+| `nodes` | `n` | - | 인스트럭션 수와 함께 모든 노드 나열 |
+| `info` | `i` | `NODE` | 노드의 모든 인스트럭션 표시 |
 
-### Other
+### 기타
 
-| Command | Aliases | Arguments | Description |
+| 커맨드 | 약어 | 인자 | 설명 |
 |---------|---------|-----------|-------------|
-| `help` | `h` | - | Show command help |
-| `quit` | `q`, `exit` | - | Exit debugger |
+| `help` | `h` | - | 커맨드 도움말 표시 |
+| `quit` | `q`, `exit` | - | 디버거 종료 |
 
-## Breakpoints
+## 브레이크포인트
 
-### Setting Breakpoints
+### 브레이크포인트 설정
 
 ```
 (gyeol) break start         # Break at start:0
 (gyeol) break encounter 3   # Break at encounter:3
 ```
 
-### Listing Breakpoints
+### 브레이크포인트 나열
 
 ```
 (gyeol) breakpoints
@@ -82,14 +82,14 @@ Breakpoints:
   [2] encounter:3
 ```
 
-### Removing Breakpoints
+### 브레이크포인트 제거
 
 ```
 (gyeol) delete start 0      # Remove specific breakpoint
 (gyeol) delete              # Clear all breakpoints
 ```
 
-### Hitting Breakpoints
+### 브레이크포인트 적중
 
 ```
 (gyeol) continue
@@ -99,9 +99,9 @@ Breakpoints:
 (gyeol)
 ```
 
-## Step Mode
+## 스텝 모드
 
-The debugger starts with step mode enabled. Each `step` command executes exactly one instruction:
+디버거는 스텝 모드가 활성화된 상태로 시작합니다. 각 `step` 커맨드는 정확히 하나의 인스트럭션을 실행합니다:
 
 ```
 (gyeol) step
@@ -112,7 +112,7 @@ The debugger starts with step mode enabled. Each `step` command executes exactly
 [start:1] Jump  -> encounter
 ```
 
-Use `continue` to run freely until a breakpoint or END:
+`continue`를 사용하면 브레이크포인트나 END까지 자유롭게 실행합니다:
 
 ```
 (gyeol) continue
@@ -120,9 +120,9 @@ Use `continue` to run freely until a breakpoint or END:
 --- END ---
 ```
 
-## Variable Inspection
+## 변수 검사
 
-### View All Variables
+### 모든 변수 보기
 
 ```
 (gyeol) locals
@@ -133,14 +133,14 @@ Variables:
   speed = 3.14 (Float)
 ```
 
-### View Single Variable
+### 단일 변수 보기
 
 ```
 (gyeol) print hp
 hp = 100 (Int)
 ```
 
-### Modify Variables
+### 변수 수정
 
 ```
 (gyeol) set hp 50
@@ -153,9 +153,9 @@ name = "Warrior"
 has_key = false
 ```
 
-## Location & Call Stack
+## 위치 및 콜 스택
 
-### Current Location
+### 현재 위치
 
 ```
 (gyeol) where
@@ -168,7 +168,7 @@ Visit counts:
   encounter: 1
 ```
 
-### Node Inspection
+### 노드 검사
 
 ```
 (gyeol) nodes
@@ -188,23 +188,23 @@ encounter (4 instructions):
   [3] Condition  courage == 1 -> brave else coward
 ```
 
-## Workflow Example
+## 워크플로우 예제
 
 ```bash
 $ GyeolDebugger story.gyb
 
-# Set a breakpoint at the encounter
+# encounter 지점에 브레이크포인트 설정
 (gyeol) break encounter
 
-# Run to the breakpoint
+# 브레이크포인트까지 실행
 (gyeol) continue
 [Breakpoint hit] encounter:0
 
-# Inspect state
+# 상태 확인
 (gyeol) locals
   courage = 1 (Int)
 
-# Step through
+# 단계별 실행
 (gyeol) step
 [encounter:0] Line  "A giant wolf appears!"
 
@@ -212,31 +212,31 @@ $ GyeolDebugger story.gyb
 "A giant wolf appears!"
 [encounter:1] Condition  courage == 1 -> brave else coward
 
-# Modify variable to test different branch
+# 다른 분기 테스트를 위해 변수 수정
 (gyeol) set courage 0
 (gyeol) step
 [coward:0] Line  hero "Help!"
 
-# Check where we are
+# 현재 위치 확인
 (gyeol) where
 Location: coward:0 [Line]
 ```
 
-## ANSI Colors
+## 터미널 색상 (ANSI)
 
-The debugger uses colored output:
+디버거는 색상 출력을 사용합니다:
 
-| Color | Usage |
+| 색상 | 용도 |
 |-------|-------|
-| Red | Errors |
-| Green | Success messages |
-| Cyan | Node names and labels |
-| Yellow | Emphasis and values |
-| Dim | Status information |
+| 빨간색 | 에러 |
+| 초록색 | 성공 메시지 |
+| 시안 | 노드 이름과 label |
+| 노란색 | 강조와 값 |
+| 흐린색 | 상태 정보 |
 
-## Build Location
+## 빌드 위치
 
-After building with CMake:
+CMake로 빌드 후:
 
 ```
 build/src/gyeol_debugger/GyeolDebugger

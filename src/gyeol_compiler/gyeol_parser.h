@@ -161,6 +161,24 @@ bool convertPoToJson(const std::string& poPath,
                      const std::string& outputPath,
                      const std::string& localeHint = "",
                      std::string* errorOut = nullptr);
+bool exportStringsPOFromStory(const ICPDev::Gyeol::Schema::StoryT& story,
+                              const std::string& outputPath,
+                              std::string* errorOut = nullptr);
+bool exportLocaleTemplateFromStory(const ICPDev::Gyeol::Schema::StoryT& story,
+                                   const std::string& outputPath,
+                                   std::string* errorOut = nullptr);
+bool convertPoToLocaleJson(const std::string& poPath,
+                           const ICPDev::Gyeol::Schema::StoryT& story,
+                           const std::string& outputPath,
+                           const std::string& localeHint = "",
+                           std::string* errorOut = nullptr);
+bool validateLocaleJsonFile(const std::string& localePath,
+                            const ICPDev::Gyeol::Schema::StoryT& story,
+                            std::string* errorOut = nullptr);
+bool buildLocaleCatalog(const std::vector<std::string>& localePaths,
+                        const std::string& outputPath,
+                        const std::string& defaultLocale,
+                        std::string* errorOut = nullptr);
 }
 
 } // namespace Gyeol

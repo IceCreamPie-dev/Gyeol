@@ -1,32 +1,32 @@
-# Runner (C++ API)
+# Runner API (C++)
 
-**Namespace:** `Gyeol`
-**Header:** `#include "gyeol_runner.h"`
+**네임스페이스:** `Gyeol`
+**헤더:** `#include "gyeol_runner.h"`
 
-The core virtual machine that executes compiled Gyeol stories.
+컴파일된 Gyeol 스토리를 실행하는 핵심 가상 머신입니다.
 
-## Description
+## 설명
 
-`Runner` is the engine-agnostic VM that interprets compiled `.gyb` story binaries. It provides an event-driven `step()`/`choose()` API that can be integrated into any game engine or application.
+`Runner`는 컴파일된 `.gyb` 스토리 바이너리를 해석하는 엔진 독립적 VM입니다. 어떤 게임 엔진이나 애플리케이션에도 통합할 수 있는 이벤트 기반 `step()`/`choose()` API를 제공합니다.
 
-The Runner manages:
-- Story execution flow (program counter, current node)
-- Variable state
-- Call stack (for function calls)
-- Choice filtering (conditions, once/sticky/fallback modifiers)
-- Visit tracking
-- Random number generation
-- Save/load serialization
+Runner가 관리하는 항목:
+- 스토리 실행 흐름 (프로그램 카운터, 현재 노드)
+- 변수 상태
+- 콜 스택 (함수 호출용)
+- 선택지 필터링 (조건, once/sticky/fallback 수식어)
+- 방문 추적
+- 랜덤 넘버 생성
+- 저장/로드 직렬화
 
-## Tutorials
+## 튜토리얼
 
-- [Quick Start](../getting-started/quick-start.md)
-- [Architecture](../advanced/architecture.md)
+- [빠른 시작](../getting-started/quick-start.md)
+- [아키텍처](../advanced/architecture.md)
 - [Runtime Contract v1.1](../advanced/runtime-contract.md)
 
 ---
 
-## Types
+## 타입
 
 ### Variant
 
@@ -34,11 +34,11 @@ The Runner manages:
 struct Variant {
     enum Type { BOOL, INT, FLOAT, STRING, LIST };
     Type type;
-    // Access via: b (bool), i (int32_t), f (float), s (string), list (vector<string>)
+    // 접근 필드: b(bool), i(int32_t), f(float), s(string), list(vector<string>)
 };
 ```
 
-Variable value container. Create using static factory methods:
+변수 값 컨테이너입니다. 정적 팩토리 메서드로 생성합니다:
 
 ```cpp
 Variant::Bool(true)
@@ -48,7 +48,7 @@ Variant::String("hello")
 Variant::List({"item1", "item2"})
 ```
 
-See [Variant](class-variant.md) for details.
+자세한 내용은 [Variant](class-variant.md)를 참고하세요.
 
 ---
 
@@ -58,14 +58,14 @@ See [Variant](class-variant.md) for details.
 enum class StepType { LINE, CHOICES, COMMAND, WAIT, YIELD, END };
 ```
 
-| Value | Description |
+| 값 | 설명 |
 |-------|-------------|
-| `LINE` | A dialogue or narration line |
-| `CHOICES` | A menu with choices (call `choose()` to continue) |
-| `COMMAND` | An engine command (call `step()` to continue) |
-| `WAIT` | Execution is blocked until `resume()` is called |
-| `YIELD` | One-tick cooperative yield; call `step()` again |
-| `END` | Story has finished |
+| `LINE` | 대사 또는 나레이션 라인 |
+| `CHOICES` | 선택지가 있는 메뉴 (계속하려면 `choose()` 호출) |
+| `COMMAND` | 엔진 명령 (계속하려면 `step()` 호출) |
+| `WAIT` | `resume()` 전까지 실행이 멈춘 상태 |
+| `YIELD` | 1틱 양보 이벤트 (다음 `step()`에서 즉시 진행) |
+| `END` | 스토리 종료 |
 
 ---
 
@@ -74,14 +74,14 @@ enum class StepType { LINE, CHOICES, COMMAND, WAIT, YIELD, END };
 ```cpp
 struct StepResult {
     StepType type;
-    LineData line;                    // Valid when type == LINE
-    std::vector<ChoiceData> choices;  // Valid when type == CHOICES
-    CommandData command;              // Valid when type == COMMAND
-    WaitData wait;                    // Valid when type == WAIT
+    LineData line;                    // type == LINE일 때 유효
+    std::vector<ChoiceData> choices;  // type == CHOICES일 때 유효
+    CommandData command;              // type == COMMAND일 때 유효
+    WaitData wait;                    // type == WAIT일 때 유효
 };
 ```
 
-Returned by `step()`. Check `type` to determine which field to read.
+`step()`이 반환합니다. `type`을 확인하여 어떤 필드를 읽을지 결정합니다.
 
 ---
 
@@ -89,7 +89,7 @@ Returned by `step()`. Check `type` to determine which field to read.
 
 ```cpp
 struct LineData {
-    const char* character;  // nullptr for narration
+    const char* character;  // narration이면 nullptr
     const char* text;
     std::vector<std::pair<const char*, const char*>> tags;  // key-value metadata
 };
@@ -115,7 +115,7 @@ enum class CommandArgType { STRING, INT, FLOAT, BOOL, IDENTIFIER };
 
 struct CommandArgData {
     CommandArgType type;
-    std::string text; // STRING / IDENTIFIER
+    std::string text; // STRING 또는 IDENTIFIER
     int32_t intValue;
     float floatValue;
     bool boolValue;
@@ -129,11 +129,11 @@ struct CommandData {
 
 ---
 
-## Methods
+## 메서드
 
-### Core Execution
+### 핵심 실행
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `bool` | [start](#start)`(const uint8_t* buffer, size_t size)` |
 | `StepResult` | [step](#step)`()` |
@@ -142,50 +142,51 @@ struct CommandData {
 | `bool` | [isFinished](#isfinished)`() const` |
 | `bool` | [hasStory](#hasstory)`() const` |
 
-### Variable Access
+### 변수 접근
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `Variant` | [getVariable](#getvariable)`(const std::string& name) const` |
 | `void` | [setVariable](#setvariable)`(const std::string& name, const Variant& value)` |
 | `bool` | [hasVariable](#hasvariable)`(const std::string& name) const` |
 | `std::vector<std::string>` | [getVariableNames](#getvariablenames)`() const` |
 
-### Save / Load
+### 저장 / 로드
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `bool` | [saveState](#savestate)`(const std::string& filepath) const` |
 | `bool` | [loadState](#loadstate)`(const std::string& filepath)` |
-| `Snapshot` | [snapshot](#snapshot)`() const` |
-| `bool` | [restore](#restore)`(const Snapshot& snapshot)` |
 
-### Locale
+### 로케일
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `bool` | [loadLocale](#loadlocale)`(const std::string& path)` |
+| `bool` | [loadLocaleCatalog](#loadlocalecatalog)`(const std::string& path)` |
+| `bool` | [setLocale](#setlocale)`(const std::string& localeCode)` |
 | `void` | [clearLocale](#clearlocale)`()` |
 | `std::string` | [getLocale](#getlocale)`() const` |
+| `std::string` | [getResolvedLocale](#getresolvedlocale)`() const` |
 
-### Visit Tracking
+### 방문 추적
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `int32_t` | [getVisitCount](#getvisitcount)`(const std::string& nodeName) const` |
 | `bool` | [hasVisited](#hasvisited)`(const std::string& nodeName) const` |
 
-### Characters
+### 캐릭터
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `std::string` | [getCharacterProperty](#getcharacterproperty)`(const std::string& characterId, const std::string& key) const` |
 | `std::vector<std::string>` | [getCharacterNames](#getcharacternames)`() const` |
 | `std::string` | [getCharacterDisplayName](#getcharacterdisplayname)`(const std::string& characterId) const` |
 
-### Node Tags
+### 노드 태그
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `std::string` | [getNodeTag](#getnodetag)`(const std::string& nodeName, const std::string& key) const` |
 | `std::vector<std::pair<std::string, std::string>>` | [getNodeTags](#getnodetags)`(const std::string& nodeName) const` |
@@ -193,27 +194,13 @@ struct CommandData {
 
 ### RNG
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `void` | [setSeed](#setseed)`(uint32_t seed)` |
-| `uint32_t` | [getSeed](#getseed)`() const` |
-
-### Runtime Diagnostics
-
-| Return | Method |
-|--------|--------|
-| `const std::string&` | [getLastError](#getlasterror)`() const` |
-| `void` | [clearLastError](#clearlasterror)`()` |
-| `const ExecutionMetrics&` | [getMetrics](#getmetrics)`() const` |
-| `void` | [resetMetrics](#resetmetrics)`()` |
-| `void` | [setTraceEnabled](#settraceenabled)`(bool enabled, size_t maxEvents = 256)` |
-| `bool` | [isTraceEnabled](#istraceenabled)`() const` |
-| `const std::vector<TraceEvent>&` | [getTrace](#gettrace)`() const` |
-| `void` | [clearTrace](#cleartrace)`()` |
 
 ---
 
-## Method Descriptions
+## 메서드 설명
 
 ### start
 
@@ -221,9 +208,9 @@ struct CommandData {
 bool start(const uint8_t* buffer, size_t size)
 ```
 
-Initializes the Runner with a compiled `.gyb` buffer. Parses the FlatBuffers data, initializes global variables, builds caches (characters, node tags), resets visit counts and once-choice tracking, and jumps to the start node.
+컴파일된 `.gyb` 버퍼로 Runner를 초기화합니다. FlatBuffers 데이터를 파싱하고, 전역 변수를 초기화하며, 캐시(캐릭터, 노드 태그)를 구축하고, 방문 횟수와 once 선택지 추적을 리셋한 후, 시작 노드로 이동합니다.
 
-Returns `true` on success.
+성공 시 `true`를 반환합니다.
 
 ```cpp
 std::vector<uint8_t> data = loadFile("story.gyb");
@@ -241,16 +228,16 @@ if (runner.start(data.data(), data.size())) {
 StepResult step()
 ```
 
-Executes the next instruction and returns a `StepResult`. The result's `type` field determines how to proceed:
+다음 인스트럭션을 실행하고 `StepResult`를 반환합니다. 결과의 `type` 필드에 따라 진행 방법이 달라집니다:
 
-| Type | Action |
+| 타입 | 동작 |
 |------|--------|
-| `LINE` | Display dialogue, then call `step()` again |
-| `CHOICES` | Display choices, then call `choose(index)` |
-| `COMMAND` | Handle command, then call `step()` again |
-| `WAIT` | Pause game flow, call `resume()`, then call `step()` |
-| `YIELD` | 1-tick yield event, call `step()` again |
-| `END` | Story is finished |
+| `LINE` | 대사를 표시하고 `step()`을 다시 호출 |
+| `CHOICES` | 선택지를 표시하고 `choose(index)`를 호출 |
+| `COMMAND` | 명령을 처리하고 `step()`을 다시 호출 |
+| `WAIT` | 일시정지 상태, `resume()` 후 `step()` 재호출 |
+| `YIELD` | 1틱 양보 이벤트, `step()` 재호출 |
+| `END` | 스토리 종료 |
 
 ```cpp
 auto result = runner.step();
@@ -275,7 +262,7 @@ switch (result.type) {
 void choose(int index)
 ```
 
-Selects a choice by 0-based index and automatically advances the story. Must be called after `step()` returns `StepType::CHOICES`. Calling `choose()` during `WAIT` sets `last_error`.
+0부터 시작하는 인덱스로 선택지를 선택하고 자동으로 스토리를 진행합니다. `step()`이 `StepType::CHOICES`를 반환한 후 호출해야 합니다. WAIT 상태에서 `choose()`를 호출하면 `last_error`가 설정됩니다.
 
 ---
 
@@ -285,7 +272,7 @@ Selects a choice by 0-based index and automatically advances the story. Must be 
 bool resume()
 ```
 
-Resumes execution from `WAIT` state. Calling `resume()` when not waiting fails and sets `last_error`.
+WAIT 상태를 해제하고 다음 실행을 허용합니다. WAIT 상태가 아닐 때 호출하면 실패하고 `last_error`를 설정합니다.
 
 ---
 
@@ -295,7 +282,7 @@ Resumes execution from `WAIT` state. Calling `resume()` when not waiting fails a
 bool isFinished() const
 ```
 
-Returns `true` if the story has reached its end.
+스토리가 끝에 도달했으면 `true`를 반환합니다.
 
 ---
 
@@ -305,7 +292,7 @@ Returns `true` if the story has reached its end.
 bool hasStory() const
 ```
 
-Returns `true` if a story buffer has been loaded via `start()`.
+`start()`를 통해 스토리 버퍼가 로드되었으면 `true`를 반환합니다.
 
 ---
 
@@ -315,9 +302,9 @@ Returns `true` if a story buffer has been loaded via `start()`.
 Variant getVariable(const std::string& name) const
 ```
 
-Returns the current value of a variable. Returns `Variant::Int(0)` equivalent if the variable doesn't exist.
+변수의 현재 값을 반환합니다. 변수가 존재하지 않으면 `Variant::Int(0)`에 해당하는 값을 반환합니다.
 
-Check existence first with [hasVariable](#hasvariable).
+먼저 [hasVariable](#hasvariable)로 존재 여부를 확인하세요.
 
 ---
 
@@ -327,7 +314,7 @@ Check existence first with [hasVariable](#hasvariable).
 void setVariable(const std::string& name, const Variant& value)
 ```
 
-Sets or creates a variable.
+변수를 설정하거나 생성합니다.
 
 ```cpp
 runner.setVariable("hp", Variant::Int(100));
@@ -343,7 +330,7 @@ runner.setVariable("alive", Variant::Bool(true));
 bool hasVariable(const std::string& name) const
 ```
 
-Returns `true` if the variable exists.
+변수가 존재하면 `true`를 반환합니다.
 
 ---
 
@@ -353,7 +340,7 @@ Returns `true` if the variable exists.
 std::vector<std::string> getVariableNames() const
 ```
 
-Returns a list of all variable names currently in scope.
+현재 스코프에 있는 모든 변수 이름의 목록을 반환합니다.
 
 ---
 
@@ -363,15 +350,13 @@ Returns a list of all variable names currently in scope.
 bool saveState(const std::string& filepath) const
 ```
 
-Serializes the complete runner state to a `.gys` FlatBuffers binary file. Includes:
-- Current node and program counter
-- All variables (including shadowed ones in call frames)
-- Call stack
-- Pending choices (with modifiers)
-- Visit counts
-- Once-choice tracking
-- Deterministic RNG progression
-- Locale overlay and pending choice metadata trailer
+Runner의 전체 상태를 `.gys` FlatBuffers 바이너리 파일로 직렬화합니다. 포함 항목:
+- 현재 노드와 프로그램 카운터
+- 모든 변수 (콜 프레임의 섀도된 변수 포함)
+- 콜 스택
+- 대기 중인 선택지 (수식어 포함)
+- 방문 횟수
+- Once 선택지 추적 상태
 
 ---
 
@@ -381,27 +366,7 @@ Serializes the complete runner state to a `.gys` FlatBuffers binary file. Includ
 bool loadState(const std::string& filepath)
 ```
 
-Restores state from a `.gys` file. A story must already be loaded.
-
----
-
-### snapshot
-
-```cpp
-Snapshot snapshot() const
-```
-
-Captures the current runtime state in memory without writing a `.gys` file. The snapshot preserves the same core state as `saveState()`, plus deterministic RNG progression and pending choice metadata for rollback and replay.
-
----
-
-### restore
-
-```cpp
-bool restore(const Snapshot& snapshot)
-```
-
-Restores a previously captured in-memory snapshot. A story must already be loaded.
+`.gys` 파일에서 상태를 복원합니다. 스토리가 이미 로드되어 있어야 합니다.
 
 ---
 
@@ -411,10 +376,37 @@ Restores a previously captured in-memory snapshot. A story must already be loade
 bool loadLocale(const std::string& path)
 ```
 
-Loads a locale overlay from path.
-Supported formats:
-- `.json` runtime locale (`version`, optional `locale`, `entries`)
-- CSV overlay (backward compatibility)
+단일 로케일 오버레이 파일을 로드합니다.
+지원 포맷:
+- JSON v2 locale (`format: "gyeol-locale"`, `version: 2`, `line_entries`, 선택 `character_entries`)
+- JSON v1 locale (`version: 1`, `entries`) 하위 호환
+- CSV 오버레이 하위 호환
+
+---
+
+### loadLocaleCatalog
+
+```cpp
+bool loadLocaleCatalog(const std::string& path)
+```
+
+런타임 언어 전환/폴백을 위한 locale catalog (`format: "gyeol-locale-catalog"`, `version: 2`)를 로드합니다.
+
+---
+
+### setLocale
+
+```cpp
+bool setLocale(const std::string& localeCode)
+```
+
+다음 폴백 체인으로 로케일을 적용합니다:
+- exact locale (예: `ko-KR`)
+- base locale (`ko`)
+- catalog `default_locale`
+- 원본 JSON IR 텍스트/속성(property)
+
+체인 내에 사용 가능한 로케일이 하나도 없으면 `false`를 반환합니다.
 
 ---
 
@@ -424,7 +416,7 @@ Supported formats:
 void clearLocale()
 ```
 
-Removes the locale overlay, reverting to original text.
+로케일 오버레이를 제거하여 원본 텍스트로 되돌립니다.
 
 ---
 
@@ -434,7 +426,17 @@ Removes the locale overlay, reverting to original text.
 std::string getLocale() const
 ```
 
-Returns the current locale identifier, or empty string if none.
+요청된 로케일 코드를 반환하거나, 없으면 빈 문자열을 반환합니다.
+
+---
+
+### getResolvedLocale
+
+```cpp
+std::string getResolvedLocale() const
+```
+
+폴백 체인에서 실제로 적용된 로케일 코드를 반환합니다.
 
 ---
 
@@ -444,7 +446,7 @@ Returns the current locale identifier, or empty string if none.
 int32_t getVisitCount(const std::string& nodeName) const
 ```
 
-Returns how many times the named node has been entered.
+해당 노드에 진입한 횟수를 반환합니다.
 
 ---
 
@@ -454,7 +456,7 @@ Returns how many times the named node has been entered.
 bool hasVisited(const std::string& nodeName) const
 ```
 
-Returns `true` if the node has been visited at least once.
+해당 노드를 최소 한 번 방문했으면 `true`를 반환합니다.
 
 ---
 
@@ -464,7 +466,7 @@ Returns `true` if the node has been visited at least once.
 std::string getCharacterProperty(const std::string& characterId, const std::string& key) const
 ```
 
-Returns a character property value. Returns empty string if not found.
+캐릭터 속성 값을 반환합니다. 찾을 수 없으면 빈 문자열을 반환합니다.
 
 ---
 
@@ -474,7 +476,7 @@ Returns a character property value. Returns empty string if not found.
 std::vector<std::string> getCharacterNames() const
 ```
 
-Returns all defined character IDs.
+정의된 모든 캐릭터 ID를 반환합니다.
 
 ---
 
@@ -484,7 +486,7 @@ Returns all defined character IDs.
 std::string getCharacterDisplayName(const std::string& characterId) const
 ```
 
-Convenience method returning `displayName` first, then `name`, then the character ID.
+`displayName`을 우선 사용하고, 없으면 `name`, 그것도 없으면 캐릭터 ID를 반환하는 편의 메서드입니다.
 
 ---
 
@@ -494,7 +496,7 @@ Convenience method returning `displayName` first, then `name`, then the characte
 std::string getNodeTag(const std::string& nodeName, const std::string& key) const
 ```
 
-Returns the value of a metadata tag on a node. Returns empty string if not found.
+노드의 메타데이터 태그 값을 반환합니다. 찾을 수 없으면 빈 문자열을 반환합니다.
 
 ---
 
@@ -504,7 +506,7 @@ Returns the value of a metadata tag on a node. Returns empty string if not found
 std::vector<std::pair<std::string, std::string>> getNodeTags(const std::string& nodeName) const
 ```
 
-Returns all metadata tags on a node as key-value pairs.
+노드의 모든 메타데이터 태그를 키-값 쌍으로 반환합니다.
 
 ---
 
@@ -514,7 +516,7 @@ Returns all metadata tags on a node as key-value pairs.
 bool hasNodeTag(const std::string& nodeName, const std::string& key) const
 ```
 
-Returns `true` if the node has the specified tag.
+해당 노드에 지정된 태그가 있으면 `true`를 반환합니다.
 
 ---
 
@@ -524,107 +526,17 @@ Returns `true` if the node has the specified tag.
 void setSeed(uint32_t seed)
 ```
 
-Sets the RNG seed for deterministic random branch selection.
-
----
-
-### getSeed
-
-```cpp
-uint32_t getSeed() const
-```
-
-Returns the currently active runtime seed.
-
----
-
-### getLastError
-
-```cpp
-const std::string& getLastError() const
-```
-
-Returns the most recent runner error message.
-
----
-
-### clearLastError
-
-```cpp
-void clearLastError()
-```
-
-Clears the stored error message.
-
----
-
-### getMetrics
-
-```cpp
-const ExecutionMetrics& getMetrics() const
-```
-
-Returns execution counters for steps, visible results, random rolls, saves, loads, restores, and errors.
-
----
-
-### resetMetrics
-
-```cpp
-void resetMetrics()
-```
-
-Resets all execution metrics to zero.
-
----
-
-### setTraceEnabled
-
-```cpp
-void setTraceEnabled(bool enabled, size_t maxEvents = 256)
-```
-
-Enables or disables in-memory runtime trace capture and sets its maximum buffer size.
-
----
-
-### isTraceEnabled
-
-```cpp
-bool isTraceEnabled() const
-```
-
-Returns `true` if runtime trace capture is enabled.
-
----
-
-### getTrace
-
-```cpp
-const std::vector<TraceEvent>& getTrace() const
-```
-
-Returns the current runtime trace log. Events include `START`, `LINE`, `COMMAND`, `CHOICES`, `CHOOSE`, `SAVE`, `LOAD`, and `RESTORE`.
-
----
-
-### clearTrace
-
-```cpp
-void clearTrace()
-```
-
-Clears the in-memory runtime trace log.
+결정적 랜덤 분기 선택을 위한 RNG 시드를 설정합니다.
 
 ---
 
 ## Debug API
 
-The Runner also exposes a Debug API for the CLI debugger. See [Debugger](../tools/debugger.md) for usage.
+Runner는 CLI 디버거를 위한 Debug API도 제공합니다. 사용법은 [디버거](../tools/debugger.md)를 참고하세요.
 
-### Debug Methods
+### 디버그 메서드
 
-| Return | Method |
+| 반환 타입 | 메서드 |
 |--------|--------|
 | `void` | `addBreakpoint(nodeName, pc)` |
 | `void` | `removeBreakpoint(nodeName, pc)` |
@@ -641,7 +553,7 @@ The Runner also exposes a Debug API for the CLI debugger. See [Debugger](../tool
 | `uint32_t` | `getNodeInstructionCount(nodeName) const` |
 | `string` | `getInstructionInfo(nodeName, pc) const` |
 
-### Debug Types
+### 디버그 타입
 
 ```cpp
 struct DebugLocation {
@@ -658,7 +570,7 @@ struct CallFrameInfo {
 };
 ```
 
-## Example: Minimal Console Player
+## 예제: 최소 콘솔 플레이어
 
 ```cpp
 #include "gyeol_runner.h"

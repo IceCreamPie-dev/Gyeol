@@ -1,27 +1,27 @@
-# Binary Format
+# 바이너리 형식
 
-Gyeol uses [FlatBuffers](https://google.github.io/flatbuffers/) for its binary formats.
+Gyeol은 바이너리 형식에 [FlatBuffers](https://google.github.io/flatbuffers/)를 사용합니다.
 
-## File Types
+## 파일 타입
 
-| Extension | Format | Root Type | Description |
+| 확장자 | 형식 | 루트 타입 | 설명 |
 |-----------|--------|-----------|-------------|
-| `.gyb` | Gyeol Binary | `Story` | Compiled story data |
-| `.gys` | Gyeol Save | `SaveState` | Saved game state |
+| `.gyb` | Gyeol Binary | `Story` | 컴파일된 스토리 데이터 |
+| `.gys` | Gyeol Save | `SaveState` | 저장된 게임 상태 |
 
-Both formats are zero-copy FlatBuffers binaries for fast loading.
+두 형식 모두 빠른 로딩을 위한 zero-copy FlatBuffers 바이너리입니다.
 
-## Schema Location
+## 스키마 위치
 
 ```
 schemas/gyeol.fbs
 ```
 
-The schema defines all data types for both `.gyb` and `.gys` files. FlatBuffers C++ headers are auto-generated during the CMake build.
+스키마는 `.gyb`와 `.gys` 파일의 모든 데이터 타입을 정의합니다. FlatBuffers C++ 헤더는 CMake 빌드 중에 자동 생성됩니다.
 
-## Story Format (.gyb)
+## 스토리 형식 (.gyb)
 
-Root type: `Story`
+루트 타입: `Story`
 
 ```
 Story
@@ -36,10 +36,10 @@ Story
 
 ### String Pool
 
-All text in the story is stored in a central string pool. Other structures reference text by integer index into this pool. Benefits:
-- **Deduplication** - identical strings stored once
-- **Localization** - locale overlay replaces strings by index
-- **Memory efficiency** - zero-copy access via FlatBuffers
+스토리의 모든 텍스트는 중앙 String Pool에 저장됩니다. 다른 구조체는 이 풀에 대한 정수 인덱스로 텍스트를 참조합니다. 장점:
+- **중복 제거** - 동일한 문자열은 한 번만 저장
+- **로컬라이제이션** - 로케일 오버레이가 인덱스 기반으로 문자열 대체
+- **메모리 효율** - FlatBuffers zero-copy 접근
 
 ### Node
 
@@ -51,33 +51,33 @@ Node
   tags: [Tag]                     # Metadata tags (#key=value)
 ```
 
-### Instruction Types (OpData union)
+### 인스트럭션 타입 (OpData union)
 
-| Type | Fields | Description |
+| 타입 | 필드 | 설명 |
 |------|--------|-------------|
-| `Line` | character_id, text_id, voice_asset_id, tags | Dialogue or narration |
-| `Choice` | text_id, target_node_name_id, condition_var_id, choice_modifier | Menu option |
-| `Jump` | target_node_name_id, is_call, arg_exprs | Flow transfer |
-| `Command` | type_id, args | Engine command |
-| `SetVar` | var_name_id, value, expr, assign_op | Variable assignment |
-| `Condition` | var_name_id, op, compare_value, true/false jumps, expressions | Branch |
-| `Random` | branches | Weighted random selection |
-| `Return` | expr, value | Function return |
-| `CallWithReturn` | target_node_name_id, return_var_name_id, arg_exprs | Call + store result |
+| `Line` | character_id, text_id, voice_asset_id, tags | 대사 또는 나레이션 |
+| `Choice` | text_id, target_node_name_id, condition_var_id, choice_modifier | 메뉴 선택지 |
+| `Jump` | target_node_name_id, is_call, arg_exprs | 흐름 이동 |
+| `Command` | type_id, args | 엔진 명령 |
+| `SetVar` | var_name_id, value, expr, assign_op | 변수 할당 |
+| `Condition` | var_name_id, op, compare_value, true/false jumps, expressions | 조건 분기 |
+| `Random` | branches | 가중치 랜덤 선택 |
+| `Return` | expr, value | 함수 반환 |
+| `CallWithReturn` | target_node_name_id, return_var_name_id, arg_exprs | 호출 + 결과 저장 |
 
-### Value Types (ValueData union)
+### 값 타입 (ValueData union)
 
-| Type | Table | Field |
+| 타입 | 테이블 | 필드 |
 |------|-------|-------|
 | Bool | `BoolValue` | `val: bool` |
 | Int | `IntValue` | `val: int` |
 | Float | `FloatValue` | `val: float` |
-| String | `StringRef` | `index: int` (string pool index) |
-| List | `ListValue` | `items: [int]` (string pool indices) |
+| String | `StringRef` | `index: int` (String Pool 인덱스) |
+| List | `ListValue` | `items: [int]` (String Pool 인덱스) |
 
-### Expression System
+### 표현식 시스템
 
-Expressions are stored as RPN (Reverse Polish Notation) token lists:
+표현식은 RPN (역폴란드 표기법) 토큰 리스트로 저장됩니다:
 
 ```
 Expression
@@ -89,16 +89,16 @@ ExprToken
   var_name_id: int                # For PushVar, PushVisitCount, etc.
 ```
 
-ExprOp types:
+ExprOp 타입:
 
-| Category | Operations |
+| 카테고리 | 연산 |
 |----------|-----------|
-| Stack | `PushLiteral`, `PushVar` |
-| Arithmetic | `Add`, `Sub`, `Mul`, `Div`, `Mod`, `Negate` |
-| Comparison | `CmpEq`, `CmpNe`, `CmpGt`, `CmpLt`, `CmpGe`, `CmpLe` |
-| Logic | `And`, `Or`, `Not` |
-| Functions | `PushVisitCount`, `PushVisited` |
-| List | `ListContains`, `ListLength` |
+| 스택 | `PushLiteral`, `PushVar` |
+| 산술 | `Add`, `Sub`, `Mul`, `Div`, `Mod`, `Negate` |
+| 비교 | `CmpEq`, `CmpNe`, `CmpGt`, `CmpLt`, `CmpGe`, `CmpLe` |
+| 논리 | `And`, `Or`, `Not` |
+| 함수 | `PushVisitCount`, `PushVisited` |
+| 리스트 | `ListContains`, `ListLength` |
 
 ### Tag
 
@@ -108,9 +108,9 @@ Tag
   value_id: int                   # String pool index for value
 ```
 
-Used for both dialogue tags (`#mood=angry`) and node tags (`#difficulty=hard`).
+대사 태그(`#mood=angry`)와 노드 태그(`#difficulty=hard`) 모두에 사용됩니다.
 
-### Character Definition
+### 캐릭터 정의
 
 ```
 CharacterDef
@@ -118,7 +118,7 @@ CharacterDef
   properties: [Tag]               # Key-value properties
 ```
 
-### Choice Modifier
+### 선택지 수식어
 
 ```
 enum ChoiceModifier : byte {
@@ -129,9 +129,9 @@ enum ChoiceModifier : byte {
 }
 ```
 
-## Save Format (.gys)
+## 세이브 형식 (.gys)
 
-Root type: `SaveState`
+루트 타입: `SaveState`
 
 ```
 SaveState
@@ -185,9 +185,9 @@ SavedVisitCount
   count: uint32                   # Visit count
 ```
 
-## Building from Schema
+## 스키마에서 빌드
 
-FlatBuffers headers are generated automatically during CMake build via FetchContent. To regenerate manually:
+FlatBuffers 헤더는 CMake 빌드 중 FetchContent를 통해 자동으로 생성됩니다. 수동으로 재생성하려면:
 
 ```bash
 flatc --cpp schemas/gyeol.fbs -o src/gyeol_core/include/generated/
@@ -195,11 +195,11 @@ flatc --cpp schemas/gyeol.fbs -o src/gyeol_core/include/generated/
 
 ## FlatBuffers Object API
 
-The codebase uses two APIs:
+코드베이스는 두 가지 API를 사용합니다:
 
-| API | Usage | Pattern |
+| API | 용도 | 패턴 |
 |-----|-------|---------|
-| **Object API** (`*T` types) | Building/writing | `StoryT`, `NodeT`, `InstructionT` |
-| **Zero-copy API** | Reading | `GetRoot<Story>()`, pointer access |
+| **Object API** (`*T` 타입) | 빌드/쓰기 | `StoryT`, `NodeT`, `InstructionT` |
+| **Zero-copy API** | 읽기 | `GetRoot<Story>()`, 포인터 접근 |
 
-The Parser builds using Object API types, then calls `Pack()` to serialize. The Runner reads using zero-copy pointers for maximum performance.
+Parser는 Object API 타입으로 빌드한 후 `Pack()`을 호출하여 직렬화합니다. Runner는 최대 성능을 위해 zero-copy 포인터로 읽습니다.

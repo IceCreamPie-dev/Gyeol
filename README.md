@@ -1,46 +1,69 @@
-﻿# Gyeol (결)
+# Gyeol (결)
 
-**Write Once, Run Everywhere Story Engine**
+**한번 작성하고, 어디서든 실행하는 스토리 엔진**
 
-C++17 기반 고성능 인터랙티브 스토리텔링 엔진입니다. `.gyeol` 스크립트 하나만 작성하면 Godot, Unity(예정), WebAssembly(예정) 등 다양한 게임 엔진에서 수정 없이 즉시 플레이할 수 있습니다.
+Gyeol은 C++17 기반 인터랙티브 스토리 엔진입니다. 정식 소스 산출물은 canonical `JSON IR`(`format: "gyeol-json-ir"`, `format_version: 2`)로 고정되며, 런타임은 `Runner` VM을 통해 동일한 실행 규약을 유지합니다.
 
-Ren'Py의 연출력, Ink의 구조적 강점, Yarn Spinner의 유연한 미들웨어 설계를 하나로 통합했습니다.
+## 문서 바로가기
 
-## 주요 기능
+- [문서 홈](docs/index.md)
+- [문서 스타일 가이드](docs/style-guide.md)
+- [컴파일러 CLI](docs/tools/compiler.md)
+- [JSON IR 명세](docs/json-ir-spec.md)
+- [런타임 계약 (Runtime Contract v1.1)](docs/advanced/runtime-contract.md)
 
-- **스크립트 기반 내러티브** - Ren'Py 스타일 문법으로 캐릭터, 대사, 선택지, 분기 작성
-- **표현식 엔진** - 변수, 산술 연산(`$ hp = hp - 10`), 인라인 조건(`{if hp > 50}강함{endif}`)
-- **함수 시스템** - 매개변수 라벨, 반환값이 있는 call/return, 로컬 스코프 섀도잉
-- **방문 추적** - `visit_count()` / `visited()`를 통한 노드 방문 횟수 자동 추적
-- **로컬라이징** - 자동 생성 Line ID + POT/PO 워크플로 + JSON/CSV locale 오버레이
-- **저장/불러오기** - 변수, 호출 스택, 방문 횟수를 포함한 전체 상태 직렬화(FlatBuffers)
-- **랜덤 분기** - 시드 기반 재현 가능한 가중치 랜덤 분기
-- **제로카피 바이너리** - 빠른 로딩을 위한 `.gyb` (FlatBuffers) 포맷
-- **개발 도구** - LSP 서버, CLI 디버거, VS Code 확장
-- **엔진 바인딩** - Godot 4.3 GDExtension (시그널 기반 `StoryPlayer` 노드)
+## 핵심 기능
 
-### 런타임 계약 하이라이트
+- `JSON IR` 검증/컴파일/패치 파이프라인
+- `Runner` VM 기반 엔진 독립 실행 모델
+- `locale catalog` 기반 다국어 핫스위치 + fallback 체인
+- 상태 저장/복원(`.gys`) 및 conformance 테스트 체계
+- LSP/디버거/Godot 연동 도구 제공
 
-- `saveState()` / `loadState()`는 deterministic RNG 진행 상태와 pending choice 메타데이터를 보존합니다.
-- `snapshot()` / `restore()`는 `.gys` 파일과 별개인 메모리 내 체크포인트 경로를 제공합니다.
-- `getLastError()`, `getMetrics()`, `getTrace()`로 바인딩/도구에서 공통 진단 표면을 사용할 수 있습니다.
-- `getSeed()`로 현재 런타임 시드를 확인해 재현 실행과 디버깅에 활용할 수 있습니다.
-- 런타임 계약 규약과 conformance 스키마는 [`Runtime Contract v1.1`](docs/advanced/runtime-contract.md) 문서로 고정합니다.
+## 빠른 시작 (JSON IR)
 
-## 빠른 예제
+`hello.json` 예시:
 
-```gyeol
-label start:
-    hero "안녕, 나는 Gyeol이야. 같이 모험할래?"
-    menu:
-        "좋아, 같이 가자!" -> good
-        "아니, 난 패스." -> bad
+```json
+{
+  "format": "gyeol-json-ir",
+  "format_version": 2,
+  "version": "0.2.0",
+  "start_node_name": "start",
+  "nodes": [
+    {
+      "name": "start",
+      "instructions": [
+        { "type": "Line", "character": "hero", "text": "안녕! 모험을 시작할까?" },
+        { "type": "Choice", "text": "좋아", "target_node": "accept" },
+        { "type": "Choice", "text": "다음에", "target_node": "decline" }
+      ]
+    },
+    {
+      "name": "accept",
+      "instructions": [
+        { "type": "Line", "character": "hero", "text": "좋아, 출발하자!" }
+      ]
+    },
+    {
+      "name": "decline",
+      "instructions": [
+        { "type": "Line", "character": "hero", "text": "괜찮아, 다음에 보자." }
+      ]
+    }
+  ]
+}
+```
 
-label good:
-    hero "좋았어! 함께 출발하자!"
+컴파일 및 실행:
 
-label bad:
-    hero "그래... 다음에 보자."
+```bash
+# 빈 템플릿부터 시작할 때만 사용
+# GyeolCompiler --init-json-ir hello.json
+GyeolCompiler --lint-json-ir hello.json
+GyeolCompiler --validate-json-ir hello.json
+GyeolCompiler --compile-json-ir hello.json -o hello.gyb
+GyeolTest hello.gyb
 ```
 
 ## 빌드
@@ -50,7 +73,7 @@ label bad:
 - **Windows**: CMake 3.15+, Git, Visual Studio Build Tools (C++), Python 3
 - **Linux/macOS (Core 빌드)**: CMake 3.15+, Ninja, C++17 컴파일러, Git
 
-프로젝트는 로컬 툴체인(`.tools/`) 기준 워크플로를 기본으로 사용합니다.
+프로젝트는 로컬 툴체인(`.tools/`) 워크플로를 기본으로 사용합니다.
 
 ### 로컬 툴체인 부트스트랩 (Windows 권장)
 
@@ -61,24 +84,6 @@ label bad:
 ```
 
 `bootstrap-toolchains.ps1`는 고정 버전 설치를 먼저 시도하고, 실패하면 기본값으로 source-build fallback(`sdk-main-64bit`)을 자동 시도합니다.
-
-Windows ARM64에서는 prebuilt SDK가 없는 경우가 많아 source-build fallback이 일반 경로입니다. 보통 30~90분 이상 걸릴 수 있습니다.
-필수 도구:
-- Visual Studio Build Tools (Desktop C++)
-- Ninja (스크립트/VS 경로에서 자동 탐색)
-
-자동 fallback을 명시적으로 끄고 싶다면:
-
-```powershell
-.\tools\dev\bootstrap-toolchains.ps1 -DisableSourceBuildFallback
-```
-
-이 스크립트는 다음을 설정합니다:
-- `.tools/emsdk` (Emscripten)
-- `.tools/venv` (SCons, Ninja 포함)
-- 현재 셸용 PATH/EMSDK 환경
-
-> 전역 설치(CMake/SCons/emsdk)를 이미 쓰고 있다면 계속 사용할 수 있지만, 기본 권장 경로는 로컬 툴체인입니다.
 
 ### Core + 도구 빌드
 
@@ -91,15 +96,11 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-다음 타깃이 빌드됩니다: `GyeolCompiler`, `GyeolLSP`, `GyeolDebugger`, `GyeolTest`(콘솔 플레이어), 테스트 스위트.
-
 ### WASM 빌드
 
 ```powershell
 .\tools\dev\build-wasm.ps1
 ```
-
-산출물: `build_wasm/dist/gyeol.js`, `build_wasm/dist/*.wasm`
 
 ### GDExtension 빌드 (Godot)
 
@@ -107,178 +108,65 @@ ctest --test-dir build --output-on-failure
 .\tools\dev\build-godot.ps1
 ```
 
-출력: `demo/godot/bin/libgyeol.windows.template_debug.x86_64.dll`
-
-ARM64 타깃으로 빌드하려면:
-
-```powershell
-.\tools\dev\build-godot.ps1 -Arch arm64
-```
-
-## 사용법
-
-### 스크립트 컴파일
+## 컴파일러 CLI (JSON IR 전용)
 
 ```bash
-# .gyeol 텍스트 -> .gyb 바이너리
-GyeolCompiler story.gyeol -o story.gyb
+GyeolCompiler --init-json-ir <story.json>
+GyeolCompiler --lint-json-ir <story.json> [--format text|json]
+GyeolCompiler --validate-json-ir <story.json>
+GyeolCompiler --format-json-ir <story.json> [-o <story.json>]
+GyeolCompiler --compile-json-ir <story.json> -o <story.gyb>
+GyeolCompiler --export-graph-json <story.json> -o <story.graph.json>
+GyeolCompiler --preview-graph-patch <story.json> --patch <patch.json> [--format text|json]
+GyeolCompiler --apply-graph-patch <story.json> --patch <patch.json> -o <story.json>
 
-# 번역 템플릿(POT) 추출
-GyeolCompiler story.gyeol --export-strings-po strings.pot
-
-# (하위 호환) 번역 CSV 추출
-GyeolCompiler story.gyeol --export-strings strings.csv
-
-# 번역 PO -> 런타임 JSON locale 변환
-GyeolCompiler --po-to-json strings_ko.po -o ko.locale.json --locale ko
-
-# 그래프 계약(JSON) 내보내기
-GyeolCompiler story.gyeol --export-graph-json story.graph.json
-
-# 그래프 패치 검증
-GyeolCompiler story.gyeol --validate-graph-patch patch.json
-
-# 그래프 패치 적용 + canonical .gyeol 재출력
-GyeolCompiler story.gyeol --apply-graph-patch patch.json -o story.patched.gyeol
-
-# 그래프 패치 적용 + 기존 line_id 보존 맵 생성
-GyeolCompiler story.gyeol --apply-graph-patch patch.json --preserve-line-id -o story.patched.gyeol
-
-# 보존 맵으로 재컴파일 시 기존 line_id 복원
-GyeolCompiler story.patched.gyeol --line-id-map story.patched.gyeol.lineidmap.json -o story.patched.gyb
+GyeolCompiler --export-strings-po-from-json-ir <story.json> -o <strings.pot>
+GyeolCompiler --export-locale-template <story.json> -o <locale.template.json>
+GyeolCompiler --po-to-locale-json <strings.po> --story <story.json> -o <locale.json> [--locale <code>]
+GyeolCompiler --validate-locale-json <locale.json> --story <story.json>
+GyeolCompiler --build-locale-catalog <localeA.json> <localeB.json> ... -o <catalog.json> [--default-locale <code>]
 ```
 
-그래프 패치 워크플로는 `v1(구조 편집)` + `v2(텍스트/커맨드/식 + instruction 단위 편집)`을 지원합니다. `--preserve-line-id`를 쓰면 unchanged instruction의 line_id를 사이드카 맵으로 보존하고, 재컴파일 시 `--line-id-map`으로 복원할 수 있습니다.
+자세한 옵션은 [컴파일러 CLI 문서](docs/tools/compiler.md)를 참고하세요.
 
-### 콘솔에서 플레이
+## Godot 연동 요약
 
-```bash
-GyeolTest story.gyb
-```
+1. `JSON IR` 컴파일: `GyeolCompiler --compile-json-ir story.json -o demo/godot/story.gyb`
+2. `GDExtension` 빌드: `.\tools\dev\build-godot.ps1`
+3. Godot 4.3에서 `demo/godot/` 프로젝트 실행
 
-### 인터랙티브 디버깅
-
-```bash
-GyeolDebugger story.gyb
-# Commands: step, continue, break node:pc, locals, print var, where, info node
-```
-
-### Godot 연동
-
-1. 스토리 컴파일: `GyeolCompiler story.gyeol -o demo/godot/story.gyb`
-2. GDExtension 빌드(위 참조)
-3. Godot 4.3에서 `demo/godot/` 프로젝트 열기
-
-`StoryPlayer` 노드 API:
-
-| Method | Description |
-|--------|-------------|
-| `load_story(path)` | `.gyb` 파일 로드 |
-| `advance()` | 다음 단계 진행 |
-| `choose(index)` | 선택지 선택 |
-| `save_state(path)` / `load_state(path)` | 저장/불러오기 |
-| `get_variable(name)` / `set_variable(name, value)` | 변수 접근 |
-| `load_locale(path)` / `clear_locale()` | 로컬라이징 |
-
-Signals: `dialogue_line`, `choices_presented`, `command_received`, `story_ended`
-
-## 스크립트 문법
-
-```gyeol
-import "common.gyeol"            # 다른 파일 import
-
-$ health = 100                   # 전역 변수
-
-label greet(name, title):        # 매개변수가 있는 함수형 라벨
-    narrator "안녕, {name}!"      # 문자열 보간
-    narrator "{if health > 50}강해 보이네{else}약해 보이네{endif}"
-    @ play_sfx "hello.wav"       # 엔진 커맨드
-    menu:
-        "계속" -> next
-        "나가기" -> exit if has_key    # 조건부 선택지
-    if health > 80 -> strong
-    elif health > 30 -> normal
-    else -> weak
-    random:                      # 가중치 랜덤 분기
-        50 -> common_path
-        10 -> rare_path
-    $ result = call some_func(1, 2)    # 반환값 받는 call
-    return result + health       # 함수 반환
-
-label next:
-    narrator "계속 진행한다..."
-```
-
-## 개발 도구
-
-### VS Code 확장
-
-`editors/vscode/`에 위치하며 아래 기능을 제공합니다.
-- `.gyeol` 문법 하이라이팅
-- LSP 연동(자동완성, 정의로 이동, hover, 진단)
-- 디버거 어댑터
-
-### LSP 서버
-
-stdin/stdout JSON-RPC 기반입니다. 진단, 자동완성(키워드/라벨/변수/내장 함수), 정의로 이동, hover, 문서 심볼을 지원합니다.
+`StoryPlayer` API 상세는 [StoryPlayer 문서](docs/api/class-story-player.md)를 참고하세요.
 
 ## 테스트
 
-Google Test 기반 자동화 테스트 318개:
-
 ```bash
-# 전체 테스트 실행
 cd build && ctest --output-on-failure
-
-# 직접 실행
-./build/src/tests/GyeolTests       # 259 tests (Core + Parser + Runner)
-./build/src/tests/GyeolLSPTests    # 59 tests (LSP Analyzer + Server)
 ```
 
-### Runtime Contract Golden 운영
-
-Core golden transcript는 `src/tests/conformance/runtime_contract_v1_golden_core_cross.json` 단일 파일을 기준으로 관리합니다.
+런타임 계약 검증:
 
 ```powershell
-# Core/WASM/Godot adapter conformance를 CI와 동일 순서로 로컬 점검
-.\tools\dev\check-runtime-contract.ps1
-
-# 계약 변경이 의도된 경우에만 golden 재생성
-.\tools\dev\update-runtime-contract-golden.ps1
-```
-
-로컬 표준 게이트(권장 순서):
-
-```powershell
-.\tools\dev\bootstrap-toolchains.ps1
-.\tools\dev\activate-toolchains.ps1
-.\tools\dev\doctor-toolchains.ps1
-.\tools\dev\build-wasm.ps1
-.\tools\dev\build-godot.ps1
 .\tools\dev\check-runtime-contract.ps1
 ```
-
-- 일반 리팩터링 PR에서는 golden 변경을 금지합니다.
-- golden을 갱신한 PR에는 transcript diff 근거와 계약 변경 의도를 함께 남깁니다.
 
 ## 프로젝트 구조
 
 ```text
-schemas/gyeol.fbs           # FlatBuffers 스키마(전체 데이터 구조)
+schemas/gyeol.fbs           # FlatBuffers 스키마
 src/
-  gyeol_core/               # Core 엔진(Story 로더, Runner VM)
-  gyeol_compiler/           # .gyeol -> .gyb 컴파일러 + 파서
-  gyeol_lsp/                # Language Server Protocol 서버
-  gyeol_debugger/           # CLI 인터랙티브 디버거
+  gyeol_core/               # Core 엔진 (Story + Runner VM)
+  gyeol_compiler/           # JSON IR 검증/컴파일/패치 도구
+  gyeol_lsp/                # LSP 서버
+  gyeol_debugger/           # CLI 디버거
   tests/                    # Google Test 스위트
 bindings/
   godot_extension/          # Godot 4.3 GDExtension
 editors/
-  vscode/                   # VS Code 확장(gyeol-lang)
+  vscode/                   # VS Code 확장
 demo/
   godot/                    # Godot 데모 프로젝트
 tools/
-  dev/                      # 로컬 툴체인 부트스트랩/검증 스크립트
+  dev/                      # 로컬 툴체인/검증 스크립트
 ```
 
 ## 라이선스

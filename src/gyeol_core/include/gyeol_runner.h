@@ -134,8 +134,11 @@ public:
 
     // Locale (다국어) API
     bool loadLocale(const std::string& path);
+    bool loadLocaleCatalog(const std::string& path);
+    bool setLocale(const std::string& localeCode);
     void clearLocale();
     std::string getLocale() const;
+    std::string getResolvedLocale() const;
 
     // Visit tracking API
     int32_t getVisitCount(const std::string& nodeName) const;
@@ -281,8 +284,14 @@ private:
     std::mt19937 rng_;
 
     // Locale 오버레이 (다국어)
-    std::string currentLocale_;
+    std::string currentLocale_;   // requested locale (or loaded single-locale id)
+    std::string resolvedLocale_;  // exact/base/default resolved locale
     std::vector<std::string> localePool_; // string_pool과 병렬, 비어있으면 원본 사용
+    std::unordered_map<std::string, std::unordered_map<std::string, std::string>> localeCharacterProps_;
+    bool hasLocaleCatalog_ = false;
+    std::string catalogDefaultLocale_;
+    std::unordered_map<std::string, std::unordered_map<int32_t, std::string>> catalogLineEntriesByLocale_;
+    std::unordered_map<std::string, std::unordered_map<std::string, std::unordered_map<std::string, std::string>>> catalogCharacterEntriesByLocale_;
 
     // 노드 방문 횟수
     std::unordered_map<std::string, uint32_t> visitCounts_;
@@ -338,6 +347,8 @@ private:
     std::string nodeNameFromPtr(const void* nodePtr) const;
     const void* findNodeByName(const char* name) const;
     int32_t findStringInPool(const char* str) const;
+    std::string baseLocaleCode(const std::string& localeCode) const;
+    bool applyLocaleSelection(const std::string& requestedLocale, bool recordTraceEvent);
 };
 
 } // namespace Gyeol

@@ -87,6 +87,25 @@ int32_t findOrAddString(StoryT& story, const std::string& value) {
     return static_cast<int32_t>(story.string_pool.size() - 1);
 }
 
+int32_t findOrAddStringWithLineId(StoryT& story, const std::string& value, const std::string& lineId) {
+    for (size_t i = 0; i < story.string_pool.size(); ++i) {
+        if (story.string_pool[i] == value) {
+            if (!lineId.empty() && i < story.line_ids.size() && story.line_ids[i].empty()) {
+                story.line_ids[i] = lineId;
+            }
+            return static_cast<int32_t>(i);
+        }
+    }
+    story.string_pool.push_back(value);
+    if (!story.line_ids.empty() || !lineId.empty()) {
+        if (story.line_ids.size() + 1 < story.string_pool.size()) {
+            story.line_ids.resize(story.string_pool.size() - 1, "");
+        }
+        story.line_ids.push_back(lineId);
+    }
+    return static_cast<int32_t>(story.string_pool.size() - 1);
+}
+
 std::unique_ptr<StoryT> cloneStory(const StoryT& story) {
     flatbuffers::FlatBufferBuilder builder;
     auto* mutableStory = const_cast<StoryT*>(&story);
@@ -1231,7 +1250,11 @@ bool applyPatchOps(StoryT& story,
                 return false;
             }
             auto* line = instr->data.AsLine();
-            line->text_id = findOrAddString(story, text);
+            std::string preservedLineId;
+            if (line->text_id >= 0 && static_cast<size_t>(line->text_id) < story.line_ids.size()) {
+                preservedLineId = story.line_ids[static_cast<size_t>(line->text_id)];
+            }
+            line->text_id = findOrAddStringWithLineId(story, text, preservedLineId);
             continue;
         }
 
@@ -1252,7 +1275,11 @@ bool applyPatchOps(StoryT& story,
                 return false;
             }
             auto* choice = instr->data.AsChoice();
-            choice->text_id = findOrAddString(story, text);
+            std::string preservedLineId;
+            if (choice->text_id >= 0 && static_cast<size_t>(choice->text_id) < story.line_ids.size()) {
+                preservedLineId = story.line_ids[static_cast<size_t>(choice->text_id)];
+            }
+            choice->text_id = findOrAddStringWithLineId(story, text, preservedLineId);
             continue;
         }
 

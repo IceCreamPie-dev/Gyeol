@@ -1,48 +1,45 @@
-# Gyeol (결) Documentation
+# Gyeol (결) 문서
 
-**Write Once, Run Everywhere Story Engine**
+**한번 작성하고, 어디서든 실행하는 스토리 엔진**
 
-Gyeol is a high-performance interactive storytelling engine built in C++17. Write a single `.gyeol` script and play it on any game engine with zero modifications.
+Gyeol은 C++17로 구축된 고성능 인터랙티브 스토리텔링 엔진입니다. canonical `gyeol-json-ir` 스토리를 기준으로 어떤 게임 엔진에서도 동일한 런타임 동작을 유지할 수 있습니다.
 
-[:material-play-circle: **Try the Playground**](../playground/){ .md-button .md-button--primary } — Write and run Gyeol scripts directly in your browser.
+[:material-play-circle: **플레이그라운드**](../playground/){ .md-button .md-button--primary } — 브라우저에서 JSON IR 스토리를 작성하고 실행해 보세요.
 
 ---
 
-## Table of Contents
+## 목차
 
-### Getting Started
+### 시작하기
 
-- [Introduction](getting-started/introduction.md) - What is Gyeol?
-- [Installation](getting-started/installation.md) - Build from source
-- [Quick Start](getting-started/quick-start.md) - Your first story in 5 minutes
-- [Godot Integration](getting-started/godot-integration.md) - Using Gyeol in Godot 4.3
+- [소개](getting-started/introduction.md) - Gyeol이란?
+- [설치](getting-started/installation.md) - 소스에서 빌드하기
+- [빠른 시작](getting-started/quick-start.md) - 5분 만에 JSON IR 첫 실행
+- [JSON IR 편집 흐름](getting-started/json-ir-workflow.md) - 작성/검증/패치/번역 워크플로
+- [Godot 연동](getting-started/godot-integration.md) - Godot 4.3에서 Gyeol 사용하기
 
-### Scripting
+### API 레퍼런스
 
-- [Script Syntax](scripting/syntax.md) - Complete `.gyeol` language reference
-- [Variables & Expressions](scripting/variables-and-expressions.md) - Variables, arithmetic, logic
-- [Flow Control](scripting/flow-control.md) - Branches, conditions, menus, random
-- [Functions](scripting/functions.md) - Parameters, call/return, local scope
-- [Advanced Features](scripting/advanced-features.md) - Interpolation, inline conditions, tags, choice modifiers
+- [StoryPlayer (Godot)](api/class-story-player.md) - GDExtension 클래스 레퍼런스
+- [Runner (C++)](api/class-runner.md) - Core VM 클래스 레퍼런스
+- [Variant](api/class-variant.md) - 변수 타입 시스템
 
-### API Reference
+### 도구
 
-- [StoryPlayer (Godot)](api/class-story-player.md) - GDExtension class reference
-- [Runner (C++)](api/class-runner.md) - Core VM class reference
-- [Variant](api/class-variant.md) - Variable type system
+- [컴파일러 CLI](tools/compiler.md) - `GyeolCompiler` 명령어 레퍼런스
+- [디버거](tools/debugger.md) - `GyeolDebugger` 인터랙티브 디버거
 
-### Tools
+### 심화
 
-- [Compiler CLI](tools/compiler.md) - `GyeolCompiler` command reference
-- [Debugger](tools/debugger.md) - `GyeolDebugger` interactive debugger
-- [LSP Server](tools/lsp.md) - Language Server for editors
-- [VS Code Extension](tools/vscode.md) - Editor integration
+- [아키텍처](advanced/architecture.md) - 엔진 내부 구조 개요
+- [Runtime Contract v1.1](advanced/runtime-contract.md) - 실행/이벤트/상태 합치 규약
+- [저장과 불러오기](advanced/save-load.md) - 상태 직렬화
+- [다국어 지원](advanced/localization.md) - 다국어 로케일 시스템
+- [바이너리 포맷](advanced/binary-format.md) - `.gyb` / `.gys` FlatBuffers 스키마
 
-### Advanced
+## 문서 경로 정책
 
-- [Architecture](advanced/architecture.md) - Engine internals overview
-- [Runtime Contract v1.1](advanced/runtime-contract.md) - Execution/event/state conformance rules
-- [Save & Load](advanced/save-load.md) - State serialization
-- [Localization](advanced/localization.md) - Multi-language support
-- [Binary Format](advanced/binary-format.md) - `.gyb` / `.gys` FlatBuffers schema
-- [Release & PR Policy](advanced/release-policy.md) - Branch protection, CI gates, SemVer tags
+- 문서는 한국어 단일 체계로 운영합니다.
+- 문서 파일명은 기본 `.md`를 사용합니다(이전 언어 접미사 방식 미사용).
+- 교차 링크 작성 시 항상 현재 경로 기준의 `.md` 경로를 사용합니다.
+- 문서 작성/용어 기준은 [문서 스타일 가이드](style-guide.md)를 기준으로 합니다.

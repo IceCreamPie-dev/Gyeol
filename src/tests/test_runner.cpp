@@ -2,11 +2,13 @@
 #include "test_helpers.h"
 #include "gyeol_runner.h"
 #include "gyeol_generated.h"
+#include <nlohmann/json.hpp>
 #include <set>
 #include <fstream>
 #include <unordered_map>
 
 using namespace Gyeol;
+using json = nlohmann::json;
 
 // --- Runner 기본 흐름 ---
 
@@ -1215,6 +1217,19 @@ static void writeLocaleJSON(const std::string& jsonPath,
     ofs << "}\n";
 }
 
+static void writeLocaleCatalogJSON(const std::string& jsonPath,
+                                   const std::string& defaultLocale,
+                                   const json& locales) {
+    json j;
+    j["format"] = "gyeol-locale-catalog";
+    j["version"] = 2;
+    j["default_locale"] = defaultLocale;
+    j["locales"] = locales;
+
+    std::ofstream ofs(jsonPath);
+    ofs << j.dump(2);
+}
+
 // line_id를 특정 pool text로 찾는 헬퍼
 static std::string findLineIdForText(const std::vector<uint8_t>& buf, const std::string& text) {
     using namespace ICPDev::Gyeol::Schema;
@@ -1384,7 +1399,7 @@ TEST(RunnerTest, LocaleJsonUnsupportedVersionRejected) {
     Runner runner;
     ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
     EXPECT_FALSE(runner.loadLocale(jsonPath));
-    EXPECT_NE(runner.getLastError().find("Unsupported locale JSON version"), std::string::npos);
+    EXPECT_NE(runner.getLastError().find("Invalid locale JSON"), std::string::npos);
 
     std::remove(jsonPath.c_str());
 }
@@ -1477,6 +1492,125 @@ TEST(RunnerTest, LocaleClearRevert) {
     EXPECT_STREQ(r2.line.text, "Hello!");
 
     std::remove(csvPath.c_str());
+}
+
+TEST(RunnerTest, LocaleCatalogFallbackAndHotSwitch) {
+    auto buf = GyeolTest::compileScript(
+        "character hero:\n"
+        "    name: \"Hero Original\"\n"
+        "label start:\n"
+        "    hero \"Line A\"\n"
+        "    hero \"Line B\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    std::string lineAId = findLineIdForText(buf, "Line A");
+    std::string lineBId = findLineIdForText(buf, "Line B");
+    ASSERT_FALSE(lineAId.empty());
+    ASSERT_FALSE(lineBId.empty());
+
+    json locales = {
+        {"en", {
+            {"line_entries", {
+                {lineAId, "Hello EN"},
+                {lineBId, "Bye EN"}
+            }},
+            {"character_entries", {
+                {"hero", {{"name", "Hero EN"}}}
+            }}
+        }},
+        {"ko", {
+            {"line_entries", {
+                {lineAId, "안녕 KO"}
+            }},
+            {"character_entries", {
+                {"hero", {{"name", "용사"}}}
+            }}
+        }},
+        {"ko-KR", {
+            {"line_entries", {
+                {lineBId, "잘가 KR"}
+            }},
+            {"character_entries", {
+                {"hero", {{"displayName", "한국 주인공"}}}
+            }}
+        }}
+    };
+
+    std::string catalogPath = "test_locale_catalog.json";
+    writeLocaleCatalogJSON(catalogPath, "en", locales);
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    ASSERT_TRUE(runner.loadLocaleCatalog(catalogPath));
+    EXPECT_EQ(runner.getLocale(), "en");
+    EXPECT_EQ(runner.getResolvedLocale(), "en");
+
+    ASSERT_TRUE(runner.setLocale("ko-KR"));
+    EXPECT_EQ(runner.getLocale(), "ko-KR");
+    EXPECT_EQ(runner.getResolvedLocale(), "ko-KR");
+
+    auto r1 = runner.step();
+    ASSERT_EQ(r1.type, StepType::LINE);
+    EXPECT_STREQ(r1.line.text, "안녕 KO"); // exact miss -> base ko
+
+    ASSERT_TRUE(runner.setLocale("fr-FR")); // exact/base miss -> default en
+    EXPECT_EQ(runner.getLocale(), "fr-FR");
+    EXPECT_EQ(runner.getResolvedLocale(), "en");
+
+    auto r2 = runner.step();
+    ASSERT_EQ(r2.type, StepType::LINE);
+    EXPECT_STREQ(r2.line.text, "Bye EN");
+
+    std::remove(catalogPath.c_str());
+}
+
+TEST(RunnerTest, LocaleCatalogCharacterPropertyFallback) {
+    auto buf = GyeolTest::compileScript(
+        "character hero:\n"
+        "    name: \"Hero Original\"\n"
+        "label start:\n"
+        "    \"x\"\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    json locales = {
+        {"en", {
+            {"line_entries", json::object()},
+            {"character_entries", {
+                {"hero", {{"name", "Hero EN"}}}
+            }}
+        }},
+        {"ko", {
+            {"line_entries", json::object()},
+            {"character_entries", {
+                {"hero", {{"name", "용사"}}}
+            }}
+        }},
+        {"ko-KR", {
+            {"line_entries", json::object()},
+            {"character_entries", {
+                {"hero", {{"displayName", "한국 주인공"}}}
+            }}
+        }}
+    };
+
+    std::string catalogPath = "test_locale_catalog_character.json";
+    writeLocaleCatalogJSON(catalogPath, "en", locales);
+
+    Runner runner;
+    ASSERT_TRUE(GyeolTest::startRunner(runner, buf));
+    ASSERT_TRUE(runner.loadLocaleCatalog(catalogPath));
+    ASSERT_TRUE(runner.setLocale("ko-KR"));
+
+    EXPECT_EQ(runner.getCharacterProperty("hero", "name"), "용사");
+    EXPECT_EQ(runner.getCharacterDisplayName("hero"), "한국 주인공");
+
+    ASSERT_TRUE(runner.setLocale("ja-JP"));
+    EXPECT_EQ(runner.getResolvedLocale(), "en");
+    EXPECT_EQ(runner.getCharacterProperty("hero", "name"), "Hero EN");
+
+    std::remove(catalogPath.c_str());
 }
 
 // ========== 인라인 조건 텍스트 테스트 ==========

@@ -1,241 +1,190 @@
-# Compiler CLI
+# 컴파일러 CLI
 
-`GyeolCompiler` compiles `.gyeol` text scripts into `.gyb` binary files.
+`GyeolCompiler`는 JSON IR 전용 파이프라인(검증, 패치, 컴파일, 번역)을 제공하는 도구입니다.
 
-## Usage
-
-```bash
-GyeolCompiler <input.gyeol> [options]
-GyeolCompiler <input.gyeol> --export-graph-json <output.graph.json>
-GyeolCompiler <input.gyeol> --validate-graph-patch <patch.json>
-GyeolCompiler <input.gyeol> --apply-graph-patch <patch.json> -o <output.gyeol>
-```
-
-## Options
-
-| Option | Description |
-|--------|-------------|
-| `-o <path>` | Output `.gyb` file path (default: `story.gyb`) |
-| `--export-strings <path>` | Export translatable strings to CSV |
-| `--export-strings-po <path>` | Export translatable strings to POT (`msgctxt = line_id`) |
-| `--po-to-json <path>` | Convert PO translations to runtime locale JSON |
-| `--locale <code>` | Locale code override for `--po-to-json` |
-| `--export-graph-json <path>` | Export graph contract JSON (`gyeol-graph-doc`, v1) |
-| `--validate-graph-patch <path>` | Validate graph patch JSON (`gyeol-graph-patch`, v1/v2) |
-| `--apply-graph-patch <path>` | Apply graph patch (v1/v2) and emit canonical `.gyeol` |
-| `--preserve-line-id` | With `--apply-graph-patch`, emit `<output>.lineidmap.json` |
-| `--line-id-map <path>` | Apply `gyeol-line-id-map` v1 during compile |
-| `--analyze [path]` | Run static analysis (print to stdout or file) |
-| `-O` | Enable optimizations (constant folding, dead code removal) |
-| `-h`, `--help` | Show help message |
-| `--version` | Show version number |
-
-## Examples
-
-### Basic Compilation
+## 사용법
 
 ```bash
-# Compile to default output (story.gyb)
-GyeolCompiler my_story.gyeol
+GyeolCompiler --init-json-ir <story.json>
+GyeolCompiler --lint-json-ir <story.json> [--format text|json]
+GyeolCompiler --validate-json-ir <story.json>
+GyeolCompiler --format-json-ir <story.json> [-o <story.json>]
+GyeolCompiler --compile-json-ir <story.json> -o <story.gyb>
+GyeolCompiler --export-graph-json <story.json> -o <story.graph.json>
+GyeolCompiler --preview-graph-patch <story.json> --patch <patch.json> [--format text|json]
+GyeolCompiler --apply-graph-patch <story.json> --patch <patch.json> -o <story.json>
 
-# Specify output path
-GyeolCompiler my_story.gyeol -o game/assets/story.gyb
+GyeolCompiler --export-strings-po-from-json-ir <story.json> -o <strings.pot>
+GyeolCompiler --export-locale-template <story.json> -o <locale.template.json>
+GyeolCompiler --po-to-locale-json <strings.po> --story <story.json> -o <locale.json> [--locale <code>]
+GyeolCompiler --validate-locale-json <locale.json> --story <story.json>
+GyeolCompiler --build-locale-catalog <localeA.json> <localeB.json> ... -o <catalog.json> [--default-locale <code>]
 ```
 
-### Export Translation Strings
+## 핵심 명령
 
-```bash
-GyeolCompiler my_story.gyeol --export-strings strings.csv
-```
+| 명령 | 설명 |
+|------|------|
+| `--init-json-ir <story.json>` | 최소 실행 가능한 JSON IR 템플릿 생성 |
+| `--lint-json-ir <story.json> [--format text\|json]` | JSON IR 품질 검사(참조/타입/빈 값 등) |
+| `--validate-json-ir <story.json>` | `gyeol-json-ir` (`format_version: 2`) 검증 |
+| `--format-json-ir <story.json> [-o <story.json>]` | canonical 정렬/포맷으로 JSON IR 재출력 |
+| `--compile-json-ir <story.json> -o <story.gyb>` | JSON IR을 `.gyb`로 컴파일 |
+| `--export-graph-json <story.json> -o <story.graph.json>` | 그래프 계약 JSON(`gyeol-graph-doc`) 내보내기 |
+| `--preview-graph-patch <story.json> --patch <patch.json> [--format text\|json]` | 패치 적용 전 변경 요약(dry-run) |
+| `--apply-graph-patch <story.json> --patch <patch.json> -o <story.json>` | 그래프 패치 적용 후 canonical JSON IR 출력 |
 
-Generates a CSV file with Line IDs and original text for translation:
+## 번역 명령
 
-```csv
-id,text
-start:0:a3f2,"Hello, how are you?"
-start:1:b7c1,"Sure, let's go!"
-```
+| 명령 | 설명 |
+|------|------|
+| `--export-strings-po-from-json-ir <story.json> -o <strings.pot>` | JSON IR에서 POT 추출 (`line_id` + 캐릭터 속성(property) 키 포함) |
+| `--export-locale-template <story.json> -o <locale.template.json>` | Direct JSON 번역 템플릿(v2) 생성 |
+| `--po-to-locale-json <strings.po> --story <story.json> -o <locale.json> [--locale <code>]` | 스토리 키 검증 포함 PO -> locale JSON v2 변환 |
+| `--validate-locale-json <locale.json> --story <story.json>` | locale JSON의 키/타입을 스토리 기준 검증 |
+| `--build-locale-catalog <localeA.json> <localeB.json> ... -o <catalog.json> [--default-locale <code>]` | 여러 locale JSON을 catalog로 병합 |
 
-```bash
-GyeolCompiler my_story.gyeol --export-strings-po strings.pot
-```
+## 그래프 패치 옵션
 
-Generates a POT template where each entry uses `msgctxt` as Gyeol `line_id`.
+| 옵션 | 설명 |
+|------|------|
+| `--preserve-line-id` | `--apply-graph-patch`와 함께 `<output>.lineidmap.json` 생성 |
+| `--line-id-map-out <path>` | line-id 맵 출력 경로 지정 |
 
-### PO to Runtime JSON
+## 진단 출력 규격
 
-```bash
-GyeolCompiler --po-to-json strings_ko.po -o ko.locale.json --locale ko
-```
+`--lint-json-ir --format json`과 패치 프리뷰 오류 출력은 아래 필드를 공통으로 사용합니다.
 
-Output JSON schema:
+- `code`
+- `severity`
+- `path`
+- `node`
+- `instruction_index`
+- `message`
+- `hint`
+
+예시:
 
 ```json
 {
-  "version": 1,
-  "locale": "ko",
-  "entries": {
-    "start:0:a3f2": "안녕하세요!"
+  "diagnostics": [
+    {
+      "code": "IR_TARGET_MISSING",
+      "severity": "error",
+      "path": "story.json",
+      "node": "start",
+      "instruction_index": 4,
+      "message": "Choice의 target_node가 존재하지 않습니다.",
+      "hint": "target_node를 존재하는 노드 이름으로 수정하세요."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "total": 1
   }
 }
 ```
 
-### Static Analysis
+## 호환 명령
+
+| 명령 | 설명 |
+|------|------|
+| `--po-to-json <input.po> -o <output.json> [--locale <code>]` | 레거시 locale v1 변환기 |
+
+## 예시
+
+### JSON IR 검증/컴파일
 
 ```bash
-# Print analysis to stdout
-GyeolCompiler my_story.gyeol --analyze
-
-# Write analysis to file
-GyeolCompiler my_story.gyeol --analyze report.txt
+GyeolCompiler --init-json-ir story.json
+GyeolCompiler --lint-json-ir story.json
+GyeolCompiler --validate-json-ir story.json
+GyeolCompiler --compile-json-ir story.json -o story.gyb
 ```
 
-### Graph Contract / Patch Workflow
+### 그래프 편집 워크플로 (JSON IR canonical)
 
 ```bash
-# Export graph doc
-GyeolCompiler my_story.gyeol --export-graph-json story.graph.json
+# JSON IR에서 그래프 문서(graph doc) 추출
+GyeolCompiler --export-graph-json story.json -o story.graph.json
 
-# Validate patch
-GyeolCompiler my_story.gyeol --validate-graph-patch patch.json
+# 패치 적용 전 변경량 미리 확인
+GyeolCompiler --preview-graph-patch story.json --patch patch.json --format text
 
-# Apply patch (atomic: no output written on failure)
-GyeolCompiler my_story.gyeol --apply-graph-patch patch.json -o story.patched.gyeol
+# 패치(patch) 적용 후 canonical JSON IR 재출력
+GyeolCompiler --apply-graph-patch story.json --patch patch.json -o story.patched.json
 
-# Apply patch + preserve existing line_id for unchanged instructions
-GyeolCompiler my_story.gyeol --apply-graph-patch patch.json --preserve-line-id -o story.patched.gyeol
-
-# Recompile patched script with preserved IDs
-GyeolCompiler story.patched.gyeol --line-id-map story.patched.gyeol.lineidmap.json -o story.patched.gyb
+# line_id 보존 맵도 함께 생성
+GyeolCompiler --apply-graph-patch story.json --patch patch.json --preserve-line-id -o story.patched.json
 ```
 
-Graph doc header:
+### PO + Direct JSON 번역
+
+```bash
+# JSON IR 기반 POT 추출
+GyeolCompiler --export-strings-po-from-json-ir story.json -o strings.pot
+
+# PO -> locale JSON v2
+GyeolCompiler --po-to-locale-json strings_ko.po --story story.json -o ko.locale.json --locale ko
+
+# 로케일 JSON 검증
+GyeolCompiler --validate-locale-json ko.locale.json --story story.json
+
+# 런타임 핫스위치/폴백용 catalog 빌드
+GyeolCompiler --build-locale-catalog ko.locale.json en.locale.json -o locales.catalog.json --default-locale en
+```
+
+### 로케일 v2 단일 파일 형태
 
 ```json
 {
-  "format": "gyeol-graph-doc",
-  "version": 1,
-  "start_node": "start"
-}
-```
-
-`gyeol-graph-doc` includes deterministic `edge_id` and per-node `instructions[]` entries with stable snapshot IDs (`instruction_id`, e.g. `n0:i3`) for v2 patching.
-
-Graph patch header:
-
-```json
-{
-  "format": "gyeol-graph-patch",
+  "format": "gyeol-locale",
   "version": 2,
-  "ops": []
+  "locale": "ko",
+  "line_entries": {
+    "start:0:a3f2": "안녕하세요"
+  },
+  "character_entries": {
+    "hero": {
+      "displayName": "주인공"
+    }
+  }
 }
 ```
 
-Supported patch ops in v1:
-- `add_node`
-- `rename_node` (updates all references automatically)
-- `delete_node` (`redirect_target` required)
-- `retarget_edge` (`edge_id` required)
-- `set_start_node`
+### 로케일 카탈로그(locale catalog) v2 형태
 
-Additional ops in v2:
-- `update_line_text`
-- `update_choice_text`
-- `update_command`
-- `update_expression`
-- `insert_instruction`
-- `delete_instruction`
-- `move_instruction`
-
-Instruction reference rule in v2:
-- `instruction_id` is resolved against the patch-start snapshot.
-- Instructions inserted by the same patch cannot be referenced by `instruction_id` in that patch.
-
-## Error Handling
-
-The compiler collects **all** errors (doesn't stop at the first one):
-
-```bash
-$ GyeolCompiler broken.gyeol
-Error: [line 5] Unknown jump target: 'missing_node'
-Error: [line 12] Unknown choice target: 'also_missing'
-Error: [line 18] Duplicate label name: 'start'
-Compilation failed with 3 errors.
+```json
+{
+  "format": "gyeol-locale-catalog",
+  "version": 2,
+  "default_locale": "en",
+  "locales": {
+    "ko": {
+      "line_entries": {
+        "start:0:a3f2": "안녕하세요"
+      },
+      "character_entries": {
+        "hero": {
+          "displayName": "주인공"
+        }
+      }
+    }
+  }
+}
 ```
 
-### Error Categories
+## 종료 코드
 
-| Category | Example |
-|----------|---------|
-| Syntax error | Malformed line, missing colon on label |
-| Unknown target | Jump/call/choice referencing non-existent label |
-| Duplicate label | Two labels with the same name |
-| Import error | File not found, circular import |
-| Parameter error | Duplicate parameter name, unclosed parentheses |
+| 코드 | 의미 |
+|------|------|
+| `0` | 성공 |
+| `1` | 검증/컴파일/입출력 오류 |
 
-## Multi-file Compilation
+## 빌드 경로
 
-When a script uses `import`, the compiler resolves all imports:
-
-```gyeol
-# main.gyeol
-import "characters.gyeol"
-import "chapter1/intro.gyeol"
-
-label start:
-    call intro
-```
-
-```bash
-# Only specify the main file - imports are resolved automatically
-GyeolCompiler main.gyeol -o game.gyb
-```
-
-- Import paths are relative to the importing file
-- Circular imports are detected and reported
-- All files are merged into a single `.gyb`
-- The start node is the first label in the main file
-
-## Output Format
-
-The `.gyb` file is a FlatBuffers binary containing:
-
-| Section | Description |
-|---------|-------------|
-| `version` | Schema version string |
-| `string_pool` | All unique text strings (deduplicated) |
-| `line_ids` | Translation Line IDs (parallel to string_pool) |
-| `global_vars` | Initial variable declarations |
-| `nodes` | All story nodes with instructions |
-| `start_node_name` | Entry point node name |
-| `characters` | Character definitions |
-
-See [Binary Format](../advanced/binary-format.md) for the full schema.
-
-## Line ID Format
-
-Auto-generated Line IDs for localization:
-
-```
-{node_name}:{instruction_index}:{hash4}
-```
-
-- `node_name` - the containing label name
-- `instruction_index` - 0-based instruction position
-- `hash4` - 4-digit hex from FNV-1a hash of the text
-
-Only translatable text (dialogue, choice text) gets Line IDs. Structural text (node names, variable names, commands) has empty Line IDs.
-
-## Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| `0` | Success |
-| `1` | Compilation error or file error |
-
-## Build Location
-
-After building with CMake:
+CMake 빌드 후:
 
 ```
 build/src/gyeol_compiler/GyeolCompiler

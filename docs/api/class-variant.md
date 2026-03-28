@@ -1,29 +1,29 @@
-# Variant
+# Variant 타입
 
-**Namespace:** `Gyeol`
-**Header:** `#include "gyeol_runner.h"`
+**네임스페이스:** `Gyeol`
+**헤더:** `#include "gyeol_runner.h"`
 
-Variable value container for the Gyeol runtime.
+Gyeol 런타임의 변수 값 컨테이너입니다.
 
-## Description
+## 설명
 
-`Variant` is a tagged union that stores variable values in the Gyeol runtime. Each variable in a story has a Variant holding its current value.
+`Variant`는 Gyeol 런타임에서 변수 값을 저장하는 태그 유니온입니다. 스토리의 각 변수는 현재 값을 담고 있는 Variant를 가집니다.
 
-## Type Enum
+## 타입 열거형
 
 ```cpp
 enum Type { BOOL, INT, FLOAT, STRING, LIST };
 ```
 
-| Type | C++ Field | Size | Description |
+| 타입 | C++ 필드 | 크기 | 설명 |
 |------|-----------|------|-------------|
-| `BOOL` | `b` | `bool` | Boolean value |
-| `INT` | `i` | `int32_t` | 32-bit signed integer |
-| `FLOAT` | `f` | `float` | 32-bit floating point |
-| `STRING` | `s` | `std::string` | UTF-8 string |
-| `LIST` | `list` | `std::vector<std::string>` | List of strings |
+| `BOOL` | `b` | `bool` | 불리언 값 |
+| `INT` | `i` | `int32_t` | 32비트 부호 있는 정수 |
+| `FLOAT` | `f` | `float` | 32비트 부동소수점 |
+| `STRING` | `s` | `std::string` | UTF-8 문자열 |
+| `LIST` | `list` | `std::vector<std::string>` | 문자열 리스트 |
 
-## Factory Methods
+## 팩토리 메서드
 
 ```cpp
 static Variant Bool(bool v);
@@ -31,12 +31,12 @@ static Variant Int(int32_t v);
 static Variant Float(float v);
 static Variant String(const std::string& v);
 static Variant List(const std::vector<std::string>& v);
-static Variant List(std::vector<std::string>&& v);  // Move version
+static Variant List(std::vector<std::string>&& v);  // 이동(move) 버전
 ```
 
-## Usage
+## 사용법
 
-### Creating Variants
+### Variant 생성
 
 ```cpp
 auto hp = Variant::Int(100);
@@ -46,7 +46,7 @@ auto speed = Variant::Float(3.14f);
 auto items = Variant::List({"sword", "shield"});
 ```
 
-### Reading Variants
+### Variant 읽기
 
 ```cpp
 Variant v = runner.getVariable("hp");
@@ -61,7 +61,7 @@ switch (v.type) {
 }
 ```
 
-### Setting Variables
+### 변수 설정
 
 ```cpp
 runner.setVariable("hp", Variant::Int(100));
@@ -69,23 +69,23 @@ runner.setVariable("name", Variant::String("Hero"));
 runner.setVariable("alive", Variant::Bool(true));
 ```
 
-## Type Mapping
+## 타입 매핑
 
-### Gyeol Script to Variant
+### Gyeol 스크립트에서 Variant로
 
-| Script Value | Variant Type |
+| 스크립트 값 | Variant 타입 |
 |-------------|-------------|
 | `true` / `false` | `BOOL` |
 | `42`, `-10` | `INT` |
 | `3.14` | `FLOAT` |
 | `"hello"` | `STRING` |
-| `+= "item"` | `LIST` (created by append) |
+| `+= "item"` | `LIST` (append로 생성) |
 
-### Variant to Godot
+### Variant에서 Godot로
 
-When used through the GDExtension StoryPlayer:
+GDExtension StoryPlayer를 통해 사용할 때:
 
-| Variant Type | Godot Type |
+| Variant 타입 | Godot 타입 |
 |-------------|------------|
 | `BOOL` | `bool` |
 | `INT` | `int` |
@@ -93,45 +93,45 @@ When used through the GDExtension StoryPlayer:
 | `STRING` | `String` |
 | `LIST` | `Array[String]` |
 
-### Godot to Variant
+### Godot에서 Variant로
 
-| Godot Type | Variant Type |
+| Godot 타입 | Variant 타입 |
 |-----------|-------------|
 | `bool` | `BOOL` |
 | `int` | `INT` |
 | `float` | `FLOAT` |
 | `String` | `STRING` |
-| `Array` | `LIST` (elements converted to String) |
+| `Array` | `LIST` (요소가 String으로 변환됨) |
 
-## Arithmetic Behavior
+## 산술 동작
 
-| Operation | INT + INT | INT + FLOAT | FLOAT + FLOAT |
+| 연산 | INT + INT | INT + FLOAT | FLOAT + FLOAT |
 |-----------|-----------|-------------|---------------|
 | `+` | INT | FLOAT | FLOAT |
 | `-` | INT | FLOAT | FLOAT |
 | `*` | INT | FLOAT | FLOAT |
-| `/` | INT (truncated) | FLOAT | FLOAT |
-| `%` | INT | N/A | N/A |
+| `/` | INT (절삭) | FLOAT | FLOAT |
+| `%` | INT | 해당 없음 | 해당 없음 |
 
-## Truthiness
+## 참/거짓 판정 (Truthiness)
 
-Used in conditions and inline `{if}` expressions:
+조건문과 인라인 `{if}` 표현식에서 사용됩니다:
 
-| Type | Truthy | Falsy |
+| 타입 | 참 (Truthy) | 거짓 (Falsy) |
 |------|--------|-------|
 | BOOL | `true` | `false` |
-| INT | non-zero | `0` |
-| FLOAT | non-zero | `0.0` |
-| STRING | non-empty | `""` |
+| INT | 0이 아닌 값 | `0` |
+| FLOAT | 0이 아닌 값 | `0.0` |
+| STRING | 비어있지 않은 문자열 | `""` |
 
-## String Conversion
+## 문자열 변환
 
-When interpolated in text (`{variable}`), Variants convert to strings:
+텍스트에서 보간될 때 (`{variable}`), Variant는 다음과 같이 문자열로 변환됩니다:
 
-| Type | Format |
+| 타입 | 형식 |
 |------|--------|
-| BOOL | `"true"` or `"false"` |
-| INT | Decimal (e.g., `"42"`) |
-| FLOAT | Decimal with fraction (e.g., `"3.140000"`) |
-| STRING | As-is |
-| LIST | Comma-separated (e.g., `"sword, shield"`) |
+| BOOL | `"true"` 또는 `"false"` |
+| INT | 10진수 (예: `"42"`) |
+| FLOAT | 소수 포함 (예: `"3.140000"`) |
+| STRING | 그대로 |
+| LIST | 쉼표 구분 (예: `"sword, shield"`) |

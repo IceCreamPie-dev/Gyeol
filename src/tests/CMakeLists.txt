@@ -5,6 +5,8 @@ add_executable(GyeolTests
     test_story.cpp
     test_saveload.cpp
     test_json_export.cpp
+    test_json_ir_reader.cpp
+    test_json_ir_tooling.cpp
     test_graph_tools.cpp
     test_runtime_contract.cpp
     runtime_contract_harness.cpp

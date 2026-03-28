@@ -1,5 +1,6 @@
 #include "gyeol_runner.h"
 #include "gyeol_generated.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -103,7 +104,7 @@ bool parseJsonString(JsonCursor& c, std::string& out) {
             case 't': out.push_back('\t'); break;
             case 'u': {
                 if (c.pos + 4 > c.text.size()) return false;
-                c.pos += 4; // keep UTF-8 source as-is for this lightweight parser
+                c.pos += 4;
                 break;
             }
             default:
@@ -143,7 +144,7 @@ bool skipJsonArray(JsonCursor& c) {
 }
 
 bool skipJsonLiteral(JsonCursor& c, const char* lit) {
-    size_t n = std::strlen(lit);
+    const size_t n = std::strlen(lit);
     if (c.pos + n > c.text.size()) return false;
     if (c.text.compare(c.pos, n, lit) != 0) return false;
     c.pos += n;
@@ -217,27 +218,56 @@ bool parseJsonStringMap(JsonCursor& c, std::unordered_map<std::string, std::stri
     skipWs(c);
     if (consume(c, '}')) return true;
     while (true) {
-        std::string k;
-        std::string v;
-        if (!parseJsonString(c, k)) return false;
+        std::string key;
+        std::string value;
+        if (!parseJsonString(c, key)) return false;
         if (!consume(c, ':')) return false;
-        if (!parseJsonString(c, v)) return false;
-        out[k] = v;
+        if (!parseJsonString(c, value)) return false;
+        out[key] = value;
         skipWs(c);
         if (consume(c, '}')) return true;
         if (!consume(c, ',')) return false;
     }
 }
 
-bool parseLocaleJson(const std::string& jsonText,
-                     int& version,
-                     std::string& locale,
-                     std::unordered_map<std::string, std::string>& entries) {
+bool parseJsonNestedStringMap(
+    JsonCursor& c,
+    std::unordered_map<std::string, std::unordered_map<std::string, std::string>>& out) {
+    if (!consume(c, '{')) return false;
+    skipWs(c);
+    if (consume(c, '}')) return true;
+    while (true) {
+        std::string outerKey;
+        if (!parseJsonString(c, outerKey)) return false;
+        if (!consume(c, ':')) return false;
+        std::unordered_map<std::string, std::string> inner;
+        if (!parseJsonStringMap(c, inner)) return false;
+        out[outerKey] = std::move(inner);
+        skipWs(c);
+        if (consume(c, '}')) return true;
+        if (!consume(c, ',')) return false;
+    }
+}
+
+struct SingleLocalePayload {
+    std::string locale;
+    std::unordered_map<std::string, std::string> lineEntries;
+    std::unordered_map<std::string, std::unordered_map<std::string, std::string>> characterEntries;
+};
+
+struct LocaleCatalogPayload {
+    std::string defaultLocale;
+    std::unordered_map<std::string, std::unordered_map<std::string, std::string>> lineEntriesByLocale;
+    std::unordered_map<std::string, std::unordered_map<std::string, std::unordered_map<std::string, std::string>>> characterEntriesByLocale;
+};
+
+bool parseSingleLocaleV1(const std::string& jsonText, SingleLocalePayload& payload) {
     JsonCursor c{jsonText};
     if (!consume(c, '{')) return false;
 
     bool hasVersion = false;
     bool hasEntries = false;
+    int version = 0;
 
     skipWs(c);
     if (consume(c, '}')) return false;
@@ -250,9 +280,9 @@ bool parseLocaleJson(const std::string& jsonText,
             if (!parseJsonInt(c, version)) return false;
             hasVersion = true;
         } else if (key == "locale") {
-            if (!parseJsonString(c, locale)) return false;
+            if (!parseJsonString(c, payload.locale)) return false;
         } else if (key == "entries") {
-            if (!parseJsonStringMap(c, entries)) return false;
+            if (!parseJsonStringMap(c, payload.lineEntries)) return false;
             hasEntries = true;
         } else {
             if (!skipJsonValue(c)) return false;
@@ -262,13 +292,215 @@ bool parseLocaleJson(const std::string& jsonText,
         if (consume(c, '}')) break;
         if (!consume(c, ',')) return false;
     }
+    skipWs(c);
+    return c.pos == c.text.size() && hasVersion && hasEntries && version == 1;
+}
+
+bool parseSingleLocaleV2(const std::string& jsonText, SingleLocalePayload& payload) {
+    JsonCursor c{jsonText};
+    if (!consume(c, '{')) return false;
+
+    bool hasVersion = false;
+    bool hasFormat = false;
+    int version = 0;
+    std::string format;
 
     skipWs(c);
-    if (c.pos != c.text.size()) return false;
-    return hasVersion && hasEntries;
+    if (consume(c, '}')) return false;
+    while (true) {
+        std::string key;
+        if (!parseJsonString(c, key)) return false;
+        if (!consume(c, ':')) return false;
+
+        if (key == "format") {
+            if (!parseJsonString(c, format)) return false;
+            hasFormat = true;
+        } else if (key == "version") {
+            if (!parseJsonInt(c, version)) return false;
+            hasVersion = true;
+        } else if (key == "locale") {
+            if (!parseJsonString(c, payload.locale)) return false;
+        } else if (key == "line_entries") {
+            if (!parseJsonStringMap(c, payload.lineEntries)) return false;
+        } else if (key == "character_entries") {
+            if (!parseJsonNestedStringMap(c, payload.characterEntries)) return false;
+        } else {
+            if (!skipJsonValue(c)) return false;
+        }
+
+        skipWs(c);
+        if (consume(c, '}')) break;
+        if (!consume(c, ',')) return false;
+    }
+    skipWs(c);
+    return c.pos == c.text.size() && hasFormat && hasVersion &&
+           format == "gyeol-locale" && version == 2;
+}
+
+bool parseLocaleCatalog(const std::string& jsonText, LocaleCatalogPayload& payload) {
+    JsonCursor c{jsonText};
+    if (!consume(c, '{')) return false;
+
+    bool hasFormat = false;
+    bool hasVersion = false;
+    bool hasLocales = false;
+    int version = 0;
+    std::string format;
+
+    skipWs(c);
+    if (consume(c, '}')) return false;
+    while (true) {
+        std::string key;
+        if (!parseJsonString(c, key)) return false;
+        if (!consume(c, ':')) return false;
+
+        if (key == "format") {
+            if (!parseJsonString(c, format)) return false;
+            hasFormat = true;
+        } else if (key == "version") {
+            if (!parseJsonInt(c, version)) return false;
+            hasVersion = true;
+        } else if (key == "default_locale") {
+            if (!parseJsonString(c, payload.defaultLocale)) return false;
+        } else if (key == "locales") {
+            if (!consume(c, '{')) return false;
+            skipWs(c);
+            if (!consume(c, '}')) {
+                while (true) {
+                    std::string localeCode;
+                    if (!parseJsonString(c, localeCode)) return false;
+                    if (!consume(c, ':')) return false;
+
+                    SingleLocalePayload single;
+                    if (!consume(c, '{')) return false;
+                    skipWs(c);
+                    if (!consume(c, '}')) {
+                        while (true) {
+                            std::string localeField;
+                            if (!parseJsonString(c, localeField)) return false;
+                            if (!consume(c, ':')) return false;
+                            if (localeField == "line_entries") {
+                                if (!parseJsonStringMap(c, single.lineEntries)) return false;
+                            } else if (localeField == "character_entries") {
+                                if (!parseJsonNestedStringMap(c, single.characterEntries)) return false;
+                            } else if (!skipJsonValue(c)) {
+                                return false;
+                            }
+                            skipWs(c);
+                            if (consume(c, '}')) break;
+                            if (!consume(c, ',')) return false;
+                        }
+                    }
+
+                    payload.lineEntriesByLocale[localeCode] = std::move(single.lineEntries);
+                    payload.characterEntriesByLocale[localeCode] = std::move(single.characterEntries);
+
+                    skipWs(c);
+                    if (consume(c, '}')) break;
+                    if (!consume(c, ',')) return false;
+                }
+            }
+            hasLocales = true;
+        } else {
+            if (!skipJsonValue(c)) return false;
+        }
+
+        skipWs(c);
+        if (consume(c, '}')) break;
+        if (!consume(c, ',')) return false;
+    }
+    skipWs(c);
+    return c.pos == c.text.size() && hasFormat && hasVersion && hasLocales &&
+           format == "gyeol-locale-catalog" && version == 2;
 }
 
 } // namespace
+
+std::string Runner::baseLocaleCode(const std::string& localeCode) const {
+    size_t sep = localeCode.find_first_of("-_");
+    if (sep == std::string::npos) return localeCode;
+    if (sep == 0) return "";
+    return localeCode.substr(0, sep);
+}
+
+bool Runner::applyLocaleSelection(const std::string& requestedLocale, bool recordTraceEvent) {
+    auto* pool = asPool(pool_);
+    if (!pool) {
+        setError("No story loaded for locale selection");
+        return false;
+    }
+    if (!hasLocaleCatalog_) {
+        setError("Locale catalog is not loaded");
+        return false;
+    }
+
+    currentLocale_ = requestedLocale;
+    resolvedLocale_.clear();
+    localePool_.assign(pool->size(), "");
+    localeCharacterProps_.clear();
+
+    std::vector<std::string> chain;
+    if (!requestedLocale.empty()) {
+        chain.push_back(requestedLocale);
+        const std::string base = baseLocaleCode(requestedLocale);
+        if (!base.empty() && base != requestedLocale) {
+            chain.push_back(base);
+        }
+    }
+    if (!catalogDefaultLocale_.empty() &&
+        std::find(chain.begin(), chain.end(), catalogDefaultLocale_) == chain.end()) {
+        chain.push_back(catalogDefaultLocale_);
+    }
+
+    bool appliedAny = false;
+    for (const auto& code : chain) {
+        auto lineIt = catalogLineEntriesByLocale_.find(code);
+        auto charIt = catalogCharacterEntriesByLocale_.find(code);
+        if (lineIt == catalogLineEntriesByLocale_.end() &&
+            charIt == catalogCharacterEntriesByLocale_.end()) {
+            continue;
+        }
+
+        if (resolvedLocale_.empty()) {
+            resolvedLocale_ = code;
+        }
+        appliedAny = true;
+
+        if (lineIt != catalogLineEntriesByLocale_.end()) {
+            for (const auto& kv : lineIt->second) {
+                const int32_t idx = kv.first;
+                if (idx < 0 || static_cast<size_t>(idx) >= localePool_.size()) continue;
+                if (localePool_[static_cast<size_t>(idx)].empty()) {
+                    localePool_[static_cast<size_t>(idx)] = kv.second;
+                }
+            }
+        }
+
+        if (charIt != catalogCharacterEntriesByLocale_.end()) {
+            for (const auto& charEntry : charIt->second) {
+                auto& dst = localeCharacterProps_[charEntry.first];
+                for (const auto& propEntry : charEntry.second) {
+                    if (dst.find(propEntry.first) == dst.end()) {
+                        dst[propEntry.first] = propEntry.second;
+                    }
+                }
+            }
+        }
+    }
+
+    if (!appliedAny) {
+        localePool_.clear();
+        localeCharacterProps_.clear();
+        resolvedLocale_.clear();
+        setError("Requested locale is not available in catalog");
+        return false;
+    }
+
+    if (recordTraceEvent) {
+        recordTrace("LOCALE_SET", currentNodeName(), pc_, currentLocale_ + "->" + resolvedLocale_);
+    }
+    return true;
+}
 
 bool Runner::loadLocale(const std::string& path) {
     auto* story = asStory(story_);
@@ -279,17 +511,24 @@ bool Runner::loadLocale(const std::string& path) {
         return false;
     }
 
-    std::unordered_map<std::string, int32_t> idMap;
+    std::unordered_map<std::string, int32_t> lineIdToPoolIndex;
     for (flatbuffers::uoffset_t i = 0; i < lineIds->size(); ++i) {
         auto* s = lineIds->Get(i);
         if (s && s->size() > 0) {
-            idMap[s->str()] = static_cast<int32_t>(i);
+            lineIdToPoolIndex[s->str()] = static_cast<int32_t>(i);
         }
     }
 
+    hasLocaleCatalog_ = false;
+    catalogDefaultLocale_.clear();
+    catalogLineEntriesByLocale_.clear();
+    catalogCharacterEntriesByLocale_.clear();
+    localeCharacterProps_.clear();
+
     localePool_.clear();
     localePool_.resize(pool->size());
-    std::string resolvedLocale = fileStem(path);
+    currentLocale_ = fileStem(path);
+    resolvedLocale_ = currentLocale_;
 
     std::string lowerPath = toLowerCopy(path);
     bool isJson = lowerPath.size() >= 5 && lowerPath.substr(lowerPath.size() - 5) == ".json";
@@ -300,31 +539,47 @@ bool Runner::loadLocale(const std::string& path) {
             setError("Failed to open locale: " + path);
             return false;
         }
-
         std::ostringstream oss;
         oss << ifs.rdbuf();
+        const std::string jsonText = oss.str();
 
-        int version = 0;
-        std::string localeName;
-        std::unordered_map<std::string, std::string> entries;
-        if (!parseLocaleJson(oss.str(), version, localeName, entries)) {
-            setError("Invalid locale JSON: " + path);
-            return false;
-        }
-        if (version != 1) {
-            setError("Unsupported locale JSON version");
-            return false;
-        }
-
-        for (const auto& kv : entries) {
-            if (kv.second.empty()) continue;
-            auto it = idMap.find(kv.first);
-            if (it != idMap.end()) {
-                localePool_[static_cast<size_t>(it->second)] = kv.second;
+        SingleLocalePayload localePayload;
+        if (parseSingleLocaleV2(jsonText, localePayload)) {
+            for (const auto& kv : localePayload.lineEntries) {
+                if (kv.second.empty()) continue;
+                auto it = lineIdToPoolIndex.find(kv.first);
+                if (it != lineIdToPoolIndex.end()) {
+                    localePool_[static_cast<size_t>(it->second)] = kv.second;
+                }
             }
-        }
-        if (!localeName.empty()) {
-            resolvedLocale = localeName;
+            for (const auto& charEntry : localePayload.characterEntries) {
+                for (const auto& propEntry : charEntry.second) {
+                    if (!propEntry.second.empty()) {
+                        localeCharacterProps_[charEntry.first][propEntry.first] = propEntry.second;
+                    }
+                }
+            }
+            if (!localePayload.locale.empty()) {
+                currentLocale_ = localePayload.locale;
+                resolvedLocale_ = localePayload.locale;
+            }
+        } else {
+            localePayload = SingleLocalePayload{};
+            if (!parseSingleLocaleV1(jsonText, localePayload)) {
+                setError("Invalid locale JSON: " + path);
+                return false;
+            }
+            for (const auto& kv : localePayload.lineEntries) {
+                if (kv.second.empty()) continue;
+                auto it = lineIdToPoolIndex.find(kv.first);
+                if (it != lineIdToPoolIndex.end()) {
+                    localePool_[static_cast<size_t>(it->second)] = kv.second;
+                }
+            }
+            if (!localePayload.locale.empty()) {
+                currentLocale_ = localePayload.locale;
+                resolvedLocale_ = localePayload.locale;
+            }
         }
     } else {
         std::ifstream ifs(path);
@@ -340,26 +595,102 @@ bool Runner::loadLocale(const std::string& path) {
             if (!line.empty() && line.back() == '\r') line.pop_back();
             auto cols = parseCSVLine(line);
             if (cols.size() < 5 || cols[4].empty()) continue;
-            auto it = idMap.find(cols[0]);
-            if (it != idMap.end()) {
+            auto it = lineIdToPoolIndex.find(cols[0]);
+            if (it != lineIdToPoolIndex.end()) {
                 localePool_[static_cast<size_t>(it->second)] = cols[4];
             }
         }
     }
 
-    currentLocale_ = resolvedLocale;
     recordTrace("LOCALE_LOAD", currentNodeName(), pc_, currentLocale_);
     return true;
 }
 
+bool Runner::loadLocaleCatalog(const std::string& path) {
+    auto* story = asStory(story_);
+    auto* lineIds = story ? story->line_ids() : nullptr;
+    if (!lineIds || lineIds->size() == 0) {
+        setError("No line_ids in story");
+        return false;
+    }
+
+    std::ifstream ifs(path);
+    if (!ifs.is_open()) {
+        setError("Failed to open locale catalog: " + path);
+        return false;
+    }
+    std::ostringstream oss;
+    oss << ifs.rdbuf();
+
+    LocaleCatalogPayload payload;
+    if (!parseLocaleCatalog(oss.str(), payload)) {
+        setError("Invalid locale catalog JSON: " + path);
+        return false;
+    }
+
+    std::unordered_map<std::string, int32_t> lineIdToPoolIndex;
+    for (flatbuffers::uoffset_t i = 0; i < lineIds->size(); ++i) {
+        auto* lid = lineIds->Get(i);
+        if (lid && lid->size() > 0) {
+            lineIdToPoolIndex[lid->str()] = static_cast<int32_t>(i);
+        }
+    }
+
+    catalogLineEntriesByLocale_.clear();
+    catalogCharacterEntriesByLocale_.clear();
+    for (const auto& localeEntry : payload.lineEntriesByLocale) {
+        auto& dst = catalogLineEntriesByLocale_[localeEntry.first];
+        for (const auto& lineEntry : localeEntry.second) {
+            auto it = lineIdToPoolIndex.find(lineEntry.first);
+            if (it != lineIdToPoolIndex.end() && !lineEntry.second.empty()) {
+                dst[it->second] = lineEntry.second;
+            }
+        }
+    }
+    for (const auto& localeEntry : payload.characterEntriesByLocale) {
+        catalogCharacterEntriesByLocale_[localeEntry.first] = localeEntry.second;
+    }
+
+    hasLocaleCatalog_ = true;
+    catalogDefaultLocale_ = payload.defaultLocale;
+    if (catalogDefaultLocale_.empty() && !payload.lineEntriesByLocale.empty()) {
+        catalogDefaultLocale_ = payload.lineEntriesByLocale.begin()->first;
+    }
+    if (catalogDefaultLocale_.empty() && !payload.characterEntriesByLocale.empty()) {
+        catalogDefaultLocale_ = payload.characterEntriesByLocale.begin()->first;
+    }
+
+    if (catalogDefaultLocale_.empty()) {
+        setError("Locale catalog has no locales");
+        return false;
+    }
+
+    if (!applyLocaleSelection(catalogDefaultLocale_, false)) {
+        return false;
+    }
+
+    recordTrace("LOCALE_CATALOG_LOAD", currentNodeName(), pc_, path);
+    return true;
+}
+
+bool Runner::setLocale(const std::string& localeCode) {
+    return applyLocaleSelection(localeCode, true);
+}
+
 void Runner::clearLocale() {
     localePool_.clear();
+    localeCharacterProps_.clear();
     currentLocale_.clear();
+    resolvedLocale_.clear();
     recordTrace("LOCALE_CLEAR", currentNodeName(), pc_, "");
 }
 
 std::string Runner::getLocale() const {
     return currentLocale_;
+}
+
+std::string Runner::getResolvedLocale() const {
+    return resolvedLocale_;
 }
 
 } // namespace Gyeol
