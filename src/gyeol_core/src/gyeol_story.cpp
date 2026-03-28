@@ -125,11 +125,32 @@ void Story::printStory() const {
                 case OpData::Command: {
                     const auto* cmd = instr->data_as_Command();
                     std::cout << "[Command] " << poolStr(pool, cmd->type_id()) << "(";
-                    const auto* params = cmd->params();
-                    if (params) {
-                        for (flatbuffers::uoffset_t k = 0; k < params->size(); ++k) {
+                    const auto* args = cmd->args();
+                    if (args) {
+                        for (flatbuffers::uoffset_t k = 0; k < args->size(); ++k) {
                             if (k > 0) std::cout << ", ";
-                            std::cout << poolStr(pool, params->Get(k));
+                            const auto* arg = args->Get(k);
+                            if (!arg) continue;
+                            switch (arg->kind()) {
+                                case CommandArgKind::String:
+                                    std::cout << "\"" << poolStr(pool, arg->string_id()) << "\"";
+                                    break;
+                                case CommandArgKind::Identifier:
+                                    std::cout << poolStr(pool, arg->string_id());
+                                    break;
+                                case CommandArgKind::Int:
+                                    std::cout << arg->int_value();
+                                    break;
+                                case CommandArgKind::Float:
+                                    std::cout << arg->float_value();
+                                    break;
+                                case CommandArgKind::Bool:
+                                    std::cout << (arg->bool_value() ? "true" : "false");
+                                    break;
+                                default:
+                                    std::cout << "<unknown>";
+                                    break;
+                            }
                         }
                     }
                     std::cout << ")" << std::endl;

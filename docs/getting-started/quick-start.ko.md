@@ -118,9 +118,9 @@ label start:
 
 ```gyeol
 label start:
-    hero "Hello there!" #mood:happy #pose:wave
-    hero "This is serious." #mood:angry #pose:arms_crossed
-    hero "Goodbye." #mood:sad
+    hero "Hello there!" #mood=happy #pose=wave
+    hero "This is serious." #mood=angry #pose=arms_crossed
+    hero "Goodbye." #mood=sad
 ```
 
 ## 함수 사용하기

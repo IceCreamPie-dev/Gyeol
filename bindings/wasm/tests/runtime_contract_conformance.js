@@ -74,7 +74,10 @@ function normalizeStepResult(result) {
       type: "COMMAND",
       command: {
         type: String(result.commandType || ""),
-        params: (Array.isArray(result.params) ? result.params : []).map((p) => String(p || "")),
+        args: (Array.isArray(result.args) ? result.args : []).map((a) => ({
+          kind: String((a && a.kind) || ""),
+          value: a ? a.value : null,
+        })),
       },
     };
   }

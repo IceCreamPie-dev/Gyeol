@@ -194,10 +194,31 @@ std::string Runner::getInstructionInfo(const std::string& nodeName, uint32_t pc)
         case OpData::Command: {
             auto* cmd = instr->data_as_Command();
             std::string info = "Command: @ " + std::string(poolStr(cmd->type_id()));
-            auto* params = cmd->params();
-            if (params) {
-                for (flatbuffers::uoffset_t k = 0; k < params->size(); ++k) {
-                    info += " " + std::string(poolStr(params->Get(k)));
+            auto* args = cmd->args();
+            if (args) {
+                for (flatbuffers::uoffset_t k = 0; k < args->size(); ++k) {
+                    const auto* arg = args->Get(k);
+                    if (!arg) continue;
+                    switch (arg->kind()) {
+                        case CommandArgKind::String:
+                            info += " \"" + std::string(poolStr(arg->string_id())) + "\"";
+                            break;
+                        case CommandArgKind::Identifier:
+                            info += " " + std::string(poolStr(arg->string_id()));
+                            break;
+                        case CommandArgKind::Int:
+                            info += " " + std::to_string(arg->int_value());
+                            break;
+                        case CommandArgKind::Float:
+                            info += " " + std::to_string(arg->float_value());
+                            break;
+                        case CommandArgKind::Bool:
+                            info += arg->bool_value() ? " true" : " false";
+                            break;
+                        default:
+                            info += " <unknown>";
+                            break;
+                    }
                 }
             }
             return info;

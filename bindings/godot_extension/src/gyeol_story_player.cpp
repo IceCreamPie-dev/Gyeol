@@ -50,7 +50,7 @@ void StoryPlayer::_bind_methods() {
 
     ADD_SIGNAL(MethodInfo("command_received",
         PropertyInfo(Variant::STRING, "type"),
-        PropertyInfo(Variant::ARRAY, "params")));
+        PropertyInfo(Variant::ARRAY, "args")));
 
     ADD_SIGNAL(MethodInfo("wait_requested",
         PropertyInfo(Variant::STRING, "tag")));
@@ -125,11 +125,24 @@ void StoryPlayer::advance() {
 
         case GyeolGodotAdapter::SignalType::CommandReceived: {
             String type = String::utf8(signalEvent.commandType.c_str());
-            Array params;
-            for (const auto& param : signalEvent.commandParams) {
-                params.append(String::utf8(param.c_str()));
+            Array args;
+            for (const auto& arg : signalEvent.commandArgs) {
+                Dictionary item;
+                item["kind"] = String::utf8(arg.kind.c_str());
+                if (arg.kind == "String" || arg.kind == "Identifier") {
+                    item["value"] = String::utf8(arg.stringValue.c_str());
+                } else if (arg.kind == "Int") {
+                    item["value"] = static_cast<int64_t>(arg.intValue);
+                } else if (arg.kind == "Float") {
+                    item["value"] = static_cast<double>(arg.floatValue);
+                } else if (arg.kind == "Bool") {
+                    item["value"] = arg.boolValue;
+                } else {
+                    item["value"] = Variant();
+                }
+                args.append(item);
             }
-            emit_signal("command_received", type, params);
+            emit_signal("command_received", type, args);
             break;
         }
 

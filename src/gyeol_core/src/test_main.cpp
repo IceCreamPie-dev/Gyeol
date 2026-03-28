@@ -62,9 +62,26 @@ int main(int argc, char* argv[]) {
 
             case Gyeol::StepType::COMMAND: {
                 std::cout << "[CMD] " << result.command.type << "(";
-                for (size_t i = 0; i < result.command.params.size(); ++i) {
+                for (size_t i = 0; i < result.command.args.size(); ++i) {
                     if (i > 0) std::cout << ", ";
-                    std::cout << result.command.params[i];
+                    const auto& arg = result.command.args[i];
+                    switch (arg.type) {
+                        case Gyeol::CommandArgType::STRING:
+                            std::cout << "\"" << arg.text << "\"";
+                            break;
+                        case Gyeol::CommandArgType::IDENTIFIER:
+                            std::cout << arg.text;
+                            break;
+                        case Gyeol::CommandArgType::INT:
+                            std::cout << arg.intValue;
+                            break;
+                        case Gyeol::CommandArgType::FLOAT:
+                            std::cout << arg.floatValue;
+                            break;
+                        case Gyeol::CommandArgType::BOOL:
+                            std::cout << (arg.boolValue ? "true" : "false");
+                            break;
+                    }
                 }
                 std::cout << ")" << std::endl;
                 std::cout << std::endl;

@@ -25,7 +25,7 @@ Add a `StoryPlayer` node to your scene, load a compiled `.gyb` story file, conne
 dialogue_line(character: String, text: String, tags: Dictionary)
 ```
 
-Emitted when a dialogue line is encountered. `character` is the character ID (empty string for narration). `text` is the dialogue text with interpolation already applied. `tags` contains metadata from `#key:value` tags.
+Emitted when a dialogue line is encountered. `character` is the character ID (empty string for narration). `text` is the dialogue text with interpolation already applied. `tags` contains metadata from `#key` / `#key=value` tags.
 
 ---
 
@@ -42,10 +42,10 @@ Emitted when a `menu:` block is reached. `choices` is an Array of String contain
 ### command_received
 
 ```
-command_received(type: String, params: Array)
+command_received(type: String, args: Array)
 ```
 
-Emitted when an `@` command is encountered. `type` is the command name, `params` is an Array of String. You **must** call [advance](#advance) after handling the command.
+Emitted when an `@` command is encountered. `type` is the command name, `args` is an Array of Dictionary items (`{ kind, value }`). You **must** call [advance](#advance) after handling the command.
 
 ---
 

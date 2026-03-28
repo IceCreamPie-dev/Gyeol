@@ -58,7 +58,7 @@ Node
 | `Line` | character_id, text_id, voice_asset_id, tags | 대사 또는 나레이션 |
 | `Choice` | text_id, target_node_name_id, condition_var_id, choice_modifier | 메뉴 선택지 |
 | `Jump` | target_node_name_id, is_call, arg_exprs | 흐름 이동 |
-| `Command` | type_id, params | 엔진 명령 |
+| `Command` | type_id, args | 엔진 명령 |
 | `SetVar` | var_name_id, value, expr, assign_op | 변수 할당 |
 | `Condition` | var_name_id, op, compare_value, true/false jumps, expressions | 조건 분기 |
 | `Random` | branches | 가중치 랜덤 선택 |
@@ -108,7 +108,7 @@ Tag
   value_id: int                   # String pool index for value
 ```
 
-대사 태그(`#mood:angry`)와 노드 태그(`#difficulty=hard`) 모두에 사용됩니다.
+대사 태그(`#mood=angry`)와 노드 태그(`#difficulty=hard`) 모두에 사용됩니다.
 
 ### 캐릭터 정의
 

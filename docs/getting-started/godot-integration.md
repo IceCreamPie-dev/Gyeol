@@ -101,7 +101,7 @@ func _on_choices_presented(choices: Array):
         btn.pressed.connect(_on_choice_selected.bind(i))
         choices_container.add_child(btn)
 
-func _on_command_received(type: String, params: Array):
+func _on_command_received(type: String, args: Array):
     match type:
         "bg":
             # Change background
@@ -109,6 +109,7 @@ func _on_command_received(type: String, params: Array):
         "sfx":
             # Play sound effect
             pass
+    # args item shape: { "kind": "String|Int|Float|Bool|Identifier", "value": ... }
     # Auto-advance after handling command
     story_player.advance()
 
@@ -137,14 +138,14 @@ func _on_choice_selected(index: int):
 |--------|-----------|------|
 | `dialogue_line` | `character: String, text: String, tags: Dictionary` | A dialogue line is ready to display |
 | `choices_presented` | `choices: Array[String]` | A menu with choices is presented |
-| `command_received` | `type: String, params: Array[String]` | An `@` command is encountered |
+| `command_received` | `type: String, args: Array[Dictionary]` | An `@` command is encountered |
 | `wait_requested` | `tag: String` | Runtime emitted `WAIT`; call `resume()` to continue |
 | `yield_emitted` | *(none)* | Runtime emitted `YIELD`; call `advance()` again |
 | `story_ended` | *(none)* | The story has finished |
 
 ### dialogue_line
 
-Emitted for every `Line` instruction. The `character` parameter is empty for narration lines. The `tags` dictionary contains metadata from `#key:value` tags on the line.
+Emitted for every `Line` instruction. The `character` parameter is empty for narration lines. The `tags` dictionary contains metadata from `#key` / `#key=value` tags on the line.
 
 ```gdscript
 func _on_dialogue_line(character: String, text: String, tags: Dictionary):

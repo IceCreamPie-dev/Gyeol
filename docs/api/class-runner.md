@@ -111,9 +111,19 @@ struct ChoiceData {
 ### CommandData
 
 ```cpp
+enum class CommandArgType { STRING, INT, FLOAT, BOOL, IDENTIFIER };
+
+struct CommandArgData {
+    CommandArgType type;
+    std::string text; // STRING / IDENTIFIER
+    int32_t intValue;
+    float floatValue;
+    bool boolValue;
+};
+
 struct CommandData {
     const char* type;
-    std::vector<const char*> params;
+    std::vector<CommandArgData> args;
 };
 ```
 

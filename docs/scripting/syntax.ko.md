@@ -149,13 +149,13 @@ hero "{if visited(shop)}Welcome back!{else}First time here?{endif}"
 ### 대사 태그 (메타데이터)
 
 ```gyeol
-hero "I'm angry!" #mood:angry #pose:arms_crossed
-hero "Listen to this." #voice:hero_line42.wav
+hero "I'm angry!" #mood=angry #pose=arms_crossed
+hero "Listen to this." #voice=hero_line42.wav
 hero "Important line!" #important
 ```
 
 - 태그는 대사 텍스트 뒤에 공백을 두고 붙입니다
-- 형식: `#key:value` 또는 `#key` (값 없음)
+- 형식: `#key=value` 또는 `#key` (값 없음)
 - 여러 태그는 공백으로 구분합니다
 - 게임 엔진에는 `dialogue_line` 시그널의 `tags` Dictionary로 전달됩니다
 
@@ -195,7 +195,8 @@ menu:
 | `#sticky` | 항상 표시 (명시적 기본값, 수식어 없음과 동일) |
 | `#fallback` | 다른 모든 선택지가 숨겨졌을 때만 표시 |
 
-- 수식어와 조건을 함께 사용할 수 있습니다: `"text" -> node if var #once` 또는 `"text" -> node #once if var`
+- 수식어와 조건을 함께 쓸 때 순서는 고정입니다: `"text" -> node if var #once`
+- `#once if var` 순서는 허용되지 않습니다
 - Once 추적은 Save/Load를 통해 유지됩니다
 - 모든 비-fallback 선택지가 숨겨지고 fallback도 없으면 빈 선택지 배열이 반환됩니다
 
@@ -307,7 +308,18 @@ label start:
 커맨드는 `command_received` 시그널을 통해 게임 엔진으로 전달됩니다. 어떤 커맨드를 지원하는지는 엔진에서 정의합니다.
 
 - `@` 뒤의 첫 번째 단어가 커맨드 `type`입니다
-- 나머지 단어들은 `params`입니다 (공백으로 구분, 공백이 포함된 문자열은 따옴표 사용)
+- 나머지 토큰은 타입드 `args`입니다
+- 허용 인자: quoted `String`, `Int`, `Float`(지수 표기 미지원), `Bool`(`true`/`false`), bare `Identifier`(`[A-Za-z_][A-Za-z0-9_]*`)
+- `key=value` 형태 커맨드 인자는 허용되지 않습니다
+
+### 마이그레이션 예시
+
+```gyeol
+# Old -> New
+hero "Hi" #mood:happy                # -> hero "Hi" #mood=happy
+"VIP" -> vip #once if is_vip         # -> "VIP" -> vip if is_vip #once
+@ bg forest.png                       # -> @ bg "forest.png"
+```
 
 ## 전체 예제
 
@@ -321,7 +333,7 @@ label start:
     @ bg "town_square.png"
     @ bgm "town_theme.ogg"
     "The sun rises over the quiet town square."
-    hero "Time to prepare for the journey." #mood:determined
+    hero "Time to prepare for the journey." #mood=determined
     menu:
         "Visit the shop" -> shop
         "Head to the gate" -> gate if has_sword

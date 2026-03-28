@@ -58,7 +58,7 @@ table Line {
     character_id:int = -1;  // String Pool Index (-1이면 내레이션)
     text_id:int;            // String Pool Index (실제 대사)
     voice_asset_id:int = -1; // 보이스 파일 키 (선택, 하위 호환)
-    tags:[Tag];             // 메타데이터 태그 (#key:value)
+    tags:[Tag];             // 메타데이터 태그 (#key / #key=value)
 }
 
 // [선택지 수식어]
@@ -84,10 +84,28 @@ table Jump {
     arg_exprs:[Expression];  // 함수 호출 인자 표현식 (is_call=true일 때)
 }
 
+// [커맨드 인자 타입]
+enum CommandArgKind : byte {
+    String = 0,      // quoted string
+    Int = 1,
+    Float = 2,
+    Bool = 3,
+    Identifier = 4   // bare identifier
+}
+
+// [커맨드 인자]
+table CommandArg {
+    kind:CommandArgKind = String;
+    string_id:int = -1;   // String / Identifier일 때 String Pool Index
+    int_value:int = 0;    // Int일 때
+    float_value:float = 0; // Float일 때
+    bool_value:bool = false; // Bool일 때
+}
+
 // [명령] (배경, 사운드 등등) - Godot/Unity 등에서 처리
 table Command {
     type_id:int;            // 명령 종류 (예: "bg", "sfx" 등을 String Pool에서 참조)
-    params:[int];           // 파라미터 값들 (String Pool Index 배열)
+    args:[CommandArg];      // 타입드 커맨드 인자
 }
 
 // 런타임 대기점: WAIT 결과를 내고 resume() 호출 전까지 정지

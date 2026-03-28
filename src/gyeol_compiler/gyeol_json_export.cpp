@@ -209,11 +209,32 @@ json JsonExport::serializeInstruction(const InstructionT& instr,
         if (!cmd) break;
         obj["type"] = "Command";
         obj["command_type"] = poolStr(pool, cmd->type_id);
-        json params = json::array();
-        for (auto paramId : cmd->params) {
-            params.push_back(poolStr(pool, paramId));
+        json args = json::array();
+        for (const auto& arg : cmd->args) {
+            if (!arg) continue;
+            json argJson;
+            argJson["kind"] = EnumNameCommandArgKind(arg->kind);
+            switch (arg->kind) {
+            case CommandArgKind::String:
+            case CommandArgKind::Identifier:
+                argJson["value"] = poolStr(pool, arg->string_id);
+                break;
+            case CommandArgKind::Int:
+                argJson["value"] = arg->int_value;
+                break;
+            case CommandArgKind::Float:
+                argJson["value"] = arg->float_value;
+                break;
+            case CommandArgKind::Bool:
+                argJson["value"] = arg->bool_value;
+                break;
+            default:
+                argJson["value"] = nullptr;
+                break;
+            }
+            args.push_back(std::move(argJson));
         }
-        obj["params"] = params;
+        obj["args"] = std::move(args);
         break;
     }
 
@@ -363,7 +384,7 @@ json JsonExport::toJson(const StoryT& story) {
 
     // Metadata
     root["format"] = "gyeol-json-ir";
-    root["format_version"] = 1;
+    root["format_version"] = 2;
     root["version"] = story.version;
     root["start_node_name"] = story.start_node_name;
 

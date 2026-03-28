@@ -1346,11 +1346,40 @@ StepResult Runner::step() {
                 auto* cmd = instr->data_as_Command();
                 result.type = StepType::COMMAND;
                 result.command.type = poolStr(cmd->type_id());
-                result.command.params.clear();
-                auto* params = cmd->params();
-                if (params) {
-                    for (flatbuffers::uoffset_t k = 0; k < params->size(); ++k) {
-                        result.command.params.push_back(poolStr(params->Get(k)));
+                result.command.args.clear();
+                auto* args = cmd->args();
+                if (args) {
+                    for (flatbuffers::uoffset_t k = 0; k < args->size(); ++k) {
+                        const auto* arg = args->Get(k);
+                        if (!arg) continue;
+                        CommandArgData outArg;
+                        switch (arg->kind()) {
+                        case CommandArgKind::String:
+                            outArg.type = CommandArgType::STRING;
+                            outArg.text = poolStr(arg->string_id());
+                            break;
+                        case CommandArgKind::Identifier:
+                            outArg.type = CommandArgType::IDENTIFIER;
+                            outArg.text = poolStr(arg->string_id());
+                            break;
+                        case CommandArgKind::Int:
+                            outArg.type = CommandArgType::INT;
+                            outArg.intValue = arg->int_value();
+                            break;
+                        case CommandArgKind::Float:
+                            outArg.type = CommandArgType::FLOAT;
+                            outArg.floatValue = arg->float_value();
+                            break;
+                        case CommandArgKind::Bool:
+                            outArg.type = CommandArgType::BOOL;
+                            outArg.boolValue = arg->bool_value();
+                            break;
+                        default:
+                            outArg.type = CommandArgType::STRING;
+                            outArg.text.clear();
+                            break;
+                        }
+                        result.command.args.push_back(std::move(outArg));
                     }
                 }
                 metrics_.commandResults++;

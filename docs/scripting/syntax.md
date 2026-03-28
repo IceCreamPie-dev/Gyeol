@@ -149,13 +149,13 @@ Inline conditions support:
 ### Dialogue Tags (Metadata)
 
 ```gyeol
-hero "I'm angry!" #mood:angry #pose:arms_crossed
-hero "Listen to this." #voice:hero_line42.wav
+hero "I'm angry!" #mood=angry #pose=arms_crossed
+hero "Listen to this." #voice=hero_line42.wav
 hero "Important line!" #important
 ```
 
 - Tags follow the dialogue text after a space
-- Format: `#key:value` or `#key` (valueless)
+- Format: `#key=value` or `#key` (valueless)
 - Multiple tags separated by spaces
 - Exposed to the game engine via the `tags` Dictionary in `dialogue_line` signal
 
@@ -195,7 +195,8 @@ menu:
 | `#sticky` | Always shown (explicit default, same as no modifier) |
 | `#fallback` | Only shown when all other choices are hidden |
 
-- Modifiers and conditions can be combined: `"text" -> node if var #once` or `"text" -> node #once if var`
+- Modifiers and conditions can be combined in this order only: `"text" -> node if var #once`
+- `#once if var` ordering is invalid
 - Once-tracking persists across save/load
 - If all non-fallback choices are hidden and no fallback exists, an empty choices array is returned
 
@@ -307,7 +308,18 @@ See [Functions](functions.md) for details.
 Commands are passed through to the game engine via the `command_received` signal. The engine defines what commands are supported.
 
 - First word after `@` is the command `type`
-- Remaining words are `params` (space-separated, quotes for strings with spaces)
+- Remaining tokens are typed command `args`
+- Allowed arg forms: quoted `String`, `Int`, `Float` (no exponent), `Bool` (`true`/`false`), bare `Identifier` (`[A-Za-z_][A-Za-z0-9_]*`)
+- `key=value` style command args are invalid
+
+### Migration Notes
+
+```gyeol
+# Old -> New
+hero "Hi" #mood:happy                # -> hero "Hi" #mood=happy
+"VIP" -> vip #once if is_vip         # -> "VIP" -> vip if is_vip #once
+@ bg forest.png                       # -> @ bg "forest.png"
+```
 
 ## Complete Example
 
@@ -321,7 +333,7 @@ label start:
     @ bg "town_square.png"
     @ bgm "town_theme.ogg"
     "The sun rises over the quiet town square."
-    hero "Time to prepare for the journey." #mood:determined
+    hero "Time to prepare for the journey." #mood=determined
     menu:
         "Visit the shop" -> shop
         "Head to the gate" -> gate if has_sword

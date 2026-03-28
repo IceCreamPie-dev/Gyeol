@@ -638,6 +638,102 @@ bool parseAssignOp(const std::string& name, AssignOp& out) {
     return false;
 }
 
+bool parseCommandArgKind(const std::string& name, CommandArgKind& out) {
+    if (name == "String") { out = CommandArgKind::String; return true; }
+    if (name == "Int") { out = CommandArgKind::Int; return true; }
+    if (name == "Float") { out = CommandArgKind::Float; return true; }
+    if (name == "Bool") { out = CommandArgKind::Bool; return true; }
+    if (name == "Identifier") { out = CommandArgKind::Identifier; return true; }
+    return false;
+}
+
+nlohmann::json commandArgToJson(const CommandArgT& arg, const StoryT& story) {
+    nlohmann::json out = nlohmann::json::object();
+    out["kind"] = EnumNameCommandArgKind(arg.kind);
+    switch (arg.kind) {
+    case CommandArgKind::String:
+    case CommandArgKind::Identifier:
+        out["value"] = poolStr(story, arg.string_id);
+        break;
+    case CommandArgKind::Int:
+        out["value"] = arg.int_value;
+        break;
+    case CommandArgKind::Float:
+        out["value"] = arg.float_value;
+        break;
+    case CommandArgKind::Bool:
+        out["value"] = arg.bool_value;
+        break;
+    default:
+        out["value"] = nullptr;
+        break;
+    }
+    return out;
+}
+
+bool parseCommandArgJson(const json& spec,
+                         StoryT& story,
+                         std::unique_ptr<CommandArgT>& outArg,
+                         std::string* errorOut) {
+    if (!spec.is_object()) {
+        if (errorOut) *errorOut = "command arg must be an object with fields 'kind' and 'value'.";
+        return false;
+    }
+    if (!spec.contains("kind") || !spec["kind"].is_string()) {
+        if (errorOut) *errorOut = "command arg requires string field 'kind'.";
+        return false;
+    }
+    if (!spec.contains("value")) {
+        if (errorOut) *errorOut = "command arg requires field 'value'.";
+        return false;
+    }
+
+    auto arg = std::make_unique<CommandArgT>();
+    if (!parseCommandArgKind(spec["kind"].get<std::string>(), arg->kind)) {
+        if (errorOut) *errorOut = "unsupported command arg kind: " + spec["kind"].get<std::string>();
+        return false;
+    }
+
+    const auto& value = spec["value"];
+    switch (arg->kind) {
+    case CommandArgKind::String:
+    case CommandArgKind::Identifier:
+        if (!value.is_string()) {
+            if (errorOut) *errorOut = "command arg value must be string for kind String/Identifier.";
+            return false;
+        }
+        arg->string_id = findOrAddString(story, value.get<std::string>());
+        break;
+    case CommandArgKind::Int:
+        if (!value.is_number_integer()) {
+            if (errorOut) *errorOut = "command arg value must be integer for kind Int.";
+            return false;
+        }
+        arg->int_value = value.get<int32_t>();
+        break;
+    case CommandArgKind::Float:
+        if (!value.is_number()) {
+            if (errorOut) *errorOut = "command arg value must be number for kind Float.";
+            return false;
+        }
+        arg->float_value = value.get<float>();
+        break;
+    case CommandArgKind::Bool:
+        if (!value.is_boolean()) {
+            if (errorOut) *errorOut = "command arg value must be boolean for kind Bool.";
+            return false;
+        }
+        arg->bool_value = value.get<bool>();
+        break;
+    default:
+        if (errorOut) *errorOut = "unsupported command arg kind.";
+        return false;
+    }
+
+    outArg = std::move(arg);
+    return true;
+}
+
 bool parseValueJson(const json& j, StoryT& story, ValueDataUnion& out, std::string* errorOut) {
     if (!j.is_object() || !j.contains("type")) {
         if (errorOut) *errorOut = "value must be an object with field 'type'.";
@@ -766,11 +862,12 @@ bool buildInstructionFromJson(const json& spec,
         }
         CommandT cmd;
         cmd.type_id = findOrAddString(story, spec["command_type"].get<std::string>());
-        if (spec.contains("params")) {
-            if (!spec["params"].is_array()) return false;
-            for (const auto& p : spec["params"]) {
-                if (!p.is_string()) return false;
-                cmd.params.push_back(findOrAddString(story, p.get<std::string>()));
+        if (spec.contains("args")) {
+            if (!spec["args"].is_array()) return false;
+            for (const auto& a : spec["args"]) {
+                std::unique_ptr<CommandArgT> arg;
+                if (!parseCommandArgJson(a, story, arg, errorOut)) return false;
+                cmd.args.push_back(std::move(arg));
             }
         }
         instr->data.Set(cmd);
@@ -1166,8 +1263,8 @@ bool applyPatchOps(StoryT& story,
                 if (errorOut) *errorOut = "update_command requires string field 'command_type'.";
                 return false;
             }
-            if (opObj.contains("params") && !opObj["params"].is_array()) {
-                if (errorOut) *errorOut = "update_command params must be an array of strings.";
+            if (opObj.contains("args") && !opObj["args"].is_array()) {
+                if (errorOut) *errorOut = "update_command args must be an array of {kind,value} objects.";
                 return false;
             }
             InstructionPos pos = findInstructionByOriginId(instructionOrigins, instructionId);
@@ -1182,14 +1279,12 @@ bool applyPatchOps(StoryT& story,
             }
             auto* cmd = instr->data.AsCommand();
             cmd->type_id = findOrAddString(story, opObj["command_type"].get<std::string>());
-            cmd->params.clear();
-            if (opObj.contains("params")) {
-                for (const auto& p : opObj["params"]) {
-                    if (!p.is_string()) {
-                        if (errorOut) *errorOut = "update_command params must contain strings only.";
-                        return false;
-                    }
-                    cmd->params.push_back(findOrAddString(story, p.get<std::string>()));
+            cmd->args.clear();
+            if (opObj.contains("args")) {
+                for (const auto& a : opObj["args"]) {
+                    std::unique_ptr<CommandArgT> arg;
+                    if (!parseCommandArgJson(a, story, arg, errorOut)) return false;
+                    cmd->args.push_back(std::move(arg));
                 }
             }
             continue;
@@ -1550,12 +1645,12 @@ bool renderInstructionLine(const InstructionT& instr,
             const std::string value = poolStr(story, tag->value_id);
             oss << " #" << key;
             if (!value.empty()) {
-                oss << ":" << value;
+                oss << "=" << value;
             }
             if (key == "voice") hasVoiceTag = true;
         }
         if (!hasVoiceTag && line->voice_asset_id >= 0) {
-            oss << " #voice:" << poolStr(story, line->voice_asset_id);
+            oss << " #voice=" << poolStr(story, line->voice_asset_id);
         }
         out = oss.str();
         return true;
@@ -1597,8 +1692,27 @@ bool renderInstructionLine(const InstructionT& instr,
         if (!cmd) return false;
         std::ostringstream oss;
         oss << "@ " << poolStr(story, cmd->type_id);
-        for (int32_t p : cmd->params) {
-            oss << " " << quote(poolStr(story, p));
+        for (const auto& arg : cmd->args) {
+            if (!arg) continue;
+            switch (arg->kind) {
+            case CommandArgKind::String:
+                oss << " " << quote(poolStr(story, arg->string_id));
+                break;
+            case CommandArgKind::Identifier:
+                oss << " " << poolStr(story, arg->string_id);
+                break;
+            case CommandArgKind::Int:
+                oss << " " << arg->int_value;
+                break;
+            case CommandArgKind::Float:
+                oss << " " << arg->float_value;
+                break;
+            case CommandArgKind::Bool:
+                oss << " " << (arg->bool_value ? "true" : "false");
+                break;
+            default:
+                break;
+            }
         }
         out = oss.str();
         return true;
@@ -1895,11 +2009,12 @@ json buildInstructionDoc(const InstructionT& instr, const StoryT& story, size_t 
         const auto* command = instr.data.AsCommand();
         if (!command) break;
         out["command_type"] = poolStr(story, command->type_id);
-        json params = json::array();
-        for (int32_t p : command->params) {
-            params.push_back(poolStr(story, p));
+        json args = json::array();
+        for (const auto& arg : command->args) {
+            if (!arg) continue;
+            args.push_back(commandArgToJson(*arg, story));
         }
-        out["params"] = std::move(params);
+        out["args"] = std::move(args);
         break;
     }
     case OpData::SetVar: {

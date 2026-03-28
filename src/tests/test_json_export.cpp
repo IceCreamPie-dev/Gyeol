@@ -24,7 +24,7 @@ label start:
 )");
 
     EXPECT_EQ(j["format"], "gyeol-json-ir");
-    EXPECT_EQ(j["format_version"], 1);
+    EXPECT_EQ(j["format_version"], 2);
     EXPECT_EQ(j["start_node_name"], "start");
     EXPECT_TRUE(j["string_pool"].is_array());
     EXPECT_TRUE(j["nodes"].is_array());
@@ -71,7 +71,7 @@ label start:
 TEST(JsonExportTest, LineWithTags) {
     auto j = compileToJson(R"(
 label start:
-    hero "Hello" #mood:happy #pose:standing
+    hero "Hello" #mood=happy #pose=standing
 )");
 
     auto& instr = j["nodes"][0]["instructions"][0];
@@ -87,7 +87,7 @@ label start:
 TEST(JsonExportTest, LineWithVoiceAsset) {
     auto j = compileToJson(R"(
 label start:
-    hero "Hello" #voice:hero_greeting.wav
+    hero "Hello" #voice=hero_greeting.wav
 )");
 
     auto& instr = j["nodes"][0]["instructions"][0];
@@ -299,14 +299,15 @@ label dead:
 TEST(JsonExportTest, CommandInstruction) {
     auto j = compileToJson(R"(
 label start:
-    @ bg forest.png
+    @ bg "forest.png"
 )");
 
     auto& instr = j["nodes"][0]["instructions"][0];
     EXPECT_EQ(instr["type"], "Command");
     EXPECT_EQ(instr["command_type"], "bg");
-    EXPECT_EQ(instr["params"].size(), 1u);
-    EXPECT_EQ(instr["params"][0], "forest.png");
+    EXPECT_EQ(instr["args"].size(), 1u);
+    EXPECT_EQ(instr["args"][0]["kind"], "String");
+    EXPECT_EQ(instr["args"][0]["value"], "forest.png");
 }
 
 // ============================================================
@@ -488,7 +489,7 @@ character npc:
     name: "NPC"
 
 label start:
-    npc "Welcome!" #mood:friendly
+    npc "Welcome!" #mood=friendly
     $ score = score + 10
     menu:
         "Fight" -> battle
@@ -496,7 +497,7 @@ label start:
     jump ending
 
 label battle:
-    @ sfx sword.wav
+    @ sfx sword_wav
     "You fight bravely"
     jump ending
 
@@ -520,5 +521,5 @@ label ending:
     // The JSON should contain actual text, not just numbers for string pool indices
     EXPECT_NE(jsonStr.find("Welcome!"), std::string::npos);
     EXPECT_NE(jsonStr.find("NPC"), std::string::npos);
-    EXPECT_NE(jsonStr.find("sword.wav"), std::string::npos);
+    EXPECT_NE(jsonStr.find("sword_wav"), std::string::npos);
 }

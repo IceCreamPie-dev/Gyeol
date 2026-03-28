@@ -27,6 +27,38 @@ nlohmann::json variantToJson(const Gyeol::Variant& v) {
     return nlohmann::json::object();
 }
 
+nlohmann::json commandArgToJson(const Gyeol::CommandArgData& arg) {
+    switch (arg.type) {
+    case Gyeol::CommandArgType::STRING:
+        return nlohmann::json{{"kind", "String"}, {"value", arg.text}};
+    case Gyeol::CommandArgType::IDENTIFIER:
+        return nlohmann::json{{"kind", "Identifier"}, {"value", arg.text}};
+    case Gyeol::CommandArgType::INT:
+        return nlohmann::json{{"kind", "Int"}, {"value", arg.intValue}};
+    case Gyeol::CommandArgType::FLOAT:
+        return nlohmann::json{{"kind", "Float"}, {"value", arg.floatValue}};
+    case Gyeol::CommandArgType::BOOL:
+        return nlohmann::json{{"kind", "Bool"}, {"value", arg.boolValue}};
+    }
+    return nlohmann::json{{"kind", "Unknown"}, {"value", nullptr}};
+}
+
+nlohmann::json adapterCommandArgToJson(const GyeolGodotAdapter::CommandArgEvent& arg) {
+    if (arg.kind == "String" || arg.kind == "Identifier") {
+        return nlohmann::json{{"kind", arg.kind}, {"value", arg.stringValue}};
+    }
+    if (arg.kind == "Int") {
+        return nlohmann::json{{"kind", "Int"}, {"value", arg.intValue}};
+    }
+    if (arg.kind == "Float") {
+        return nlohmann::json{{"kind", "Float"}, {"value", arg.floatValue}};
+    }
+    if (arg.kind == "Bool") {
+        return nlohmann::json{{"kind", "Bool"}, {"value", arg.boolValue}};
+    }
+    return nlohmann::json{{"kind", arg.kind}, {"value", nullptr}};
+}
+
 bool applyActionOp(Gyeol::Runner& runner,
                    const nlohmann::json& action,
                    const RunOptions& options,
@@ -172,10 +204,16 @@ nlohmann::json adapterSignalToResultJson(const GyeolGodotAdapter::SignalEvent& e
     }
     case GyeolGodotAdapter::SignalType::CommandReceived:
         result["type"] = "COMMAND";
+        {
+            nlohmann::json args = nlohmann::json::array();
+            for (const auto& arg : event.commandArgs) {
+                args.push_back(adapterCommandArgToJson(arg));
+            }
         result["command"] = {
             {"type", event.commandType},
-            {"params", event.commandParams}
+            {"args", std::move(args)}
         };
+        }
         break;
     case GyeolGodotAdapter::SignalType::WaitRequested:
         result["type"] = "WAIT";
@@ -342,13 +380,13 @@ nlohmann::json stepResultToJson(const Gyeol::StepResult& result) {
     }
     case Gyeol::StepType::COMMAND: {
         j["type"] = "COMMAND";
-        nlohmann::json params = nlohmann::json::array();
-        for (const auto* p : result.command.params) {
-            params.push_back(p ? p : "");
+        nlohmann::json args = nlohmann::json::array();
+        for (const auto& arg : result.command.args) {
+            args.push_back(commandArgToJson(arg));
         }
         j["command"] = {
             {"type", result.command.type ? result.command.type : ""},
-            {"params", std::move(params)}
+            {"args", std::move(args)}
         };
         break;
     }

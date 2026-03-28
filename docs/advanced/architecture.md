@@ -178,7 +178,7 @@ StoryPlayer (Node)
   |── Signals:
   |     dialogue_line(character, text, tags)
   |     choices_presented(choices)
-  |     command_received(type, params)
+  |     command_received(type, args)
   |     story_ended()
 ```
 

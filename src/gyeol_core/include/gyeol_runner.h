@@ -44,9 +44,19 @@ struct ChoiceData {
     int index = 0;
 };
 
+enum class CommandArgType { STRING, INT, FLOAT, BOOL, IDENTIFIER };
+
+struct CommandArgData {
+    CommandArgType type = CommandArgType::STRING;
+    std::string text; // STRING / IDENTIFIER
+    int32_t intValue = 0;
+    float floatValue = 0.0f;
+    bool boolValue = false;
+};
+
 struct CommandData {
     const char* type = nullptr;
-    std::vector<const char*> params;
+    std::vector<CommandArgData> args;
 };
 
 struct WaitData {

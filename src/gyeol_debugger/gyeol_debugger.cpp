@@ -545,8 +545,24 @@ void Debugger::printStepResult(const StepResult& result) {
         }
         case StepType::COMMAND: {
             std::cout << YELLOW << "@ " << result.command.type;
-            for (const auto& param : result.command.params) {
-                std::cout << " " << param;
+            for (const auto& arg : result.command.args) {
+                switch (arg.type) {
+                    case CommandArgType::STRING:
+                        std::cout << " \"" << arg.text << "\"";
+                        break;
+                    case CommandArgType::IDENTIFIER:
+                        std::cout << " " << arg.text;
+                        break;
+                    case CommandArgType::INT:
+                        std::cout << " " << arg.intValue;
+                        break;
+                    case CommandArgType::FLOAT:
+                        std::cout << " " << arg.floatValue;
+                        break;
+                    case CommandArgType::BOOL:
+                        std::cout << " " << (arg.boolValue ? "true" : "false");
+                        break;
+                }
             }
             std::cout << RESET << std::endl;
             break;

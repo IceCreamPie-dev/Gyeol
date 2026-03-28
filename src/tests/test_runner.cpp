@@ -289,8 +289,9 @@ TEST(RunnerTest, CommandReturned) {
     auto r = runner.step();
     EXPECT_EQ(r.type, StepType::COMMAND);
     EXPECT_STREQ(r.command.type, "bg");
-    ASSERT_EQ(r.command.params.size(), 1u);
-    EXPECT_STREQ(r.command.params[0], "forest.png");
+    ASSERT_EQ(r.command.args.size(), 1u);
+    EXPECT_EQ(r.command.args[0].type, CommandArgType::STRING);
+    EXPECT_EQ(r.command.args[0].text, "forest.png");
 
     auto r2 = runner.step();
     EXPECT_EQ(r2.type, StepType::LINE);
@@ -1615,7 +1616,7 @@ TEST(RunnerTest, InlineCondInChoice) {
 TEST(RunnerTest, TagsExposedInLineData) {
     auto buf = GyeolTest::compileScript(
         "label start:\n"
-        "    hero \"Hello!\" #mood:angry\n"
+        "    hero \"Hello!\" #mood=angry\n"
     );
     ASSERT_FALSE(buf.empty());
 
@@ -1633,7 +1634,7 @@ TEST(RunnerTest, TagsExposedInLineData) {
 TEST(RunnerTest, MultipleTagsExposed) {
     auto buf = GyeolTest::compileScript(
         "label start:\n"
-        "    hero \"Hello!\" #mood:angry #pose:arms_crossed #voice:hero.wav\n"
+        "    hero \"Hello!\" #mood=angry #pose=arms_crossed #voice=hero.wav\n"
     );
     ASSERT_FALSE(buf.empty());
 
@@ -3470,10 +3471,13 @@ label start:
     auto r = runner.step();
     EXPECT_EQ(r.type, StepType::COMMAND);
     EXPECT_STREQ(r.command.type, "play_sfx");
-    ASSERT_EQ(r.command.params.size(), 3u);
-    EXPECT_STREQ(r.command.params[0], "explosion.wav");
-    EXPECT_STREQ(r.command.params[1], "0.8");
-    EXPECT_STREQ(r.command.params[2], "true");
+    ASSERT_EQ(r.command.args.size(), 3u);
+    EXPECT_EQ(r.command.args[0].type, CommandArgType::STRING);
+    EXPECT_EQ(r.command.args[0].text, "explosion.wav");
+    EXPECT_EQ(r.command.args[1].type, CommandArgType::FLOAT);
+    EXPECT_FLOAT_EQ(r.command.args[1].floatValue, 0.8f);
+    EXPECT_EQ(r.command.args[2].type, CommandArgType::BOOL);
+    EXPECT_TRUE(r.command.args[2].boolValue);
 }
 
 TEST(RunnerEdgeCaseTest, ReturnWithoutCallEndsStory) {

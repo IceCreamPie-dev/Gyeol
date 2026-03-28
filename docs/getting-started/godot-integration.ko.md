@@ -99,7 +99,8 @@ func _on_choices_presented(choices: Array):
         btn.pressed.connect(_on_choice_selected.bind(i))
         choices_container.add_child(btn)
 
-func _on_command_received(type: String, params: Array):
+func _on_command_received(type: String, args: Array):
+    # args 항목 형태: { "kind": "String|Int|Float|Bool|Identifier", "value": ... }
     # 커맨드 처리 후 계속 진행
     story_player.advance()
 
@@ -126,7 +127,7 @@ func _on_choice_selected(index: int):
 |---|---|---|
 | `dialogue_line` | `character: String, text: String, tags: Dictionary` | 대사/내레이션 라인 표시 |
 | `choices_presented` | `choices: Array[String]` | 선택지 메뉴 표시 |
-| `command_received` | `type: String, params: Array[String]` | `@` 커맨드 수신 |
+| `command_received` | `type: String, args: Array[Dictionary]` | `@` 커맨드 수신 |
 | `wait_requested` | `tag: String` | `WAIT` 이벤트 발생, `resume()` 필요 |
 | `yield_emitted` | *(없음)* | `YIELD` 이벤트 발생, `advance()` 재호출 |
 | `story_ended` | *(없음)* | 스토리 종료 |

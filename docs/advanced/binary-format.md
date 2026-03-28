@@ -58,7 +58,7 @@ Node
 | `Line` | character_id, text_id, voice_asset_id, tags | Dialogue or narration |
 | `Choice` | text_id, target_node_name_id, condition_var_id, choice_modifier | Menu option |
 | `Jump` | target_node_name_id, is_call, arg_exprs | Flow transfer |
-| `Command` | type_id, params | Engine command |
+| `Command` | type_id, args | Engine command |
 | `SetVar` | var_name_id, value, expr, assign_op | Variable assignment |
 | `Condition` | var_name_id, op, compare_value, true/false jumps, expressions | Branch |
 | `Random` | branches | Weighted random selection |
@@ -108,7 +108,7 @@ Tag
   value_id: int                   # String pool index for value
 ```
 
-Used for both dialogue tags (`#mood:angry`) and node tags (`#difficulty=hard`).
+Used for both dialogue tags (`#mood=angry`) and node tags (`#difficulty=hard`).
 
 ### Character Definition
 

@@ -2,11 +2,11 @@
 
 ## Dialogue Tags
 
-Attach metadata to dialogue lines using `#key:value` tags:
+Attach metadata to dialogue lines using `#key=value` tags:
 
 ```gyeol
-hero "I'm furious!" #mood:angry #pose:arms_crossed
-hero "Listen carefully." #voice:hero_line42.wav
+hero "I'm furious!" #mood=angry #pose=arms_crossed
+hero "Listen carefully." #voice=hero_line42.wav
 hero "This is important!" #important
 ```
 
@@ -14,7 +14,7 @@ hero "This is important!" #important
 
 | Format | Example | Description |
 |--------|---------|-------------|
-| `#key:value` | `#mood:angry` | Key-value metadata |
+| `#key=value` | `#mood=angry` | Key-value metadata |
 | `#key` | `#important` | Boolean flag (value = empty string) |
 
 Multiple tags are space-separated after the dialogue text.
@@ -35,10 +35,10 @@ func _on_dialogue_line(character: String, text: String, tags: Dictionary):
 
 ### Voice Asset (Legacy)
 
-The `#voice:filename` tag is the standard way to attach voice files:
+The `#voice=filename` tag is the standard way to attach voice files:
 
 ```gyeol
-hero "Hello!" #voice:hero_hello.wav
+hero "Hello!" #voice=hero_hello.wav
 ```
 
 ## Node Metadata Tags
@@ -137,11 +137,10 @@ The fallback choice only appears when all other choices (sword + shield) are hid
 
 ### Combined Conditions + Modifiers
 
-Both orderings are valid:
+Use this ordering only:
 
 ```gyeol
 "VIP special" -> vip if is_vip #once
-"VIP special" -> vip #once if is_vip
 ```
 
 ### Evaluation Order

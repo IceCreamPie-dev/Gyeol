@@ -33,8 +33,31 @@ SignalEvent toSignalEvent(const Gyeol::StepResult& result) {
     case Gyeol::StepType::COMMAND:
         event.type = SignalType::CommandReceived;
         event.commandType = safeStr(result.command.type);
-        for (const auto* param : result.command.params) {
-            event.commandParams.push_back(safeStr(param));
+        for (const auto& arg : result.command.args) {
+            CommandArgEvent out;
+            switch (arg.type) {
+            case Gyeol::CommandArgType::STRING:
+                out.kind = "String";
+                out.stringValue = arg.text;
+                break;
+            case Gyeol::CommandArgType::IDENTIFIER:
+                out.kind = "Identifier";
+                out.stringValue = arg.text;
+                break;
+            case Gyeol::CommandArgType::INT:
+                out.kind = "Int";
+                out.intValue = arg.intValue;
+                break;
+            case Gyeol::CommandArgType::FLOAT:
+                out.kind = "Float";
+                out.floatValue = arg.floatValue;
+                break;
+            case Gyeol::CommandArgType::BOOL:
+                out.kind = "Bool";
+                out.boolValue = arg.boolValue;
+                break;
+            }
+            event.commandArgs.push_back(std::move(out));
         }
         break;
 

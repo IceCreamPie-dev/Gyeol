@@ -127,11 +127,34 @@ public:
             obj.set("type", std::string("COMMAND"));
             obj.set("commandType", result.command.type ? std::string(result.command.type) : std::string(""));
             {
-                val params = val::array();
-                for (auto* p : result.command.params) {
-                    params.call<void>("push", p ? std::string(p) : std::string(""));
+                val args = val::array();
+                for (const auto& arg : result.command.args) {
+                    val item = val::object();
+                    switch (arg.type) {
+                    case CommandArgType::STRING:
+                        item.set("kind", std::string("String"));
+                        item.set("value", arg.text);
+                        break;
+                    case CommandArgType::IDENTIFIER:
+                        item.set("kind", std::string("Identifier"));
+                        item.set("value", arg.text);
+                        break;
+                    case CommandArgType::INT:
+                        item.set("kind", std::string("Int"));
+                        item.set("value", arg.intValue);
+                        break;
+                    case CommandArgType::FLOAT:
+                        item.set("kind", std::string("Float"));
+                        item.set("value", arg.floatValue);
+                        break;
+                    case CommandArgType::BOOL:
+                        item.set("kind", std::string("Bool"));
+                        item.set("value", arg.boolValue);
+                        break;
+                    }
+                    args.call<void>("push", item);
                 }
-                obj.set("params", params);
+                obj.set("args", args);
             }
             break;
 

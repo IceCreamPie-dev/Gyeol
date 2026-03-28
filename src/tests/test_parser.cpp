@@ -234,7 +234,57 @@ TEST(ParserTest, CommandInstruction) {
     auto* cmd = instr->data_as_Command();
     EXPECT_STREQ(story->string_pool()->Get(
         static_cast<uint32_t>(cmd->type_id()))->c_str(), "bg");
-    ASSERT_EQ(cmd->params()->size(), 1u);
+    ASSERT_NE(cmd->args(), nullptr);
+    ASSERT_EQ(cmd->args()->size(), 1u);
+    auto* arg0 = cmd->args()->Get(0);
+    ASSERT_NE(arg0, nullptr);
+    EXPECT_EQ(arg0->kind(), CommandArgKind::String);
+    EXPECT_STREQ(story->string_pool()->Get(
+        static_cast<uint32_t>(arg0->string_id()))->c_str(), "forest.png");
+}
+
+TEST(ParserTest, CommandTypedArgs) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    @ play_sfx \"explosion.wav\" 3 0.8 true channel_main\n"
+    );
+    ASSERT_FALSE(buf.empty());
+
+    auto* story = GetStory(buf.data());
+    auto* cmd = story->nodes()->Get(0)->lines()->Get(0)->data_as_Command();
+    ASSERT_NE(cmd, nullptr);
+    ASSERT_NE(cmd->args(), nullptr);
+    ASSERT_EQ(cmd->args()->size(), 5u);
+
+    EXPECT_EQ(cmd->args()->Get(0)->kind(), CommandArgKind::String);
+    EXPECT_EQ(cmd->args()->Get(1)->kind(), CommandArgKind::Int);
+    EXPECT_EQ(cmd->args()->Get(2)->kind(), CommandArgKind::Float);
+    EXPECT_EQ(cmd->args()->Get(3)->kind(), CommandArgKind::Bool);
+    EXPECT_EQ(cmd->args()->Get(4)->kind(), CommandArgKind::Identifier);
+}
+
+TEST(ParserTest, CommandRejectsKeyValueArg) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    @ bg mode=fast\n"
+    );
+    EXPECT_TRUE(buf.empty());
+}
+
+TEST(ParserTest, CommandRejectsBareFilenameWithDot) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    @ bg forest.png\n"
+    );
+    EXPECT_TRUE(buf.empty());
+}
+
+TEST(ParserTest, CommandRejectsExponentNumber) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    @ shake 1e3\n"
+    );
+    EXPECT_TRUE(buf.empty());
 }
 
 TEST(ParserTest, WaitInstructionWithTag) {
@@ -333,7 +383,7 @@ TEST(ParserTest, StartNodeIsFirstLabel) {
 TEST(ParserTest, VoiceAssetTag) {
     auto buf = GyeolTest::compileScript(
         "label start:\n"
-        "    hero \"hello\" #voice:hero_01.wav\n"
+        "    hero \"hello\" #voice=hero_01.wav\n"
     );
     ASSERT_FALSE(buf.empty());
 
@@ -347,7 +397,7 @@ TEST(ParserTest, VoiceAssetTag) {
 TEST(ParserTest, VoiceAssetNarration) {
     auto buf = GyeolTest::compileScript(
         "label start:\n"
-        "    \"narration\" #voice:nar_01.ogg\n"
+        "    \"narration\" #voice=nar_01.ogg\n"
     );
     ASSERT_FALSE(buf.empty());
 
@@ -376,7 +426,7 @@ TEST(ParserTest, NoVoiceAsset) {
 TEST(ParserTest, SingleTag) {
     auto buf = GyeolTest::compileScript(
         "label start:\n"
-        "    hero \"hello\" #mood:angry\n"
+        "    hero \"hello\" #mood=angry\n"
     );
     ASSERT_FALSE(buf.empty());
 
@@ -394,7 +444,7 @@ TEST(ParserTest, SingleTag) {
 TEST(ParserTest, MultipleTags) {
     auto buf = GyeolTest::compileScript(
         "label start:\n"
-        "    hero \"hello\" #mood:angry #pose:arms_crossed\n"
+        "    hero \"hello\" #mood=angry #pose=arms_crossed\n"
     );
     ASSERT_FALSE(buf.empty());
 
@@ -415,7 +465,7 @@ TEST(ParserTest, MultipleTags) {
 TEST(ParserTest, VoiceTagBackwardCompat) {
     auto buf = GyeolTest::compileScript(
         "label start:\n"
-        "    hero \"hello\" #voice:hero.wav #mood:happy\n"
+        "    hero \"hello\" #voice=hero.wav #mood=happy\n"
     );
     ASSERT_FALSE(buf.empty());
 
@@ -454,7 +504,7 @@ TEST(ParserTest, TagWithoutValue) {
 TEST(ParserTest, NarrationWithTags) {
     auto buf = GyeolTest::compileScript(
         "label start:\n"
-        "    \"narration text\" #effect:fade_in\n"
+        "    \"narration text\" #effect=fade_in\n"
     );
     ASSERT_FALSE(buf.empty());
 
@@ -2379,7 +2429,7 @@ label start:
 TEST(ParserEdgeCaseTest, MultipleTagsOnLine) {
     auto buf = GyeolTest::compileScript(R"(
 label start:
-    narrator "text" #mood:happy #pose:idle #important
+    narrator "text" #mood=happy #pose=idle #important
 )");
     ASSERT_FALSE(buf.empty());
     auto* story = GetStory(buf.data());
@@ -2405,7 +2455,23 @@ label start:
     EXPECT_STREQ(story->string_pool()->Get(
         static_cast<uint32_t>(cmd->type_id()))->c_str(), "clear_screen");
     // FlatBuffers: 빈 벡터는 nullptr — null 체크 필수
-    EXPECT_TRUE(cmd->params() == nullptr || cmd->params()->size() == 0u);
+    EXPECT_TRUE(cmd->args() == nullptr || cmd->args()->size() == 0u);
+}
+
+TEST(ParserTest, DialogueTagColonRejected) {
+    auto buf = GyeolTest::compileScript(
+        "label start:\n"
+        "    hero \"hello\" #mood:angry\n"
+    );
+    EXPECT_TRUE(buf.empty());
+}
+
+TEST(ParserTest, NodeTagColonRejected) {
+    auto buf = GyeolTest::compileScript(R"(
+label boss #difficulty:hard:
+    narrator "Prepare!"
+)");
+    EXPECT_TRUE(buf.empty());
 }
 
 TEST(ParserEdgeCaseTest, ConditionWithoutElseClause) {
@@ -3215,7 +3281,7 @@ label node_a:
 }
 
 TEST(ParserChoiceModifierTest, ModifierBeforeCondition) {
-    // #once if var — modifier before condition should also work
+    // #once if var 는 더 이상 허용하지 않음
     auto buf = GyeolTest::compileScript(R"(
 $ has_key = true
 label start:
@@ -3225,10 +3291,5 @@ label start:
 label node_a:
     narrator "A"
 )");
-    ASSERT_FALSE(buf.empty());
-
-    auto* story = flatbuffers::GetRoot<ICPDev::Gyeol::Schema::Story>(buf.data());
-    auto* choice = story->nodes()->Get(0)->lines()->Get(0)->data_as_Choice();
-    EXPECT_EQ(choice->choice_modifier(), ICPDev::Gyeol::Schema::ChoiceModifier::Once);
-    EXPECT_GE(choice->condition_var_id(), 0);
+    ASSERT_TRUE(buf.empty());
 }

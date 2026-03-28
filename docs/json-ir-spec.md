@@ -1,6 +1,6 @@
 # Gyeol JSON IR Specification
 
-> Version: 1 (`format_version: 1`)
+> Version: 2 (`format_version: 2`)
 
 Gyeol 컴파일러가 출력하는 JSON 중간 표현(Intermediate Representation) 포맷 스펙.
 `.gyb` FlatBuffers 바이너리와 1:1 대응하며, 모든 String Pool 인덱스가 실제 문자열로 해석되어 있어 외부 도구에서 바로 사용 가능.
@@ -53,7 +53,7 @@ std::string jsonStr = Gyeol::JsonExport::toJsonString(parser.getStory());
 ```json
 {
     "format": "gyeol-json-ir",
-    "format_version": 1,
+    "format_version": 2,
     "version": "0.2.0",
     "start_node_name": "start",
     "string_pool": ["start", "hero", "Hello", ...],
@@ -67,7 +67,7 @@ std::string jsonStr = Gyeol::JsonExport::toJsonString(parser.getStory());
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | `format` | `string` | 항상 `"gyeol-json-ir"` |
-| `format_version` | `int` | 포맷 버전 (현재 `1`) |
+| `format_version` | `int` | 포맷 버전 (현재 `2`) |
 | `version` | `string` | 스토리 버전 (컴파일러 버전) |
 | `start_node_name` | `string` | 시작 노드 이름 |
 | `string_pool` | `string[]` | 전체 문자열 풀 (인덱스 참조가 필요한 도구용) |
@@ -172,7 +172,9 @@ std::string jsonStr = Gyeol::JsonExport::toJsonString(parser.getStory());
 {
     "type": "Command",
     "command_type": "bg",
-    "params": ["forest.png"]
+    "args": [
+        {"kind": "String", "value": "forest.png"}
+    ]
 }
 ```
 
@@ -180,7 +182,9 @@ std::string jsonStr = Gyeol::JsonExport::toJsonString(parser.getStory());
 |------|------|------|
 | `type` | `"Command"` | |
 | `command_type` | `string` | 명령 종류 (`bg`, `sfx`, `music`, 등 자유 정의) |
-| `params` | `string[]` | 파라미터 배열 |
+| `args` | `CommandArg[]` | 타입드 파라미터 배열 |
+
+`CommandArg`의 `kind`는 `"String" | "Int" | "Float" | "Bool" | "Identifier"` 중 하나.
 
 > **참고**: `@` 명령어는 사용자 정의. Gyeol이 강제하는 목록은 없으며, 게임 엔진에서 자유롭게 해석.
 
@@ -517,14 +521,14 @@ character npc:
 $ score = 0
 
 label start:
-    npc "Welcome!" #mood:friendly
+    npc "Welcome!" #mood=friendly
     $ score = score + 10
     menu:
         "Fight" -> battle
         "Talk" -> dialogue
 
 label battle:
-    @ sfx sword.wav
+    @ sfx "sword.wav"
     "You fight"
     jump ending
 
@@ -541,7 +545,7 @@ label ending:
 ```json
 {
     "format": "gyeol-json-ir",
-    "format_version": 1,
+    "format_version": 2,
     "version": "",
     "start_node_name": "start",
     "string_pool": ["score", "0", "start", "npc", "Welcome!", ...],
@@ -604,7 +608,9 @@ label ending:
                 {
                     "type": "Command",
                     "command_type": "sfx",
-                    "params": ["sword.wav"]
+                    "args": [
+                        {"kind": "String", "value": "sword.wav"}
+                    ]
                 },
                 {
                     "type": "Line",

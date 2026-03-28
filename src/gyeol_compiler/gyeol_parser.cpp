@@ -4,12 +4,54 @@
 #include <sstream>
 #include <algorithm>
 #include <cstdlib>
+#include <cctype>
+#include <limits>
 #include <filesystem>
 #include <nlohmann/json.hpp>
 
 using namespace ICPDev::Gyeol::Schema;
 
 namespace Gyeol {
+
+namespace {
+
+bool isIdentifierToken(const std::string& token) {
+    if (token.empty()) return false;
+    const unsigned char first = static_cast<unsigned char>(token[0]);
+    if (!(std::isalpha(first) || token[0] == '_')) return false;
+    for (size_t i = 1; i < token.size(); ++i) {
+        const unsigned char ch = static_cast<unsigned char>(token[i]);
+        if (!(std::isalnum(ch) || token[i] == '_')) return false;
+    }
+    return true;
+}
+
+bool parseStrictIntToken(const std::string& token, int32_t& outValue) {
+    if (token.empty()) return false;
+    char* end = nullptr;
+    long value = std::strtol(token.c_str(), &end, 10);
+    if (end == token.c_str() || *end != '\0') return false;
+    if (value < std::numeric_limits<int32_t>::min() ||
+        value > std::numeric_limits<int32_t>::max()) {
+        return false;
+    }
+    outValue = static_cast<int32_t>(value);
+    return true;
+}
+
+bool parseStrictFloatToken(const std::string& token, float& outValue) {
+    if (token.empty()) return false;
+    if (token.find('.') == std::string::npos) return false;
+    if (token.find_first_of("eE") != std::string::npos) return false;
+
+    char* end = nullptr;
+    float value = std::strtof(token.c_str(), &end);
+    if (end == token.c_str() || *end != '\0') return false;
+    outValue = value;
+    return true;
+}
+
+} // namespace
 
 // --- String Pool ---
 int32_t Parser::addString(const std::string& str) {
@@ -657,6 +699,19 @@ bool Parser::parseLabelLine(const std::string& content, int lineNum) {
         }
         std::string key = content.substr(keyStart, pos - keyStart);
         std::string value;
+        if (key.empty()) {
+            addError(lineNum, "node tag key is empty");
+            return false;
+        }
+        // ':'는 label 종료 콜론으로만 허용. 값 구분자는 '='만 허용.
+        if (pos < content.size() && content[pos] == ':') {
+            const size_t next = pos + 1;
+            if (next < content.size() &&
+                content[next] != ' ' && content[next] != '\t') {
+                addError(lineNum, "node tags use '=' for values (e.g. #key=value)");
+                return false;
+            }
+        }
         // '=' 뒤에 value가 있으면 파싱
         if (pos < content.size() && content[pos] == '=') {
             pos++; // skip '='
@@ -755,21 +810,36 @@ bool Parser::parseDialogueLine(const std::string& content, int lineNum) {
         line->text_id = addStringWithId(text, lid);
     }
 
-    // Tags: 복수 #key:value 파싱
+    // Tags: 복수 #key / #key=value 파싱
     line->voice_asset_id = -1;
     skipSpaces(content, pos);
     while (pos < content.size() && content[pos] == '#') {
         pos++; // skip '#'
-        std::string tag = parseWord(content, pos);
-        if (tag.empty()) break;
+        size_t keyStart = pos;
+        while (pos < content.size() &&
+               content[pos] != ' ' && content[pos] != '\t' &&
+               content[pos] != '#' && content[pos] != '=' && content[pos] != ':') {
+            pos++;
+        }
+        std::string key = content.substr(keyStart, pos - keyStart);
+        if (key.empty()) {
+            addError(lineNum, "dialogue tag key is empty");
+            return false;
+        }
 
-        std::string key, value;
-        auto colonPos = tag.find(':');
-        if (colonPos != std::string::npos) {
-            key = tag.substr(0, colonPos);
-            value = tag.substr(colonPos + 1);
-        } else {
-            key = tag;
+        std::string value;
+        if (pos < content.size() && content[pos] == ':') {
+            addError(lineNum, "dialogue tags use '=' for values (e.g. #mood=happy)");
+            return false;
+        }
+        if (pos < content.size() && content[pos] == '=') {
+            pos++; // skip '='
+            size_t valStart = pos;
+            while (pos < content.size() &&
+                   content[pos] != ' ' && content[pos] != '\t' && content[pos] != '#') {
+                pos++;
+            }
+            value = content.substr(valStart, pos - valStart);
         }
 
         auto tagObj = std::make_unique<TagT>();
@@ -831,11 +901,10 @@ bool Parser::parseMenuChoiceLine(const std::string& content, int lineNum) {
     choice->target_node_name_id = addString(target);
 
     // 선택적: "if 변수명" 및 "#once/#sticky/#fallback"
-    // 두 가지가 섞여 나올 수 있음: "-> node if var #once" 또는 "-> node #once" 또는 "-> node if var"
+    // 문법 고정: "-> node if var #once" (modifier는 if 뒤에서만 허용)
     skipSpaces(content, pos);
-    while (pos < content.size()) {
+    if (pos < content.size()) {
         if (content[pos] == '#') {
-            // 수식어 태그 파싱
             pos++; // skip '#'
             std::string modifier = parseWord(content, pos);
             if (modifier == "once") {
@@ -845,21 +914,46 @@ bool Parser::parseMenuChoiceLine(const std::string& content, int lineNum) {
             } else if (modifier == "fallback") {
                 choice->choice_modifier = ICPDev::Gyeol::Schema::ChoiceModifier::Fallback;
             } else {
-                addWarning(lineNum, "unknown choice modifier: #" + modifier);
+                addError(lineNum, "unknown choice modifier: #" + modifier);
+                return false;
             }
             skipSpaces(content, pos);
         } else {
             std::string keyword = parseWord(content, pos);
             if (keyword == "if") {
                 std::string varName = parseWord(content, pos);
-                if (!varName.empty()) {
-                    choice->condition_var_id = addString(varName);
+                if (varName.empty()) {
+                    addError(lineNum, "expected condition variable after 'if'");
+                    return false;
                 }
+                choice->condition_var_id = addString(varName);
                 skipSpaces(content, pos);
             } else {
-                break; // 알 수 없는 토큰은 무시하고 종료
+                addError(lineNum, "unexpected token after choice target: " + keyword);
+                return false;
             }
         }
+    }
+
+    if (pos < content.size() && content[pos] == '#') {
+        pos++; // skip '#'
+        std::string modifier = parseWord(content, pos);
+        if (modifier == "once") {
+            choice->choice_modifier = ICPDev::Gyeol::Schema::ChoiceModifier::Once;
+        } else if (modifier == "sticky") {
+            choice->choice_modifier = ICPDev::Gyeol::Schema::ChoiceModifier::Sticky;
+        } else if (modifier == "fallback") {
+            choice->choice_modifier = ICPDev::Gyeol::Schema::ChoiceModifier::Fallback;
+        } else {
+            addError(lineNum, "unknown choice modifier: #" + modifier);
+            return false;
+        }
+        skipSpaces(content, pos);
+    }
+
+    if (pos < content.size()) {
+        addError(lineNum, "unexpected token after choice modifier/condition: " + trim(content.substr(pos)));
+        return false;
     }
 
     auto instr = std::make_unique<InstructionT>();
@@ -1860,19 +1954,46 @@ bool Parser::parseCommandLine(const std::string& content, int lineNum) {
     auto cmd = std::make_unique<CommandT>();
     cmd->type_id = addString(cmdType);
 
-    // 파라미터들
+    // 타입드 파라미터들: String(quoted), Int, Float, Bool, Identifier
     while (true) {
         skipSpaces(content, pos);
         if (pos >= content.size()) break;
 
+        auto arg = std::make_unique<CommandArgT>();
         if (content[pos] == '"') {
             std::string param = parseQuotedString(content, pos);
-            cmd->params.push_back(addString(param));
+            arg->kind = CommandArgKind::String;
+            arg->string_id = addString(param);
         } else {
-            std::string param = parseWord(content, pos);
-            if (param.empty()) break;
-            cmd->params.push_back(addString(param));
+            std::string token = parseWord(content, pos);
+            if (token.empty()) break;
+            if (token.find('=') != std::string::npos) {
+                addError(lineNum, "command argument must not use key=value syntax");
+                return false;
+            }
+
+            int32_t intValue = 0;
+            float floatValue = 0.0f;
+            if (token == "true" || token == "false") {
+                arg->kind = CommandArgKind::Bool;
+                arg->bool_value = (token == "true");
+            } else if (parseStrictIntToken(token, intValue)) {
+                arg->kind = CommandArgKind::Int;
+                arg->int_value = intValue;
+            } else if (parseStrictFloatToken(token, floatValue)) {
+                arg->kind = CommandArgKind::Float;
+                arg->float_value = floatValue;
+            } else if (isIdentifierToken(token)) {
+                arg->kind = CommandArgKind::Identifier;
+                arg->string_id = addString(token);
+            } else {
+                addError(lineNum,
+                    "invalid command argument '" + token +
+                    "' (allowed: quoted string, int, float, bool, identifier)");
+                return false;
+            }
         }
+        cmd->args.push_back(std::move(arg));
     }
 
     auto instr = std::make_unique<InstructionT>();

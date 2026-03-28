@@ -263,7 +263,7 @@ TEST(GraphToolsTest, CanonicalEmitterRoundTripAfterPatch) {
         "    $ x = 1\n"
         "    if x == 1 -> next else end\n"
         "label next:\n"
-        "    hero \"Hello\" #voice:v1.ogg\n"
+        "    hero \"Hello\" #voice=v1.ogg\n"
         "label end:\n"
         "    return\n");
 
@@ -309,7 +309,10 @@ TEST(GraphToolsTest, PatchV2SupportsInstructionEditingOps) {
         {"ops", json::array({
             {{"op", "update_line_text"}, {"instruction_id", "n0:i0"}, {"text", "HELLO_V2"}},
             {{"op", "update_choice_text"}, {"instruction_id", "n0:i4"}, {"text", "Go now"}},
-            {{"op", "update_command"}, {"instruction_id", "n0:i1"}, {"command_type", "sfx"}, {"params", json::array({"hit.wav", "0.8"})}},
+            {{"op", "update_command"}, {"instruction_id", "n0:i1"}, {"command_type", "sfx"}, {"args", json::array({
+                {{"kind", "String"}, {"value", "hit.wav"}},
+                {{"kind", "Float"}, {"value", 0.8}}
+            })}},
             {{"op", "update_expression"}, {"instruction_id", "n0:i2"}, {"expr_text", "2 + 3"}},
             {{"op", "update_expression"}, {"instruction_id", "n0:i3"}, {"expr_text", "hp > 2"}},
             {{"op", "insert_instruction"}, {"node", "start"}, {"index", 0}, {"instruction", {{"type", "Line"}, {"text", "Prelude"}}}},
@@ -327,7 +330,7 @@ TEST(GraphToolsTest, PatchV2SupportsInstructionEditingOps) {
     EXPECT_NE(script.find("\"Prelude\""), std::string::npos);
     EXPECT_NE(script.find("\"HELLO_V2\""), std::string::npos);
     EXPECT_NE(script.find("\"Go now\" -> next"), std::string::npos);
-    EXPECT_NE(script.find("@ sfx \"hit.wav\" \"0.8\""), std::string::npos);
+    EXPECT_NE(script.find("@ sfx \"hit.wav\" 0.8"), std::string::npos);
     EXPECT_NE(script.find("$ hp = "), std::string::npos);
     EXPECT_EQ(script.find("$ hp = 1"), std::string::npos);
     EXPECT_NE(script.find("if hp > 2 -> next else end"), std::string::npos);

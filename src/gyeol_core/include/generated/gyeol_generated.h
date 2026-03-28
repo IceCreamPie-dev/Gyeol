@@ -53,6 +53,10 @@ struct Jump;
 struct JumpBuilder;
 struct JumpT;
 
+struct CommandArg;
+struct CommandArgBuilder;
+struct CommandArgT;
+
 struct Command;
 struct CommandBuilder;
 struct CommandT;
@@ -690,6 +694,45 @@ inline const char *EnumNameChoiceModifier(ChoiceModifier e) {
   if (::flatbuffers::IsOutRange(e, ChoiceModifier::Default, ChoiceModifier::Fallback)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesChoiceModifier()[index];
+}
+
+enum class CommandArgKind : int8_t {
+  String = 0,
+  Int = 1,
+  Float = 2,
+  Bool = 3,
+  Identifier = 4,
+  MIN = String,
+  MAX = Identifier
+};
+
+inline const CommandArgKind (&EnumValuesCommandArgKind())[5] {
+  static const CommandArgKind values[] = {
+    CommandArgKind::String,
+    CommandArgKind::Int,
+    CommandArgKind::Float,
+    CommandArgKind::Bool,
+    CommandArgKind::Identifier
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesCommandArgKind() {
+  static const char * const names[6] = {
+    "String",
+    "Int",
+    "Float",
+    "Bool",
+    "Identifier",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameCommandArgKind(CommandArgKind e) {
+  if (::flatbuffers::IsOutRange(e, CommandArgKind::String, CommandArgKind::Identifier)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesCommandArgKind()[index];
 }
 
 enum class ExprOp : int8_t {
@@ -1450,10 +1493,116 @@ inline ::flatbuffers::Offset<Jump> CreateJumpDirect(
 
 ::flatbuffers::Offset<Jump> CreateJump(::flatbuffers::FlatBufferBuilder &_fbb, const JumpT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct CommandArgT : public ::flatbuffers::NativeTable {
+  typedef CommandArg TableType;
+  ICPDev::Gyeol::Schema::CommandArgKind kind = ICPDev::Gyeol::Schema::CommandArgKind::String;
+  int32_t string_id = -1;
+  int32_t int_value = 0;
+  float float_value = 0.0f;
+  bool bool_value = false;
+};
+
+struct CommandArg FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef CommandArgT NativeTableType;
+  typedef CommandArgBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_KIND = 4,
+    VT_STRING_ID = 6,
+    VT_INT_VALUE = 8,
+    VT_FLOAT_VALUE = 10,
+    VT_BOOL_VALUE = 12
+  };
+  ICPDev::Gyeol::Schema::CommandArgKind kind() const {
+    return static_cast<ICPDev::Gyeol::Schema::CommandArgKind>(GetField<int8_t>(VT_KIND, 0));
+  }
+  int32_t string_id() const {
+    return GetField<int32_t>(VT_STRING_ID, -1);
+  }
+  int32_t int_value() const {
+    return GetField<int32_t>(VT_INT_VALUE, 0);
+  }
+  float float_value() const {
+    return GetField<float>(VT_FLOAT_VALUE, 0.0f);
+  }
+  bool bool_value() const {
+    return GetField<uint8_t>(VT_BOOL_VALUE, 0) != 0;
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int8_t>(verifier, VT_KIND, 1) &&
+           VerifyField<int32_t>(verifier, VT_STRING_ID, 4) &&
+           VerifyField<int32_t>(verifier, VT_INT_VALUE, 4) &&
+           VerifyField<float>(verifier, VT_FLOAT_VALUE, 4) &&
+           VerifyField<uint8_t>(verifier, VT_BOOL_VALUE, 1) &&
+           verifier.EndTable();
+  }
+  CommandArgT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(CommandArgT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<CommandArg> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CommandArgT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct CommandArgBuilder {
+  typedef CommandArg Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_kind(ICPDev::Gyeol::Schema::CommandArgKind kind) {
+    fbb_.AddElement<int8_t>(CommandArg::VT_KIND, static_cast<int8_t>(kind), 0);
+  }
+  void add_string_id(int32_t string_id) {
+    fbb_.AddElement<int32_t>(CommandArg::VT_STRING_ID, string_id, -1);
+  }
+  void add_int_value(int32_t int_value) {
+    fbb_.AddElement<int32_t>(CommandArg::VT_INT_VALUE, int_value, 0);
+  }
+  void add_float_value(float float_value) {
+    fbb_.AddElement<float>(CommandArg::VT_FLOAT_VALUE, float_value, 0.0f);
+  }
+  void add_bool_value(bool bool_value) {
+    fbb_.AddElement<uint8_t>(CommandArg::VT_BOOL_VALUE, static_cast<uint8_t>(bool_value), 0);
+  }
+  explicit CommandArgBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<CommandArg> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<CommandArg>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<CommandArg> CreateCommandArg(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ICPDev::Gyeol::Schema::CommandArgKind kind = ICPDev::Gyeol::Schema::CommandArgKind::String,
+    int32_t string_id = -1,
+    int32_t int_value = 0,
+    float float_value = 0.0f,
+    bool bool_value = false) {
+  CommandArgBuilder builder_(_fbb);
+  builder_.add_float_value(float_value);
+  builder_.add_int_value(int_value);
+  builder_.add_string_id(string_id);
+  builder_.add_bool_value(bool_value);
+  builder_.add_kind(kind);
+  return builder_.Finish();
+}
+
+struct CommandArg::Traits {
+  using type = CommandArg;
+  static auto constexpr Create = CreateCommandArg;
+};
+
+::flatbuffers::Offset<CommandArg> CreateCommandArg(::flatbuffers::FlatBufferBuilder &_fbb, const CommandArgT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct CommandT : public ::flatbuffers::NativeTable {
   typedef Command TableType;
   int32_t type_id = 0;
-  std::vector<int32_t> params{};
+  std::vector<std::unique_ptr<ICPDev::Gyeol::Schema::CommandArgT>> args{};
+  CommandT() = default;
+  CommandT(const CommandT &o);
+  CommandT(CommandT&&) FLATBUFFERS_NOEXCEPT = default;
+  CommandT &operator=(CommandT o) FLATBUFFERS_NOEXCEPT;
 };
 
 struct Command FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -1462,19 +1611,20 @@ struct Command FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   struct Traits;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_TYPE_ID = 4,
-    VT_PARAMS = 6
+    VT_ARGS = 6
   };
   int32_t type_id() const {
     return GetField<int32_t>(VT_TYPE_ID, 0);
   }
-  const ::flatbuffers::Vector<int32_t> *params() const {
-    return GetPointer<const ::flatbuffers::Vector<int32_t> *>(VT_PARAMS);
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::CommandArg>> *args() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::CommandArg>> *>(VT_ARGS);
   }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<int32_t>(verifier, VT_TYPE_ID, 4) &&
-           VerifyOffset(verifier, VT_PARAMS) &&
-           verifier.VerifyVector(params()) &&
+           VerifyOffset(verifier, VT_ARGS) &&
+           verifier.VerifyVector(args()) &&
+           verifier.VerifyVectorOfTables(args()) &&
            verifier.EndTable();
   }
   CommandT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1489,8 +1639,8 @@ struct CommandBuilder {
   void add_type_id(int32_t type_id) {
     fbb_.AddElement<int32_t>(Command::VT_TYPE_ID, type_id, 0);
   }
-  void add_params(::flatbuffers::Offset<::flatbuffers::Vector<int32_t>> params) {
-    fbb_.AddOffset(Command::VT_PARAMS, params);
+  void add_args(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::CommandArg>>> args) {
+    fbb_.AddOffset(Command::VT_ARGS, args);
   }
   explicit CommandBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -1506,9 +1656,9 @@ struct CommandBuilder {
 inline ::flatbuffers::Offset<Command> CreateCommand(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     int32_t type_id = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<int32_t>> params = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::CommandArg>>> args = 0) {
   CommandBuilder builder_(_fbb);
-  builder_.add_params(params);
+  builder_.add_args(args);
   builder_.add_type_id(type_id);
   return builder_.Finish();
 }
@@ -1521,12 +1671,12 @@ struct Command::Traits {
 inline ::flatbuffers::Offset<Command> CreateCommandDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     int32_t type_id = 0,
-    const std::vector<int32_t> *params = nullptr) {
-  auto params__ = params ? _fbb.CreateVector<int32_t>(*params) : 0;
+    const std::vector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::CommandArg>> *args = nullptr) {
+  auto args__ = args ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::CommandArg>>(*args) : 0;
   return ICPDev::Gyeol::Schema::CreateCommand(
       _fbb,
       type_id,
-      params__);
+      args__);
 }
 
 ::flatbuffers::Offset<Command> CreateCommand(::flatbuffers::FlatBufferBuilder &_fbb, const CommandT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -4231,6 +4381,56 @@ inline ::flatbuffers::Offset<Jump> CreateJump(::flatbuffers::FlatBufferBuilder &
       _arg_exprs);
 }
 
+inline CommandArgT *CommandArg::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<CommandArgT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void CommandArg::UnPackTo(CommandArgT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = kind(); _o->kind = _e; }
+  { auto _e = string_id(); _o->string_id = _e; }
+  { auto _e = int_value(); _o->int_value = _e; }
+  { auto _e = float_value(); _o->float_value = _e; }
+  { auto _e = bool_value(); _o->bool_value = _e; }
+}
+
+inline ::flatbuffers::Offset<CommandArg> CommandArg::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CommandArgT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateCommandArg(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<CommandArg> CreateCommandArg(::flatbuffers::FlatBufferBuilder &_fbb, const CommandArgT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const CommandArgT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _kind = _o->kind;
+  auto _string_id = _o->string_id;
+  auto _int_value = _o->int_value;
+  auto _float_value = _o->float_value;
+  auto _bool_value = _o->bool_value;
+  return ICPDev::Gyeol::Schema::CreateCommandArg(
+      _fbb,
+      _kind,
+      _string_id,
+      _int_value,
+      _float_value,
+      _bool_value);
+}
+
+inline CommandT::CommandT(const CommandT &o)
+      : type_id(o.type_id) {
+  args.reserve(o.args.size());
+  for (const auto &args_ : o.args) { args.emplace_back((args_) ? new ICPDev::Gyeol::Schema::CommandArgT(*args_) : nullptr); }
+}
+
+inline CommandT &CommandT::operator=(CommandT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(type_id, o.type_id);
+  std::swap(args, o.args);
+  return *this;
+}
+
 inline CommandT *Command::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<CommandT>();
   UnPackTo(_o.get(), _resolver);
@@ -4241,7 +4441,7 @@ inline void Command::UnPackTo(CommandT *_o, const ::flatbuffers::resolver_functi
   (void)_o;
   (void)_resolver;
   { auto _e = type_id(); _o->type_id = _e; }
-  { auto _e = params(); if (_e) { _o->params.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->params[_i] = _e->Get(_i); } } else { _o->params.resize(0); } }
+  { auto _e = args(); if (_e) { _o->args.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->args[_i]) { _e->Get(_i)->UnPackTo(_o->args[_i].get(), _resolver); } else { _o->args[_i] = std::unique_ptr<ICPDev::Gyeol::Schema::CommandArgT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->args.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<Command> Command::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CommandT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -4253,11 +4453,11 @@ inline ::flatbuffers::Offset<Command> CreateCommand(::flatbuffers::FlatBufferBui
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const CommandT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _type_id = _o->type_id;
-  auto _params = _o->params.size() ? _fbb.CreateVector(_o->params) : 0;
+  auto _args = _o->args.size() ? _fbb.CreateVector<::flatbuffers::Offset<ICPDev::Gyeol::Schema::CommandArg>> (_o->args.size(), [](size_t i, _VectorArgs *__va) { return CreateCommandArg(*__va->__fbb, __va->__o->args[i].get(), __va->__rehasher); }, &_va ) : 0;
   return ICPDev::Gyeol::Schema::CreateCommand(
       _fbb,
       _type_id,
-      _params);
+      _args);
 }
 
 inline WaitT *Wait::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {

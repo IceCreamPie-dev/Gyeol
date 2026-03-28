@@ -307,7 +307,7 @@ function advanceStory() {
             return;
 
         case 'COMMAND':
-            addCommandLine(result.commandType, result.params);
+            addCommandLine(result.commandType, result.args);
             advanceStory();
             return;
 
@@ -368,7 +368,7 @@ function addDialogueLine(character, text, tags) {
     if (tags && tags.length > 0) {
         const tagSpan = document.createElement('span');
         tagSpan.style.cssText = 'color:var(--teal); font-size:11px; margin-left:8px; opacity:0.6;';
-        tagSpan.textContent = tags.map(t => `#${t.key}${t.value ? ':' + t.value : ''}`).join(' ');
+        tagSpan.textContent = tags.map(t => `#${t.key}${t.value ? '=' + t.value : ''}`).join(' ');
         div.appendChild(tagSpan);
     }
 
@@ -376,10 +376,24 @@ function addDialogueLine(character, text, tags) {
     dialogueArea.scrollTop = dialogueArea.scrollHeight;
 }
 
-function addCommandLine(type, params) {
+function addCommandLine(type, args) {
     const div = document.createElement('div');
     div.className = 'dialogue-line command';
-    div.textContent = `@ ${type} ${params.join(' ')}`;
+    const rendered = (Array.isArray(args) ? args : []).map((arg) => {
+        if (!arg || typeof arg !== 'object') return '';
+        const kind = String(arg.kind || '');
+        if (kind === 'String') {
+            return `"${String(arg.value ?? '')}"`;
+        }
+        if (kind === 'Identifier') {
+            return String(arg.value ?? '');
+        }
+        if (kind === 'Bool') {
+            return Boolean(arg.value) ? 'true' : 'false';
+        }
+        return String(arg.value ?? '');
+    }).join(' ');
+    div.textContent = `@ ${type}${rendered ? ' ' + rendered : ''}`;
     dialogueArea.appendChild(div);
     dialogueArea.scrollTop = dialogueArea.scrollHeight;
 }
