@@ -1,0 +1,31 @@
+{
+  "format": "gyeol-locale-catalog",
+  "version": 2,
+  "default_locale": "en",
+  "locales": {
+    "en": {
+      "line_entries": {
+        "start:0": "Alpha (EN)",
+        "start:1": "Beta (EN)",
+        "end:0": "Omega (EN)"
+      },
+      "character_entries": {
+        "narrator": {
+          "name": "Narrator"
+        }
+      }
+    },
+    "ko": {
+      "line_entries": {
+        "start:0": "알파",
+        "start:1": "베타",
+        "end:0": "오메가"
+      },
+      "character_entries": {
+        "narrator": {
+          "name": "해설자"
+        }
+      }
+    }
+  }
+}

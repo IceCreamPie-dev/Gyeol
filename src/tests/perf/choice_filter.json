@@ -1,0 +1,182 @@
+{
+  "format": "gyeol-json-ir",
+  "format_version": 2,
+  "global_vars": [
+    {
+      "assign_op": "Assign",
+      "expr": null,
+      "type": "SetVar",
+      "value": {
+        "type": "Int",
+        "val": 0
+      },
+      "var_name": "i"
+    },
+    {
+      "assign_op": "Assign",
+      "expr": null,
+      "type": "SetVar",
+      "value": {
+        "type": "Bool",
+        "val": true
+      },
+      "var_name": "show_once"
+    },
+    {
+      "assign_op": "Assign",
+      "expr": null,
+      "type": "SetVar",
+      "value": {
+        "type": "Bool",
+        "val": true
+      },
+      "var_name": "show_condition"
+    }
+  ],
+  "line_ids": [
+    "",
+    "",
+    "",
+    "",
+    "",
+    "menu_loop:0:7eab",
+    "",
+    "menu_loop:1:64c9",
+    "menu_loop:2:91fa",
+    "",
+    "",
+    "end:0:b307"
+  ],
+  "nodes": [
+    {
+      "instructions": [
+        {
+          "compare_value": {
+            "type": "Int",
+            "val": 300
+          },
+          "false_jump_node": "menu_loop",
+          "op": "GreaterOrEqual",
+          "true_jump_node": "disable_condition",
+          "type": "Condition",
+          "var_name": "i"
+        }
+      ],
+      "name": "start"
+    },
+    {
+      "instructions": [
+        {
+          "assign_op": "Assign",
+          "expr": null,
+          "type": "SetVar",
+          "value": {
+            "type": "Bool",
+            "val": false
+          },
+          "var_name": "show_condition"
+        },
+        {
+          "is_call": false,
+          "target_node": "menu_loop",
+          "type": "Jump"
+        }
+      ],
+      "name": "disable_condition"
+    },
+    {
+      "instructions": [
+        {
+          "choice_modifier": "Once",
+          "condition_var": "show_once",
+          "target_node": "branch",
+          "text": "Once path",
+          "type": "Choice"
+        },
+        {
+          "condition_var": "show_condition",
+          "target_node": "branch",
+          "text": "Condition path",
+          "type": "Choice"
+        },
+        {
+          "choice_modifier": "Fallback",
+          "target_node": "end",
+          "text": "Fallback path",
+          "type": "Choice"
+        }
+      ],
+      "name": "menu_loop"
+    },
+    {
+      "instructions": [
+        {
+          "assign_op": "Assign",
+          "expr": null,
+          "type": "SetVar",
+          "value": {
+            "type": "Bool",
+            "val": false
+          },
+          "var_name": "show_once"
+        },
+        {
+          "assign_op": "Assign",
+          "expr": {
+            "tokens": [
+              {
+                "op": "PushVar",
+                "var_name": "i"
+              },
+              {
+                "op": "PushLiteral",
+                "value": {
+                  "type": "Int",
+                  "val": 1
+                }
+              },
+              {
+                "op": "Add"
+              }
+            ]
+          },
+          "type": "SetVar",
+          "value": null,
+          "var_name": "i"
+        },
+        {
+          "is_call": false,
+          "target_node": "start",
+          "type": "Jump"
+        }
+      ],
+      "name": "branch"
+    },
+    {
+      "instructions": [
+        {
+          "character": null,
+          "text": "choice-filter-end",
+          "type": "Line"
+        }
+      ],
+      "name": "end"
+    }
+  ],
+  "start_node_name": "start",
+  "string_pool": [
+    "i",
+    "show_once",
+    "show_condition",
+    "disable_condition",
+    "menu_loop",
+    "Once path",
+    "branch",
+    "Condition path",
+    "Fallback path",
+    "end",
+    "start",
+    "choice-filter-end"
+  ],
+  "version": "0.1.0"
+}

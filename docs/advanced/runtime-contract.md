@@ -1,6 +1,6 @@
 # 런타임 계약 (Runtime Contract) v1.1
 
-`Runtime Contract v1.1`은 `WAIT`/`YIELD`와 `resume()`을 정식 도입한 하위 비호환(strict-breaking) 런타임 계약입니다. Core, WASM, Godot 어댑터가 동일 규약을 따릅니다.
+`Runtime Contract v1.1`은 `WAIT`/`YIELD`와 `resume()`을 정식 도입한 하위 비호환(strict-breaking) 런타임 계약입니다. 현재 공식 운영 범위는 Windows Core 기준이며, 외부 어댑터는 동일 규약을 참고 구현합니다.
 
 ## 범위
 
@@ -31,7 +31,7 @@
 {
   "format": "gyeol-runtime-transcript",
   "version": 2,
-  "engine": "core|wasm|godot_adapter",
+  "engine": "core",
   "steps": [
     {
       "action": "step|choose|resume|set_seed|save|load|snapshot|restore|clear_last_error",
@@ -64,7 +64,26 @@ GyeolRuntimeContractCLI compare \
   --diff-out logs/conformance/core.diff.json
 ```
 
-WASM 합치 검증은 `bindings/wasm/tests/runtime_contract_conformance.js`를 사용하며 동일하게 `expected/actual/diff` 아티팩트를 생성합니다.
+## 성능 게이트 (Core/Windows)
+
+런타임 계약의 실행 안정성은 성능 회귀 게이트와 함께 운영합니다.
+
+```bash
+GyeolRuntimePerfCLI run \
+  --suite src/tests/perf/runtime_perf_suite_core.json \
+  --output logs/perf/core.actual.json
+
+GyeolRuntimePerfCLI compare \
+  --baseline src/tests/perf/runtime_perf_baseline_core.json \
+  --actual logs/perf/core.actual.json \
+  --threshold 0.15 \
+  --report-out logs/perf/core.compare.json
+```
+
+- 입력은 `JSON IR` suite 시나리오를 기본으로 사용합니다.
+- `compare`는 시나리오별 회귀율을 계산하며, baseline `p95_ns` 기반 노이즈 버퍼(최대 `+10%`)를 반영합니다.
+- 누락/추가 시나리오는 즉시 실패 처리합니다.
+- 기준선 갱신은 `python tools/dev/update-runtime-perf-baseline.py`로 수행합니다.
 
 ## 로컬 표준 게이트
 
@@ -74,8 +93,6 @@ Windows 개발 환경에서 CI 검증 순서를 로컬에서 재현하려면 아
 .\tools\dev\bootstrap-toolchains.ps1
 .\tools\dev\activate-toolchains.ps1
 .\tools\dev\doctor-toolchains.ps1
-.\tools\dev\build-wasm.ps1
-.\tools\dev\build-godot.ps1
 .\tools\dev\check-runtime-contract.ps1
 ```
 

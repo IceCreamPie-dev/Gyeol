@@ -9,7 +9,7 @@ namespace Gyeol {
 
 class Debugger {
 public:
-    bool loadStory(const std::string& gybPath);
+    bool loadStoryFromJsonIr(const std::string& jsonIrPath);
     void run();  // Main REPL loop
 
 private:

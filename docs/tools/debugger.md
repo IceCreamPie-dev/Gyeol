@@ -1,18 +1,18 @@
 # 디버거
 
-`GyeolDebugger`는 컴파일된 스토리를 인스트럭션 단위로 단계별 실행할 수 있는 CLI 인터랙티브 디버거입니다.
+`GyeolDebugger`는 JSON IR 스토리를 인스트럭션 단위로 단계별 실행할 수 있는 CLI 인터랙티브 디버거입니다.
 
 ## 사용법
 
 ```bash
-GyeolDebugger <story.gyb> [--help] [--version]
+GyeolDebugger <story.json> [--help] [--version]
 ```
 
 ## 시작하기
 
 ```bash
-$ GyeolDebugger story.gyb
-[Gyeol Debugger] Loaded story.gyb
+$ GyeolDebugger story.json
+[Gyeol Debugger] Loaded story.json
 [start:0] Line  hero "Hello!"
 (gyeol) step
 [hero] Hello!
@@ -191,7 +191,7 @@ encounter (4 instructions):
 ## 워크플로우 예제
 
 ```bash
-$ GyeolDebugger story.gyb
+$ GyeolDebugger story.json
 
 # encounter 지점에 브레이크포인트 설정
 (gyeol) break encounter

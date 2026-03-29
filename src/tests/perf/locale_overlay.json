@@ -1,0 +1,98 @@
+{
+  "format": "gyeol-json-ir",
+  "format_version": 2,
+  "global_vars": [
+    {
+      "assign_op": "Assign",
+      "expr": null,
+      "type": "SetVar",
+      "value": {
+        "type": "Int",
+        "val": 0
+      },
+      "var_name": "i"
+    }
+  ],
+  "line_ids": [
+    "",
+    "",
+    "start:0:724b",
+    "start:1:7be7",
+    "",
+    "",
+    "end:0:2fc8"
+  ],
+  "nodes": [
+    {
+      "instructions": [
+        {
+          "character": "narrator",
+          "text": "Alpha",
+          "type": "Line"
+        },
+        {
+          "character": "narrator",
+          "text": "Beta",
+          "type": "Line"
+        },
+        {
+          "assign_op": "Assign",
+          "expr": {
+            "tokens": [
+              {
+                "op": "PushVar",
+                "var_name": "i"
+              },
+              {
+                "op": "PushLiteral",
+                "value": {
+                  "type": "Int",
+                  "val": 1
+                }
+              },
+              {
+                "op": "Add"
+              }
+            ]
+          },
+          "type": "SetVar",
+          "value": null,
+          "var_name": "i"
+        },
+        {
+          "compare_value": {
+            "type": "Int",
+            "val": 400
+          },
+          "false_jump_node": "end",
+          "op": "Less",
+          "true_jump_node": "start",
+          "type": "Condition",
+          "var_name": "i"
+        }
+      ],
+      "name": "start"
+    },
+    {
+      "instructions": [
+        {
+          "character": "narrator",
+          "text": "Omega",
+          "type": "Line"
+        }
+      ],
+      "name": "end"
+    }
+  ],
+  "start_node_name": "start",
+  "string_pool": [
+    "i",
+    "narrator",
+    "Alpha",
+    "Beta",
+    "start",
+    "end",
+    "Omega"
+  ],
+  "version": "0.1.0"
+}

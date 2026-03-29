@@ -56,7 +56,7 @@ std::string jsonTypeName(json::value_t type) {
 void printUsage() {
     std::cerr
         << "Usage:\n"
-        << "  GyeolRuntimeContractCLI generate --engine <core|godot_adapter> --story <story.gyeol> "
+        << "  GyeolRuntimeContractCLI generate --engine <core> --story <story.json> "
            "--actions <actions.json> --output <transcript.json>\n"
         << "  GyeolRuntimeContractCLI compare --expected <golden.json> --actual <actual.json> "
            "--diff-out <diff.json> [--expected-out <path>] [--actual-out <path>] "
@@ -101,8 +101,8 @@ bool parseGenerateArgs(int argc, char** argv, GenerateArgs& out, std::string& er
         error = "generate requires --engine, --story, --actions, and --output.";
         return false;
     }
-    if (out.engine != "core" && out.engine != "godot_adapter") {
-        error = "Unsupported engine '" + out.engine + "'. Use core or godot_adapter.";
+    if (out.engine != "core") {
+        error = "Unsupported engine '" + out.engine + "'. Runtime contract CLI supports core only.";
         return false;
     }
 
@@ -269,14 +269,9 @@ int commandGenerate(const GenerateArgs& args) {
     }
 
     json transcript;
-    if (args.engine == "core") {
-        RuntimeContract::RunOptions options;
-        options.engine = "core";
-        if (!RuntimeContract::runCoreActions(storyBuffer, actionsDoc, options, transcript, &error)) {
-            std::cerr << error << "\n";
-            return 1;
-        }
-    } else if (!RuntimeContract::runGodotAdapterActions(storyBuffer, actionsDoc, transcript, &error)) {
+    RuntimeContract::RunOptions options;
+    options.engine = "core";
+    if (!RuntimeContract::runCoreActions(storyBuffer, actionsDoc, options, transcript, &error)) {
         std::cerr << error << "\n";
         return 1;
     }

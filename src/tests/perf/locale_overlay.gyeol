@@ -1,0 +1,10 @@
+$ i = 0
+
+label start:
+    narrator "Alpha"
+    narrator "Beta"
+    $ i = i + 1
+    if i < 400 -> start else end
+
+label end:
+    narrator "Omega"

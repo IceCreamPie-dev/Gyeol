@@ -28,17 +28,6 @@ runner.saveState("save1.gys");
 runner.loadState("save1.gys");
 ```
 
-### GDScript (StoryPlayer)
-
-```gdscript
-# Save - `res://`, `user://` 경로 지원
-story_player.save_state("user://saves/slot1.gys")
-
-# Load - 먼저 스토리가 로드되어 있어야 함
-story_player.load_story("res://story.gyb")
-story_player.load_state("user://saves/slot1.gys")
-```
-
 ## 요구 사항
 
 - **저장 시:** 스토리가 로드되어 있어야 합니다 (`hasStory() == true`)
@@ -139,34 +128,10 @@ if (!runner.loadState("missing.gys")) {
 }
 ```
 
-```gdscript
-if not story_player.save_state("user://save.gys"):
-    print("Save failed!")
-
-if not story_player.load_state("user://save.gys"):
-    print("Load failed!")
-```
-
 ## 다중 세이브 슬롯
 
-다른 파일 경로를 사용하여 다중 세이브 슬롯을 구현합니다:
-
-```gdscript
-func save_game(slot: int):
-    var path = "user://saves/slot_%d.gys" % slot
-    story_player.save_state(path)
-
-func load_game(slot: int):
-    var path = "user://saves/slot_%d.gys" % slot
-    if FileAccess.file_exists(path):
-        story_player.load_state(path)
-```
+다른 파일 경로를 사용하여 다중 세이브 슬롯을 구현합니다.
 
 ## 자동 저장 패턴
 
-```gdscript
-func _on_dialogue_line(character, text, tags):
-    # Auto-save at checkpoints
-    if story_player.has_node_tag(get_current_node(), "checkpoint"):
-        story_player.save_state("user://autosave.gys")
-```
+대사/체크포인트 이벤트를 받아 `saveState("autosave.gys")`를 호출하면 자동 저장 패턴을 구현할 수 있습니다.

@@ -1,0 +1,24 @@
+$ i = 0
+$ show_once = true
+$ show_condition = true
+
+label start:
+    if i >= 300 -> disable_condition else menu_loop
+
+label disable_condition:
+    $ show_condition = false
+    jump menu_loop
+
+label menu_loop:
+    menu:
+        "Once path" -> branch if show_once #once
+        "Condition path" -> branch if show_condition
+        "Fallback path" -> end #fallback
+
+label branch:
+    $ show_once = false
+    $ i = i + 1
+    jump start
+
+label end:
+    "choice-filter-end"

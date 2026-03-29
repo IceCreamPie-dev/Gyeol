@@ -9,17 +9,18 @@ add_executable(GyeolTests
     test_json_ir_tooling.cpp
     test_graph_tools.cpp
     test_runtime_contract.cpp
+    test_runtime_perf.cpp
     runtime_contract_harness.cpp
-    ${CMAKE_SOURCE_DIR}/bindings/godot_extension/src/gyeol_story_player_adapter.cpp
+    runtime_perf_tools.cpp
     test_helpers.h
     runtime_contract_harness.h
+    runtime_perf_tools.h
 )
 
 target_include_directories(GyeolTests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/gyeol_core/include
     ${CMAKE_SOURCE_DIR}/src/gyeol_core/include/generated
     ${CMAKE_SOURCE_DIR}/src/gyeol_compiler
-    ${CMAKE_SOURCE_DIR}/bindings/godot_extension/src
 )
 
 target_compile_definitions(GyeolTests PRIVATE
@@ -43,7 +44,6 @@ add_test(NAME GyeolTests COMMAND GyeolTests)
 add_executable(GyeolRuntimeContractCLI
     runtime_contract_cli.cpp
     runtime_contract_harness.cpp
-    ${CMAKE_SOURCE_DIR}/bindings/godot_extension/src/gyeol_story_player_adapter.cpp
     runtime_contract_harness.h
 )
 
@@ -51,7 +51,6 @@ target_include_directories(GyeolRuntimeContractCLI PRIVATE
     ${CMAKE_SOURCE_DIR}/src/gyeol_core/include
     ${CMAKE_SOURCE_DIR}/src/gyeol_core/include/generated
     ${CMAKE_SOURCE_DIR}/src/gyeol_compiler
-    ${CMAKE_SOURCE_DIR}/bindings/godot_extension/src
 )
 
 target_compile_definitions(GyeolRuntimeContractCLI PRIVATE
@@ -65,6 +64,32 @@ target_link_libraries(GyeolRuntimeContractCLI PRIVATE
 
 if(MINGW)
     target_link_options(GyeolRuntimeContractCLI PRIVATE -static)
+endif()
+
+# Runtime performance CLI
+add_executable(GyeolRuntimePerfCLI
+    runtime_perf_cli.cpp
+    runtime_perf_tools.cpp
+    runtime_contract_harness.cpp
+)
+
+target_include_directories(GyeolRuntimePerfCLI PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/gyeol_core/include
+    ${CMAKE_SOURCE_DIR}/src/gyeol_core/include/generated
+    ${CMAKE_SOURCE_DIR}/src/gyeol_compiler
+)
+
+target_compile_definitions(GyeolRuntimePerfCLI PRIVATE
+    GYEOL_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
+target_link_libraries(GyeolRuntimePerfCLI PRIVATE
+    GyeolCore
+    GyeolParser
+)
+
+if(MINGW)
+    target_link_options(GyeolRuntimePerfCLI PRIVATE -static)
 endif()
 
 # LSP tests (analyzer + server)

@@ -1,43 +1,31 @@
 # 컴파일러 CLI
 
-`GyeolCompiler`는 JSON IR 전용 파이프라인(검증, 패치, 컴파일, 번역)을 제공하는 도구입니다.
+`GyeolCompiler`는 `.gyeol` 저작을 기준으로 검증과 JSON IR 산출을 수행하고, JSON IR/패치/번역 파이프라인을 연결하는 도구입니다.
 
 ## 사용법
 
 ```bash
-GyeolCompiler --init-json-ir <story.json>
-GyeolCompiler --lint-json-ir <story.json> [--format text|json]
-GyeolCompiler --validate-json-ir <story.json>
-GyeolCompiler --format-json-ir <story.json> [-o <story.json>]
-GyeolCompiler --compile-json-ir <story.json> -o <story.gyb>
-GyeolCompiler --export-graph-json <story.json> -o <story.graph.json>
-GyeolCompiler --preview-graph-patch <story.json> --patch <patch.json> [--format text|json]
-GyeolCompiler --apply-graph-patch <story.json> --patch <patch.json> -o <story.json>
-
-GyeolCompiler --export-strings-po-from-json-ir <story.json> -o <strings.pot>
-GyeolCompiler --export-locale-template <story.json> -o <locale.template.json>
-GyeolCompiler --po-to-locale-json <strings.po> --story <story.json> -o <locale.json> [--locale <code>]
-GyeolCompiler --validate-locale-json <locale.json> --story <story.json>
-GyeolCompiler --build-locale-catalog <localeA.json> <localeB.json> ... -o <catalog.json> [--default-locale <code>]
+GyeolCompiler --validate <story.gyeol>
+GyeolCompiler --export-json-ir <story.gyeol> -o <story.json>
 ```
 
-## 핵심 명령
+## 공개 명령 (`.gyeol` 저작)
 
 | 명령 | 설명 |
 |------|------|
-| `--init-json-ir <story.json>` | 최소 실행 가능한 JSON IR 템플릿 생성 |
-| `--lint-json-ir <story.json> [--format text\|json]` | JSON IR 품질 검사(참조/타입/빈 값 등) |
-| `--validate-json-ir <story.json>` | `gyeol-json-ir` (`format_version: 2`) 검증 |
-| `--format-json-ir <story.json> [-o <story.json>]` | canonical 정렬/포맷으로 JSON IR 재출력 |
-| `--compile-json-ir <story.json> -o <story.gyb>` | JSON IR을 `.gyb`로 컴파일 |
-| `--export-graph-json <story.json> -o <story.graph.json>` | 그래프 계약 JSON(`gyeol-graph-doc`) 내보내기 |
-| `--preview-graph-patch <story.json> --patch <patch.json> [--format text\|json]` | 패치 적용 전 변경 요약(dry-run) |
-| `--apply-graph-patch <story.json> --patch <patch.json> -o <story.json>` | 그래프 패치 적용 후 canonical JSON IR 출력 |
+| `--validate <story.gyeol>` | 스크립트 문법/의미 검증 |
+| `--export-json-ir <story.gyeol> -o <story.json>` | `.gyeol`에서 JSON IR 산출물 생성 |
 
-## 번역 명령
+## 고급/내부 명령 (JSON IR/툴링)
 
 | 명령 | 설명 |
 |------|------|
+| `--validate-json-ir <story.json>` | JSON IR 검증 |
+| `--lint-json-ir <story.json> [--format text\|json]` | JSON IR 품질 검사 |
+| `--format-json-ir <story.json> [-o <story.json>]` | canonical JSON IR 재포맷 |
+| `--export-graph-json <story.json> -o <story.graph.json>` | 그래프 문서 내보내기 |
+| `--preview-graph-patch <story.json> --patch <patch.json> [--format text\|json]` | 패치 적용 전 요약(dry-run) |
+| `--apply-graph-patch <story.json> --patch <patch.json> -o <story.json>` | 그래프 패치 적용 |
 | `--export-strings-po-from-json-ir <story.json> -o <strings.pot>` | JSON IR에서 POT 추출 (`line_id` + 캐릭터 속성(property) 키 포함) |
 | `--export-locale-template <story.json> -o <locale.template.json>` | Direct JSON 번역 템플릿(v2) 생성 |
 | `--po-to-locale-json <strings.po> --story <story.json> -o <locale.json> [--locale <code>]` | 스토리 키 검증 포함 PO -> locale JSON v2 변환 |
@@ -94,18 +82,19 @@ GyeolCompiler --build-locale-catalog <localeA.json> <localeB.json> ... -o <catal
 
 ## 예시
 
-### JSON IR 검증/컴파일
+### `.gyeol` 검증/산출
 
 ```bash
-GyeolCompiler --init-json-ir story.json
-GyeolCompiler --lint-json-ir story.json
-GyeolCompiler --validate-json-ir story.json
-GyeolCompiler --compile-json-ir story.json -o story.gyb
+GyeolCompiler --validate story.gyeol
+GyeolCompiler --export-json-ir story.gyeol -o story.json
 ```
 
 ### 그래프 편집 워크플로 (JSON IR canonical)
 
 ```bash
+# .gyeol에서 JSON IR 산출물 생성
+GyeolCompiler --export-json-ir story.gyeol -o story.json
+
 # JSON IR에서 그래프 문서(graph doc) 추출
 GyeolCompiler --export-graph-json story.json -o story.graph.json
 

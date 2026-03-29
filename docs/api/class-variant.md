@@ -81,27 +81,9 @@ runner.setVariable("alive", Variant::Bool(true));
 | `"hello"` | `STRING` |
 | `+= "item"` | `LIST` (append로 생성) |
 
-### Variant에서 Godot로
+### 외부 호스트 타입 매핑
 
-GDExtension StoryPlayer를 통해 사용할 때:
-
-| Variant 타입 | Godot 타입 |
-|-------------|------------|
-| `BOOL` | `bool` |
-| `INT` | `int` |
-| `FLOAT` | `float` |
-| `STRING` | `String` |
-| `LIST` | `Array[String]` |
-
-### Godot에서 Variant로
-
-| Godot 타입 | Variant 타입 |
-|-----------|-------------|
-| `bool` | `BOOL` |
-| `int` | `INT` |
-| `float` | `FLOAT` |
-| `String` | `STRING` |
-| `Array` | `LIST` (요소가 String으로 변환됨) |
+엔진/호스트 통합 시 `Variant`는 호스트의 기본 타입(`bool`, `int`, `float`, `string`, `string[]`)으로 1:1 매핑하는 것을 권장합니다.
 
 ## 산술 동작
 

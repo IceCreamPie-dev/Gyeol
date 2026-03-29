@@ -3,7 +3,7 @@
 > 버전: 2 (`format_version: 2`)
 
 Gyeol의 canonical JSON 중간 표현(Intermediate Representation) 포맷 명세입니다.
-`.gyb` FlatBuffers 바이너리와 1:1 대응하며, 모든 String Pool 인덱스가 실제 문자열로 해석되어 있어 외부 도구에서 바로 사용 가능.
+내부 런타임 버퍼와 1:1 대응하며, 모든 String Pool 인덱스가 실제 문자열로 해석되어 있어 외부 도구에서 바로 사용 가능합니다.
 
 ## 사용법
 
@@ -13,22 +13,8 @@ Gyeol의 canonical JSON 중간 표현(Intermediate Representation) 포맷 명세
 # JSON IR 검증
 GyeolCompiler --validate-json-ir story.json
 
-# JSON IR -> 바이너리
-GyeolCompiler --compile-json-ir story.json -o story.gyb
-
 # 그래프 패치 적용 후 canonical JSON IR 출력
 GyeolCompiler --apply-graph-patch story.json --patch patch.json -o story.patched.json
-```
-
-### WASM (브라우저)
-
-```javascript
-const engine = new GyeolEngine();
-const result = engine.compileToJson(sourceCode);
-if (result.success) {
-    const story = JSON.parse(result.json);
-    // story.nodes, story.characters, etc.
-}
 ```
 
 ### C++ API 사용
@@ -41,7 +27,7 @@ std::string error;
 
 bool ok = Gyeol::JsonIrReader::fromFile("story.json", story, &error);
 if (ok) {
-    std::vector<uint8_t> gyb = Gyeol::JsonIrReader::compileToBuffer(story);
+    std::vector<uint8_t> runtimeBuffer = Gyeol::JsonIrReader::compileToBuffer(story);
 }
 ```
 

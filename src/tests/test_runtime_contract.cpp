@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "runtime_contract_harness.h"
+#include "gyeol_json_ir_reader.h"
 
 #include <filesystem>
 
@@ -29,7 +30,7 @@ TEST(RuntimeContractCoreTest, CrossScenarioMatchesGolden) {
     std::vector<uint8_t> storyBuffer;
     std::string error;
     ASSERT_TRUE(RuntimeContract::compileStoryToBuffer(
-        sourcePath("src/tests/conformance/runtime_contract_v1_story.gyeol"),
+        sourcePath("src/tests/conformance/runtime_contract_v1_story.json"),
         storyBuffer,
         &error)) << error;
 
@@ -58,7 +59,7 @@ TEST(RuntimeContractCoreTest, SaveLoadAndSnapshotRestoreAreEquivalent) {
     std::vector<uint8_t> storyBuffer;
     std::string error;
     ASSERT_TRUE(RuntimeContract::compileStoryToBuffer(
-        sourcePath("src/tests/conformance/runtime_contract_v1_story.gyeol"),
+        sourcePath("src/tests/conformance/runtime_contract_v1_story.json"),
         storyBuffer,
         &error)) << error;
 
@@ -130,7 +131,7 @@ TEST(RuntimeContractCoreTest, LastErrorLifecycleForWaitMisuse) {
     std::vector<uint8_t> storyBuffer;
     std::string error;
     ASSERT_TRUE(RuntimeContract::compileStoryToBuffer(
-        sourcePath("src/tests/conformance/runtime_contract_v1_story.gyeol"),
+        sourcePath("src/tests/conformance/runtime_contract_v1_story.json"),
         storyBuffer,
         &error)) << error;
 
@@ -181,7 +182,7 @@ TEST(RuntimeContractCoreTest, LocaleOverlayKeepsStepFlowStable) {
     std::vector<uint8_t> storyBuffer;
     std::string error;
     ASSERT_TRUE(RuntimeContract::compileStoryToBuffer(
-        sourcePath("src/tests/conformance/runtime_contract_v1_story.gyeol"),
+        sourcePath("src/tests/conformance/runtime_contract_v1_story.json"),
         storyBuffer,
         &error)) << error;
 
@@ -194,9 +195,11 @@ TEST(RuntimeContractCoreTest, LocaleOverlayKeepsStepFlowStable) {
     std::string localePath =
         (std::filesystem::temp_directory_path() / "gyeol_runtime_contract_v1_locale.json").string();
     {
-        Gyeol::Parser parser;
-        ASSERT_TRUE(parser.parse(sourcePath("src/tests/conformance/runtime_contract_v1_story.gyeol")));
-        const auto& story = parser.getStory();
+        ICPDev::Gyeol::Schema::StoryT story;
+        ASSERT_TRUE(Gyeol::JsonIrReader::fromFile(
+            sourcePath("src/tests/conformance/runtime_contract_v1_story.json"),
+            story,
+            &error)) << error;
         json locale = {
             {"version", 1},
             {"locale", "contract-test"},
@@ -247,29 +250,3 @@ TEST(RuntimeContractCoreTest, LocaleOverlayKeepsStepFlowStable) {
     std::filesystem::remove(localePath, ec);
 }
 
-TEST(RuntimeContractGodotAdapterTest, AdapterTranscriptMatchesCoreGolden) {
-    std::vector<uint8_t> storyBuffer;
-    std::string error;
-    ASSERT_TRUE(RuntimeContract::compileStoryToBuffer(
-        sourcePath("src/tests/conformance/runtime_contract_v1_story.gyeol"),
-        storyBuffer,
-        &error)) << error;
-
-    json actionsDoc;
-    ASSERT_TRUE(RuntimeContract::loadJsonFile(
-        sourcePath("src/tests/conformance/runtime_contract_v1_actions_cross.json"),
-        actionsDoc,
-        &error)) << error;
-
-    json actual;
-    ASSERT_TRUE(RuntimeContract::runGodotAdapterActions(storyBuffer, actionsDoc, actual, &error)) << error;
-
-    json golden;
-    ASSERT_TRUE(RuntimeContract::loadJsonFile(
-        sourcePath("src/tests/conformance/runtime_contract_v1_golden_core_cross.json"),
-        golden,
-        &error)) << error;
-
-    golden["engine"] = "godot_adapter";
-    EXPECT_TRUE(RuntimeContract::jsonEquals(golden, actual, &error)) << error;
-}

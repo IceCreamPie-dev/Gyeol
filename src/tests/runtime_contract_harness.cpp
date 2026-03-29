@@ -1,5 +1,5 @@
 #include "runtime_contract_harness.h"
-#include "gyeol_story_player_adapter.h"
+#include "gyeol_json_ir_reader.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -41,22 +41,6 @@ nlohmann::json commandArgToJson(const Gyeol::CommandArgData& arg) {
         return nlohmann::json{{"kind", "Bool"}, {"value", arg.boolValue}};
     }
     return nlohmann::json{{"kind", "Unknown"}, {"value", nullptr}};
-}
-
-nlohmann::json adapterCommandArgToJson(const GyeolGodotAdapter::CommandArgEvent& arg) {
-    if (arg.kind == "String" || arg.kind == "Identifier") {
-        return nlohmann::json{{"kind", arg.kind}, {"value", arg.stringValue}};
-    }
-    if (arg.kind == "Int") {
-        return nlohmann::json{{"kind", "Int"}, {"value", arg.intValue}};
-    }
-    if (arg.kind == "Float") {
-        return nlohmann::json{{"kind", "Float"}, {"value", arg.floatValue}};
-    }
-    if (arg.kind == "Bool") {
-        return nlohmann::json{{"kind", "Bool"}, {"value", arg.boolValue}};
-    }
-    return nlohmann::json{{"kind", arg.kind}, {"value", nullptr}};
 }
 
 bool applyActionOp(Gyeol::Runner& runner,
@@ -173,65 +157,6 @@ bool validateActionsSchema(const nlohmann::json& actionsDoc, std::string* errorO
     return true;
 }
 
-nlohmann::json adapterSignalToResultJson(const GyeolGodotAdapter::SignalEvent& event) {
-    nlohmann::json result = nlohmann::json::object();
-
-    switch (event.type) {
-    case GyeolGodotAdapter::SignalType::DialogueLine: {
-        result["type"] = "LINE";
-        nlohmann::json tags = nlohmann::json::object();
-        for (const auto& tag : event.tags) {
-            tags[tag.first] = tag.second;
-        }
-        result["line"] = {
-            {"character", event.character},
-            {"text", event.text},
-            {"tags", std::move(tags)}
-        };
-        break;
-    }
-    case GyeolGodotAdapter::SignalType::ChoicesPresented: {
-        result["type"] = "CHOICES";
-        nlohmann::json choices = nlohmann::json::array();
-        for (size_t i = 0; i < event.choices.size(); ++i) {
-            choices.push_back({
-                {"index", static_cast<int>(i)},
-                {"text", event.choices[i]}
-            });
-        }
-        result["choices"] = std::move(choices);
-        break;
-    }
-    case GyeolGodotAdapter::SignalType::CommandReceived:
-        result["type"] = "COMMAND";
-        {
-            nlohmann::json args = nlohmann::json::array();
-            for (const auto& arg : event.commandArgs) {
-                args.push_back(adapterCommandArgToJson(arg));
-            }
-        result["command"] = {
-            {"type", event.commandType},
-            {"args", std::move(args)}
-        };
-        }
-        break;
-    case GyeolGodotAdapter::SignalType::WaitRequested:
-        result["type"] = "WAIT";
-        result["wait"] = {
-            {"tag", event.waitTag}
-        };
-        break;
-    case GyeolGodotAdapter::SignalType::YieldEmitted:
-        result["type"] = "YIELD";
-        break;
-    case GyeolGodotAdapter::SignalType::StoryEnded:
-        result["type"] = "END";
-        break;
-    }
-
-    return result;
-}
-
 } // namespace
 
 bool loadJsonFile(const std::string& path, nlohmann::json& out, std::string* errorOut) {
@@ -276,19 +201,20 @@ bool writeJsonFile(const std::string& path, const nlohmann::json& jsonData, std:
 bool compileStoryToBuffer(const std::string& storyPath,
                           std::vector<uint8_t>& outBuffer,
                           std::string* errorOut) {
-    Gyeol::Parser parser;
-    if (!parser.parse(storyPath)) {
-        std::string mergedErrors;
-        for (const auto& err : parser.getErrors()) {
-            if (!mergedErrors.empty()) mergedErrors += " | ";
-            mergedErrors += err;
-        }
-        if (errorOut) *errorOut = "Failed to parse story: " + mergedErrors;
+    const auto ext = std::filesystem::path(storyPath).extension().string();
+    if (ext != ".json") {
+        if (errorOut) *errorOut = "Runtime contract/perf story input must be JSON IR (.json): " + storyPath;
         return false;
     }
-    outBuffer = parser.compileToBuffer();
+    ICPDev::Gyeol::Schema::StoryT story;
+    std::string error;
+    if (!Gyeol::JsonIrReader::fromFile(storyPath, story, &error)) {
+        if (errorOut) *errorOut = "Failed to parse JSON IR story: " + error;
+        return false;
+    }
+    outBuffer = Gyeol::JsonIrReader::compileToBuffer(story);
     if (outBuffer.empty()) {
-        if (errorOut) *errorOut = "compileToBuffer returned empty output.";
+        if (errorOut) *errorOut = "JSON IR compileToBuffer returned empty output.";
         return false;
     }
     return true;
@@ -437,85 +363,6 @@ bool runCoreActions(const std::vector<uint8_t>& storyBuffer,
         }
 
         if (record.value("action", "") == "checkpoint") {
-            outTranscript["checkpoints"].push_back({
-                {"label", record["label"]},
-                {"state", record["state"]}
-            });
-        } else {
-            outTranscript["steps"].push_back(std::move(record));
-        }
-    }
-
-    return true;
-}
-
-bool runGodotAdapterActions(const std::vector<uint8_t>& storyBuffer,
-                            const nlohmann::json& actionsDoc,
-                            nlohmann::json& outTranscript,
-                            std::string* errorOut) {
-    if (!validateActionsSchema(actionsDoc, errorOut)) return false;
-
-    Gyeol::Runner runner;
-    if (!runner.start(storyBuffer.data(), storyBuffer.size())) {
-        if (errorOut) *errorOut = "Runner.start failed.";
-        return false;
-    }
-
-    RunOptions options;
-    options.engine = "godot_adapter";
-
-    outTranscript = {
-        {"format", "gyeol-runtime-transcript"},
-        {"version", 2},
-        {"engine", options.engine},
-        {"steps", nlohmann::json::array()},
-        {"checkpoints", nlohmann::json::array()}
-    };
-
-    for (const auto& action : actionsDoc["actions"]) {
-        if (!action.contains("op") || !action["op"].is_string()) {
-            if (errorOut) *errorOut = "Action is missing string field 'op'.";
-            return false;
-        }
-
-        const std::string op = action["op"].get<std::string>();
-        nlohmann::json record = {{"action", op}};
-
-        if (op == "set_seed") {
-            if (!action.contains("seed") || !action["seed"].is_number_integer()) {
-                if (errorOut) *errorOut = "set_seed requires integer field 'seed'.";
-                return false;
-            }
-            const auto seed = static_cast<uint32_t>(action["seed"].get<int>());
-            runner.setSeed(seed);
-            record["seed"] = seed;
-        } else if (op == "step") {
-            const auto result = runner.step();
-            const auto signalEvent = GyeolGodotAdapter::toSignalEvent(result);
-            record["result"] = adapterSignalToResultJson(signalEvent);
-        } else if (op == "choose") {
-            if (!action.contains("index") || !action["index"].is_number_integer()) {
-                if (errorOut) *errorOut = "choose requires integer field 'index'.";
-                return false;
-            }
-            const int index = action["index"].get<int>();
-            runner.choose(index);
-            record["index"] = index;
-        } else if (op == "resume") {
-            record["ok"] = runner.resume();
-        } else if (op == "checkpoint") {
-            if (!action.contains("label") || !action["label"].is_string()) {
-                if (errorOut) *errorOut = "checkpoint requires string field 'label'.";
-                return false;
-            }
-            record["label"] = action["label"];
-        } else {
-            if (errorOut) *errorOut = "Unsupported adapter action op: " + op;
-            return false;
-        }
-
-        record["state"] = runnerStateToJson(runner, options);
-        if (op == "checkpoint") {
             outTranscript["checkpoints"].push_back({
                 {"label", record["label"]},
                 {"state", record["state"]}

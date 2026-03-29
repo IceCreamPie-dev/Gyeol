@@ -9,9 +9,10 @@ target_include_directories(GyeolDebugger PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_SOURCE_DIR}/src/gyeol_core/include"
     "${CMAKE_SOURCE_DIR}/src/gyeol_core/include/generated"
+    "${CMAKE_SOURCE_DIR}/src/gyeol_compiler"
 )
 
-target_link_libraries(GyeolDebugger PRIVATE GyeolCore)
+target_link_libraries(GyeolDebugger PRIVATE GyeolCore GyeolParser)
 
 # MinGW: 정적 링크
 if(MINGW)

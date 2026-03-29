@@ -1,0 +1,113 @@
+{
+  "format": "gyeol-json-ir",
+  "format_version": 2,
+  "global_vars": [
+    {
+      "assign_op": "Assign",
+      "expr": null,
+      "type": "SetVar",
+      "value": {
+        "type": "Int",
+        "val": 1
+      },
+      "var_name": "flag"
+    }
+  ],
+  "line_ids": [
+    "",
+    "start:0:90b1",
+    "start:1:774b",
+    "",
+    "start:2:2ae5",
+    "",
+    "",
+    "next:3:4b42",
+    "end:0:9f63"
+  ],
+  "nodes": [
+    {
+      "instructions": [
+        {
+          "character": null,
+          "text": "intro",
+          "type": "Line"
+        },
+        {
+          "target_node": "next",
+          "text": "go",
+          "type": "Choice"
+        },
+        {
+          "target_node": "end",
+          "text": "stop",
+          "type": "Choice"
+        }
+      ],
+      "name": "start"
+    },
+    {
+      "instructions": [
+        {
+          "tag": "cutscene",
+          "type": "Wait"
+        },
+        {
+          "type": "Yield"
+        },
+        {
+          "assign_op": "Assign",
+          "expr": {
+            "tokens": [
+              {
+                "op": "PushVar",
+                "var_name": "flag"
+              },
+              {
+                "op": "PushLiteral",
+                "value": {
+                  "type": "Int",
+                  "val": 1
+                }
+              },
+              {
+                "op": "Add"
+              }
+            ]
+          },
+          "type": "SetVar",
+          "value": null,
+          "var_name": "flag"
+        },
+        {
+          "character": null,
+          "text": "next line",
+          "type": "Line"
+        }
+      ],
+      "name": "next"
+    },
+    {
+      "instructions": [
+        {
+          "character": null,
+          "text": "bye",
+          "type": "Line"
+        }
+      ],
+      "name": "end"
+    }
+  ],
+  "start_node_name": "start",
+  "string_pool": [
+    "flag",
+    "intro",
+    "go",
+    "next",
+    "stop",
+    "end",
+    "cutscene",
+    "next line",
+    "bye"
+  ],
+  "version": "0.1.0"
+}

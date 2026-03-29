@@ -1,6 +1,5 @@
 #pragma once
 
-#include "gyeol_parser.h"
 #include "gyeol_runner.h"
 
 #include <nlohmann/json.hpp>
@@ -34,11 +33,6 @@ bool runCoreActions(const std::vector<uint8_t>& storyBuffer,
                     const RunOptions& options,
                     nlohmann::json& outTranscript,
                     std::string* errorOut = nullptr);
-
-bool runGodotAdapterActions(const std::vector<uint8_t>& storyBuffer,
-                            const nlohmann::json& actionsDoc,
-                            nlohmann::json& outTranscript,
-                            std::string* errorOut = nullptr);
 
 bool jsonEquals(const nlohmann::json& expected,
                 const nlohmann::json& actual,

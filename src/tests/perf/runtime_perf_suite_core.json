@@ -1,0 +1,36 @@
+{
+  "format": "gyeol-runtime-perf-suite",
+  "version": 1,
+  "scenarios": [
+    {
+      "name": "line_loop",
+      "story_path": "line_loop.json",
+      "warmup": 5,
+      "iterations": 20,
+      "max_steps": 10000
+    },
+    {
+      "name": "choice_filter",
+      "story_path": "choice_filter.json",
+      "warmup": 5,
+      "iterations": 20,
+      "max_steps": 10000
+    },
+    {
+      "name": "typed_command",
+      "story_path": "typed_command.json",
+      "warmup": 5,
+      "iterations": 20,
+      "max_steps": 10000
+    },
+    {
+      "name": "locale_overlay",
+      "story_path": "locale_overlay.json",
+      "warmup": 5,
+      "iterations": 20,
+      "max_steps": 10000,
+      "locale_catalog": "locale_overlay.catalog.json",
+      "locale": "ko-KR"
+    }
+  ]
+}

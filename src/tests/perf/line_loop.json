@@ -1,0 +1,89 @@
+{
+  "format": "gyeol-json-ir",
+  "format_version": 2,
+  "global_vars": [
+    {
+      "assign_op": "Assign",
+      "expr": null,
+      "type": "SetVar",
+      "value": {
+        "type": "Int",
+        "val": 0
+      },
+      "var_name": "i"
+    }
+  ],
+  "line_ids": [
+    "",
+    "start:0:e264",
+    "",
+    "",
+    "end:0:4718"
+  ],
+  "nodes": [
+    {
+      "instructions": [
+        {
+          "character": null,
+          "text": "line-loop",
+          "type": "Line"
+        },
+        {
+          "assign_op": "Assign",
+          "expr": {
+            "tokens": [
+              {
+                "op": "PushVar",
+                "var_name": "i"
+              },
+              {
+                "op": "PushLiteral",
+                "value": {
+                  "type": "Int",
+                  "val": 1
+                }
+              },
+              {
+                "op": "Add"
+              }
+            ]
+          },
+          "type": "SetVar",
+          "value": null,
+          "var_name": "i"
+        },
+        {
+          "compare_value": {
+            "type": "Int",
+            "val": 800
+          },
+          "false_jump_node": "end",
+          "op": "Less",
+          "true_jump_node": "start",
+          "type": "Condition",
+          "var_name": "i"
+        }
+      ],
+      "name": "start"
+    },
+    {
+      "instructions": [
+        {
+          "character": null,
+          "text": "line-loop-end",
+          "type": "Line"
+        }
+      ],
+      "name": "end"
+    }
+  ],
+  "start_node_name": "start",
+  "string_pool": [
+    "i",
+    "line-loop",
+    "start",
+    "end",
+    "line-loop-end"
+  ],
+  "version": "0.1.0"
+}

@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $BuildDir = Join-Path $RepoRoot "build"
-$StoryPath = Join-Path $RepoRoot "src/tests/conformance/runtime_contract_v1_story.gyeol"
+$StoryPath = Join-Path $RepoRoot "src/tests/conformance/runtime_contract_v1_story.json"
 $ActionsPath = Join-Path $RepoRoot "src/tests/conformance/runtime_contract_v1_actions_cross.json"
 $GoldenPath = Join-Path $RepoRoot "src/tests/conformance/runtime_contract_v1_golden_core_cross.json"
 

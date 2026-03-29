@@ -35,7 +35,3 @@ target_include_directories(GyeolCore PUBLIC
 
 # FetchContent로 가져온 flatbuffers 라이브러리와 링크
 target_link_libraries(GyeolCore PUBLIC flatbuffers)
-
-# --- 5. 테스트용 실행 파일 ---
-add_executable(GyeolTest src/test_main.cpp)
-target_link_libraries(GyeolTest PRIVATE GyeolCore)

@@ -7,7 +7,7 @@
 
 ## 설명
 
-`Runner`는 컴파일된 `.gyb` 스토리 바이너리를 해석하는 엔진 독립적 VM입니다. 어떤 게임 엔진이나 애플리케이션에도 통합할 수 있는 이벤트 기반 `step()`/`choose()` API를 제공합니다.
+`Runner`는 JSON IR에서 생성된 런타임 버퍼를 해석하는 엔진 독립적 VM입니다. 어떤 게임 엔진이나 애플리케이션에도 통합할 수 있는 이벤트 기반 `step()`/`choose()` API를 제공합니다.
 
 Runner가 관리하는 항목:
 - 스토리 실행 흐름 (프로그램 카운터, 현재 노드)
@@ -208,12 +208,15 @@ struct CommandData {
 bool start(const uint8_t* buffer, size_t size)
 ```
 
-컴파일된 `.gyb` 버퍼로 Runner를 초기화합니다. FlatBuffers 데이터를 파싱하고, 전역 변수를 초기화하며, 캐시(캐릭터, 노드 태그)를 구축하고, 방문 횟수와 once 선택지 추적을 리셋한 후, 시작 노드로 이동합니다.
+JSON IR에서 생성된 런타임 버퍼로 Runner를 초기화합니다. FlatBuffers 데이터를 파싱하고, 전역 변수를 초기화하며, 캐시(캐릭터, 노드 태그)를 구축하고, 방문 횟수와 once 선택지 추적을 리셋한 후, 시작 노드로 이동합니다.
 
 성공 시 `true`를 반환합니다.
 
 ```cpp
-std::vector<uint8_t> data = loadFile("story.gyb");
+ICPDev::Gyeol::Schema::StoryT story;
+std::string error;
+Gyeol::JsonIrReader::fromFile("story.json", story, &error);
+std::vector<uint8_t> data = Gyeol::JsonIrReader::compileToBuffer(story);
 Gyeol::Runner runner;
 if (runner.start(data.data(), data.size())) {
     // Ready to step()
@@ -574,16 +577,18 @@ struct CallFrameInfo {
 
 ```cpp
 #include "gyeol_runner.h"
-#include <fstream>
+#include "gyeol_json_ir_reader.h"
 #include <iostream>
 
 int main() {
-    // Load .gyb file
-    std::ifstream ifs("story.gyb", std::ios::binary | std::ios::ate);
-    auto size = ifs.tellg();
-    ifs.seekg(0);
-    std::vector<uint8_t> buffer(size);
-    ifs.read(reinterpret_cast<char*>(buffer.data()), size);
+    // Load JSON IR and compile to runtime buffer
+    ICPDev::Gyeol::Schema::StoryT story;
+    std::string error;
+    if (!Gyeol::JsonIrReader::fromFile("story.json", story, &error)) {
+        std::cerr << error << "\n";
+        return 1;
+    }
+    std::vector<uint8_t> buffer = Gyeol::JsonIrReader::compileToBuffer(story);
 
     // Start runner
     Gyeol::Runner runner;

@@ -11,8 +11,8 @@ int main(int argc, char* argv[]) {
             return 0;
         }
         if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
-            std::cout << "GyeolDebugger - Interactive debugger for .gyb stories\n"
-                      << "Usage: GyeolDebugger <story.gyb>\n"
+            std::cout << "GyeolDebugger - Interactive debugger for JSON IR stories\n"
+                      << "Usage: GyeolDebugger <story.json>\n"
                       << "\n"
                       << "Options:\n"
                       << "  --version  Show version\n"
@@ -22,14 +22,14 @@ int main(int argc, char* argv[]) {
     }
 
     if (argc < 2) {
-        std::cerr << "Usage: GyeolDebugger <story.gyb>\n"
+        std::cerr << "Usage: GyeolDebugger <story.json>\n"
                   << "Try 'GyeolDebugger --help' for more information.\n";
         return 1;
     }
 
     Gyeol::Debugger debugger;
 
-    if (!debugger.loadStory(argv[1])) {
+    if (!debugger.loadStoryFromJsonIr(argv[1])) {
         return 1;
     }
 

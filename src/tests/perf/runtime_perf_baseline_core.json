@@ -1,0 +1,48 @@
+{
+  "engine": "core",
+  "format": "gyeol-runtime-perf",
+  "scenarios": [
+    {
+      "iterations": 20,
+      "median_instructions_executed": 2401,
+      "median_ns": 514200,
+      "median_step_calls": 802,
+      "name": "line_loop",
+      "p95_ns": 1005300,
+      "throughput_step_calls_per_sec": 1559704.395176974,
+      "warmup": 5
+    },
+    {
+      "iterations": 20,
+      "median_instructions_executed": 1505,
+      "median_ns": 1283700,
+      "median_step_calls": 303,
+      "name": "choice_filter",
+      "p95_ns": 1372500,
+      "throughput_step_calls_per_sec": 236036.45711614864,
+      "warmup": 5
+    },
+    {
+      "iterations": 20,
+      "median_instructions_executed": 1251,
+      "median_ns": 531600,
+      "median_step_calls": 752,
+      "name": "typed_command",
+      "p95_ns": 781000,
+      "throughput_step_calls_per_sec": 1414597.4416854777,
+      "warmup": 5
+    },
+    {
+      "iterations": 20,
+      "median_instructions_executed": 1601,
+      "median_ns": 321700,
+      "median_step_calls": 802,
+      "name": "locale_overlay",
+      "p95_ns": 559200,
+      "throughput_step_calls_per_sec": 2493005.906123718,
+      "warmup": 5
+    }
+  ],
+  "suite_path": "src\\tests\\perf\\runtime_perf_suite_core.json",
+  "version": 1
+}

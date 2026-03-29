@@ -1,0 +1,172 @@
+{
+  "format": "gyeol-json-ir",
+  "format_version": 2,
+  "global_vars": [
+    {
+      "assign_op": "Assign",
+      "expr": null,
+      "type": "SetVar",
+      "value": {
+        "type": "Int",
+        "val": 0
+      },
+      "var_name": "i"
+    }
+  ],
+  "line_ids": [
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "end:0:b707"
+  ],
+  "nodes": [
+    {
+      "instructions": [
+        {
+          "args": [
+            {
+              "kind": "String",
+              "value": "explosion.wav"
+            },
+            {
+              "kind": "Int",
+              "value": 3
+            },
+            {
+              "kind": "Float",
+              "value": 0.800000011920929
+            },
+            {
+              "kind": "Bool",
+              "value": true
+            },
+            {
+              "kind": "Identifier",
+              "value": "channel_main"
+            }
+          ],
+          "command_type": "play_sfx",
+          "type": "Command"
+        },
+        {
+          "args": [
+            {
+              "kind": "String",
+              "value": "forest.png"
+            },
+            {
+              "kind": "Int",
+              "value": 2
+            },
+            {
+              "kind": "Float",
+              "value": 1.25
+            },
+            {
+              "kind": "Bool",
+              "value": false
+            },
+            {
+              "kind": "Identifier",
+              "value": "layer_bg"
+            }
+          ],
+          "command_type": "set_bg",
+          "type": "Command"
+        },
+        {
+          "args": [
+            {
+              "kind": "Int",
+              "value": 4
+            },
+            {
+              "kind": "Float",
+              "value": 0.4000000059604645
+            },
+            {
+              "kind": "Bool",
+              "value": true
+            },
+            {
+              "kind": "Identifier",
+              "value": "channel_camera"
+            }
+          ],
+          "command_type": "camera_shake",
+          "type": "Command"
+        },
+        {
+          "assign_op": "Assign",
+          "expr": {
+            "tokens": [
+              {
+                "op": "PushVar",
+                "var_name": "i"
+              },
+              {
+                "op": "PushLiteral",
+                "value": {
+                  "type": "Int",
+                  "val": 1
+                }
+              },
+              {
+                "op": "Add"
+              }
+            ]
+          },
+          "type": "SetVar",
+          "value": null,
+          "var_name": "i"
+        },
+        {
+          "compare_value": {
+            "type": "Int",
+            "val": 250
+          },
+          "false_jump_node": "end",
+          "op": "Less",
+          "true_jump_node": "start",
+          "type": "Condition",
+          "var_name": "i"
+        }
+      ],
+      "name": "start"
+    },
+    {
+      "instructions": [
+        {
+          "character": null,
+          "text": "typed-command-end",
+          "type": "Line"
+        }
+      ],
+      "name": "end"
+    }
+  ],
+  "start_node_name": "start",
+  "string_pool": [
+    "i",
+    "play_sfx",
+    "explosion.wav",
+    "channel_main",
+    "set_bg",
+    "forest.png",
+    "layer_bg",
+    "camera_shake",
+    "channel_camera",
+    "start",
+    "end",
+    "typed-command-end"
+  ],
+  "version": "0.1.0"
+}

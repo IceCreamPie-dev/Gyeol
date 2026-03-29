@@ -34,18 +34,19 @@ bool parseOutputFormat(const std::string& text, OutputFormat& out) {
     return false;
 }
 
-bool writeBinaryFile(const std::string& path, const std::vector<uint8_t>& data) {
-    std::ofstream ofs(path, std::ios::binary);
-    if (!ofs.is_open()) return false;
-    ofs.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
-    return ofs.good();
-}
-
 bool writeTextFile(const std::string& path, const std::string& text) {
     std::ofstream ofs(path);
     if (!ofs.is_open()) return false;
     ofs << text;
     return ofs.good();
+}
+
+bool parseGyeolStory(const std::string& path, Gyeol::Parser& outParser) {
+    if (outParser.parse(path)) return true;
+    for (const auto& err : outParser.getErrors()) {
+        std::cerr << "error: " << err << std::endl;
+    }
+    return false;
 }
 
 bool loadStoryFromJsonIr(const std::string& path, StoryT& outStory) {
@@ -94,83 +95,17 @@ void printPatchPreviewText(const json& preview) {
 void printUsage() {
     std::cout
         << "Gyeol Compiler v" << VERSION << "\n"
-        << "JSON IR-first usage:\n"
-        << "  GyeolCompiler --init-json-ir <story.json>\n"
-        << "  GyeolCompiler --lint-json-ir <story.json> [--format text|json]\n"
-        << "  GyeolCompiler --validate-json-ir <story.json>\n"
-        << "  GyeolCompiler --format-json-ir <story.json> [-o <story.json>]\n"
-        << "  GyeolCompiler --compile-json-ir <story.json> -o <story.gyb>\n"
-        << "  GyeolCompiler --export-graph-json <story.json> -o <story.graph.json>\n"
-        << "  GyeolCompiler --preview-graph-patch <story.json> --patch <patch.json> [--format text|json]\n"
-        << "  GyeolCompiler --apply-graph-patch <story.json> --patch <patch.json> -o <story.json>\n"
-        << "  GyeolCompiler --export-strings-po-from-json-ir <story.json> -o <strings.pot>\n"
-        << "  GyeolCompiler --export-locale-template <story.json> -o <locale.template.json>\n"
-        << "  GyeolCompiler --po-to-locale-json <strings.po> --story <story.json> -o <ko.locale.json> [--locale <code>]\n"
-        << "  GyeolCompiler --validate-locale-json <locale.json> --story <story.json>\n"
-        << "  GyeolCompiler --build-locale-catalog <localeA.json> <localeB.json> ... -o <catalog.json> [--default-locale <code>]\n"
+        << "Public (.gyeol authoring):\n"
+        << "  GyeolCompiler --validate <story.gyeol>\n"
+        << "  GyeolCompiler --export-json-ir <story.gyeol> -o <story.json>\n"
         << "\n"
-        << "Compatibility:\n"
-        << "  --po-to-json <input.po> -o <output.json> [--locale <code>] (v1 runtime locale)\n"
-        << "  --legacy-compile-gyeol <input.gyeol> [-o <out>] [--format gyb|json] (hidden legacy mode)\n"
+        << "Advanced/hidden:\n"
+        << "  --validate-json-ir / --lint-json-ir / --format-json-ir\n"
+        << "  --export-graph-json / --preview-graph-patch / --apply-graph-patch\n"
+        << "  --export-strings-po-from-json-ir / --export-locale-template\n"
+        << "  --po-to-locale-json / --validate-locale-json / --build-locale-catalog\n"
+        << "  --po-to-json (legacy locale v1)\n"
         << "\n";
-}
-
-int runLegacyCompileMode(int argc, char* argv[]) {
-    if (argc < 3) {
-        std::cerr << "error: --legacy-compile-gyeol requires <input.gyeol>" << std::endl;
-        return 1;
-    }
-
-    std::string inputPath = argv[2];
-    std::string outputPath = "story.gyb";
-    std::string outputFormat = "gyb";
-
-    for (int i = 3; i < argc; ++i) {
-        if (std::strcmp(argv[i], "-o") == 0) {
-            if (i + 1 >= argc) {
-                std::cerr << "error: missing value for -o" << std::endl;
-                return 1;
-            }
-            outputPath = argv[++i];
-        } else if (std::strcmp(argv[i], "--format") == 0) {
-            if (i + 1 >= argc) {
-                std::cerr << "error: missing value for --format" << std::endl;
-                return 1;
-            }
-            outputFormat = argv[++i];
-            if (outputFormat != "gyb" && outputFormat != "json") {
-                std::cerr << "error: unknown format '" << outputFormat << "'" << std::endl;
-                return 1;
-            }
-        } else {
-            std::cerr << "error: unknown option '" << argv[i] << "'" << std::endl;
-            return 1;
-        }
-    }
-
-    Gyeol::Parser parser;
-    if (!parser.parse(inputPath)) {
-        for (const auto& err : parser.getErrors()) {
-            std::cerr << "error: " << err << std::endl;
-        }
-        return 1;
-    }
-
-    if (outputFormat == "json") {
-        if (!writeTextFile(outputPath, Gyeol::JsonExport::toJsonString(parser.getStory()))) {
-            std::cerr << "error: failed to write JSON output: " << outputPath << std::endl;
-            return 1;
-        }
-        return 0;
-    }
-
-    if (!parser.compile(outputPath)) {
-        for (const auto& err : parser.getErrors()) {
-            std::cerr << "error: " << err << std::endl;
-        }
-        return 1;
-    }
-    return 0;
 }
 
 } // namespace
@@ -192,8 +127,51 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    if (std::strcmp(argv[1], "--legacy-compile-gyeol") == 0) {
-        return runLegacyCompileMode(argc, argv);
+    if (std::strcmp(argv[1], "--validate") == 0) {
+        if (argc != 3) {
+            std::cerr << "error: usage --validate <story.gyeol>" << std::endl;
+            return 1;
+        }
+        Gyeol::Parser parser;
+        if (!parseGyeolStory(argv[2], parser)) return 1;
+        for (const auto& warning : parser.getWarnings()) {
+            std::cout << "warning: " << warning << std::endl;
+        }
+        std::cout << "Valid script: " << argv[2] << std::endl;
+        return 0;
+    }
+
+    if (std::strcmp(argv[1], "--export-json-ir") == 0) {
+        if (argc < 5) {
+            std::cerr << "error: usage --export-json-ir <story.gyeol> -o <story.json>" << std::endl;
+            return 1;
+        }
+        std::string inputPath = argv[2];
+        std::string outputPath;
+        for (int i = 3; i < argc; ++i) {
+            if (std::strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
+                outputPath = argv[++i];
+            } else {
+                std::cerr << "error: unknown option '" << argv[i] << "'" << std::endl;
+                return 1;
+            }
+        }
+        if (outputPath.empty()) {
+            std::cerr << "error: missing -o <story.json>" << std::endl;
+            return 1;
+        }
+
+        Gyeol::Parser parser;
+        if (!parseGyeolStory(inputPath, parser)) return 1;
+        if (!writeTextFile(outputPath, Gyeol::JsonExport::toJsonString(parser.getStory()))) {
+            std::cerr << "error: failed to write JSON IR output: " << outputPath << std::endl;
+            return 1;
+        }
+        for (const auto& warning : parser.getWarnings()) {
+            std::cout << "warning: " << warning << std::endl;
+        }
+        std::cout << "Exported JSON IR: " << inputPath << " -> " << outputPath << std::endl;
+        return 0;
     }
 
     if (std::strcmp(argv[1], "--init-json-ir") == 0) {
@@ -304,36 +282,6 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         std::cout << "Formatted JSON IR: " << inputPath << " -> " << outputPath << std::endl;
-        return 0;
-    }
-
-    if (std::strcmp(argv[1], "--compile-json-ir") == 0) {
-        if (argc < 5) {
-            std::cerr << "error: usage --compile-json-ir <story.json> -o <story.gyb>" << std::endl;
-            return 1;
-        }
-        std::string jsonPath = argv[2];
-        std::string outputPath;
-        for (int i = 3; i < argc; ++i) {
-            if (std::strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
-                outputPath = argv[++i];
-            } else {
-                std::cerr << "error: unknown option '" << argv[i] << "'" << std::endl;
-                return 1;
-            }
-        }
-        if (outputPath.empty()) {
-            std::cerr << "error: missing -o <story.gyb>" << std::endl;
-            return 1;
-        }
-        StoryT story;
-        if (!loadStoryFromJsonIr(jsonPath, story)) return 1;
-        std::vector<uint8_t> buffer = Gyeol::JsonIrReader::compileToBuffer(story);
-        if (buffer.empty() || !writeBinaryFile(outputPath, buffer)) {
-            std::cerr << "error: failed to write binary output: " << outputPath << std::endl;
-            return 1;
-        }
-        std::cout << "Compiled JSON IR: " << jsonPath << " -> " << outputPath << std::endl;
         return 0;
     }
 

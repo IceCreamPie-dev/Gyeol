@@ -1,7 +1,7 @@
 #include "gyeol_debugger.h"
+#include "gyeol_json_ir_reader.h"
 
 #include <iostream>
-#include <fstream>
 #include <sstream>
 #include <algorithm>
 
@@ -39,17 +39,18 @@ std::string Debugger::variantToString(const Variant& v) {
     return "?";
 }
 
-bool Debugger::loadStory(const std::string& gybPath) {
-    std::ifstream ifs(gybPath, std::ios::binary | std::ios::ate);
-    if (!ifs.is_open()) {
-        std::cerr << RED << "Error: Cannot open file: " << gybPath << RESET << std::endl;
+bool Debugger::loadStoryFromJsonIr(const std::string& jsonIrPath) {
+    ICPDev::Gyeol::Schema::StoryT story;
+    std::string error;
+    if (!Gyeol::JsonIrReader::fromFile(jsonIrPath, story, &error)) {
+        std::cerr << RED << "Error: Cannot parse JSON IR: " << error << RESET << std::endl;
         return false;
     }
-
-    auto size = ifs.tellg();
-    ifs.seekg(0);
-    storyBuffer_.resize(static_cast<size_t>(size));
-    ifs.read(reinterpret_cast<char*>(storyBuffer_.data()), size);
+    storyBuffer_ = Gyeol::JsonIrReader::compileToBuffer(story);
+    if (storyBuffer_.empty()) {
+        std::cerr << RED << "Error: Failed to compile JSON IR to runtime buffer" << RESET << std::endl;
+        return false;
+    }
 
     if (!runner_.start(storyBuffer_.data(), storyBuffer_.size())) {
         std::cerr << RED << "Error: Failed to load story" << RESET << std::endl;

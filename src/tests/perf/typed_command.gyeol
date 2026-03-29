@@ -1,0 +1,11 @@
+$ i = 0
+
+label start:
+    @ play_sfx "explosion.wav" 3 0.8 true channel_main
+    @ set_bg "forest.png" 2 1.25 false layer_bg
+    @ camera_shake 4 0.4 true channel_camera
+    $ i = i + 1
+    if i < 250 -> start else end
+
+label end:
+    "typed-command-end"

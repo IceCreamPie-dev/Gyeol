@@ -1,6 +1,6 @@
 # 로컬라이제이션
 
-Gyeol 로컬라이제이션은 JSON IR 전용 파이프라인을 기준으로, PO 방식과 Direct JSON 방식을 모두 지원합니다.
+Gyeol 로컬라이제이션은 `.gyeol` 저작을 기준으로, JSON IR 산출물에서 PO 방식과 Direct JSON 방식을 모두 지원합니다.
 
 ## 번역 범위
 
@@ -43,7 +43,7 @@ Gyeol 로컬라이제이션은 JSON IR 전용 파이프라인을 기준으로, P
 1. 정확 일치 로케일(exact locale, `ko-KR`)
 2. 기본 언어 로케일(base locale, `ko`)
 3. catalog `default_locale`
-4. 원본 JSON IR 텍스트/속성
+4. 원본 스토리 텍스트/속성
 
 `Runner::setLocale()`는 진행 상태(PC/콜스택/변수)를 유지한 채 언어만 즉시 바꿉니다.
 
@@ -51,6 +51,7 @@ Gyeol 로컬라이제이션은 JSON IR 전용 파이프라인을 기준으로, P
 
 ```bash
 # 1) JSON IR에서 POT 추출
+GyeolCompiler --export-json-ir story.gyeol -o story.json
 GyeolCompiler --export-strings-po-from-json-ir story.json -o strings.pot
 
 # 2) PO 번역
@@ -68,6 +69,7 @@ GyeolCompiler --build-locale-catalog ko.locale.json en.locale.json -o locales.ca
 
 ```bash
 # 1) JSON IR에서 템플릿 추출
+GyeolCompiler --export-json-ir story.gyeol -o story.json
 GyeolCompiler --export-locale-template story.json -o locale.template.json
 
 # 2) locale JSON에 번역 채우기
@@ -90,18 +92,6 @@ std::string requested = runner.getLocale();         // "ko-KR"
 std::string resolved = runner.getResolvedLocale();  // exact가 없으면 "ko"
 
 runner.clearLocale(); // 원문으로 복귀
-```
-
-### GDScript (StoryPlayer)
-
-```gdscript
-story_player.load_locale_catalog("res://locales/locales.catalog.json")
-story_player.set_locale("ko-KR")
-
-var requested = story_player.get_locale()
-var resolved = story_player.get_resolved_locale()
-
-story_player.clear_locale()
 ```
 
 ## 하위 호환
